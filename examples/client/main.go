@@ -6,7 +6,10 @@ import (
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
 	"frbg/network"
+	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,10 +27,30 @@ func add(cmd int, str string, f func()) {
 	des[cmd] = str
 }
 
+func auth() {
+	u := "https:localhost:8080"
+	client := &http.Client{}
+	response, err := client.PostForm(u, url.Values{"name": []string{"caiyunfeng"}, "password": []string{"123123"}})
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println("error reading response body:", err)
+		return
+	}
+
+	fmt.Println("Response", string(body))
+}
+
 func main() {
 	flag.IntVar(&uid, "u", 123, "-u 123")
 	flag.IntVar(&gateid, "p", 6666, "-p 6666")
 	flag.Parse()
+
+	auth()
 
 	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", gateid))
 	if err != nil {

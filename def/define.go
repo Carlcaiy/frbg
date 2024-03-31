@@ -1,4 +1,4 @@
-package network
+package def
 
 type ServerType int32
 
@@ -47,5 +47,3 @@ type Compoment interface {
 	Run()
 	Close()
 }
-
-type Call func(*Conn, *Message) error

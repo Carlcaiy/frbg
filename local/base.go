@@ -2,12 +2,16 @@ package local
 
 import (
 	"fmt"
+	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
 	"frbg/network"
+	"frbg/parser"
 	"net"
 	"time"
 )
+
+type Call func(*network.Conn, *parser.Message) error
 
 type IUser interface {
 	UserID() uint32
@@ -19,9 +23,9 @@ type IUser interface {
 type BaseLocal struct {
 	*network.ServerConfig
 	m_users   map[uint32]IUser
-	m_servers map[network.ServerType][]*network.Conn
-	m_route   map[uint16]network.Call
-	m_hook    map[uint16]network.Call
+	m_servers map[def.ServerType][]*network.Conn
+	m_route   map[uint16]Call
+	m_hook    map[uint16]Call
 	*Timer
 }
 
@@ -29,10 +33,10 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 	return &BaseLocal{
 		ServerConfig: sconf,
 		m_users:      make(map[uint32]IUser),
-		m_servers:    make(map[network.ServerType][]*network.Conn),
-		m_route:      make(map[uint16]network.Call),
+		m_servers:    make(map[def.ServerType][]*network.Conn),
+		m_route:      make(map[uint16]Call),
 		Timer:        NewTimer(1024),
-		m_hook:       make(map[uint16]network.Call),
+		m_hook:       make(map[uint16]Call),
 	}
 }
 
@@ -58,7 +62,7 @@ func (l *BaseLocal) TimerHeartBeat() {
 	for _, t := range l.ServerConfig.Subs {
 		if servers, ok := l.m_servers[t]; ok {
 			for _, s := range servers {
-				msg := network.NewMessage(s.ServerId, t)
+				msg := parser.NewMessage(s.ServerId, t)
 				bs, _ := msg.Pack(cmd.HeartBeat, &pb.HeartBeat{
 					ServerType: uint32(t),
 					ServerId:   s.ServerId,
@@ -86,7 +90,7 @@ func (l *BaseLocal) OnConnect(conn *network.Conn) {
 	l.m_servers[conn.ServerType] = append(l.m_servers[conn.ServerType], conn)
 
 	// 注册server
-	msg := network.NewMessage(0, conn.ServerType)
+	msg := parser.NewMessage(0, conn.ServerType)
 	bs, _ := msg.Pack(cmd.Regist, &pb.Regist{
 		ServerId:   l.ServerId,
 		ServerType: uint32(l.ServerType),
@@ -135,10 +139,10 @@ func (l *BaseLocal) RangeUser(iter func(u IUser)) {
 	}
 }
 
-func (l *BaseLocal) Regist(conn *network.Conn, msg *network.Message) error {
+func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
 	data := new(pb.Regist)
 	msg.UnPack(data)
-	st := network.ServerType(data.ServerType)
+	st := def.ServerType(data.ServerType)
 	if sli, ok := l.m_servers[st]; ok {
 		for i := range sli {
 			if sli[i].ServerConfig != nil && sli[i].ServerId == data.ServerId {
@@ -157,14 +161,14 @@ func (l *BaseLocal) Regist(conn *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *network.Message) error {
+func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	data := new(pb.HeartBeat)
 	msg.UnPack(data)
 	// fmt.Println("receive HeartBeat", data.String())
 	return nil
 }
 
-func (l *BaseLocal) TestRequest(conn *network.Conn, msg *network.Message) error {
+func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 	data := new(pb.Test)
 	msg.UnPack(data)
 
@@ -173,7 +177,7 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *network.Message) error 
 		Conn:   conn,
 	})
 
-	m := network.NewMessage(data.Uid, network.ST_Client)
+	m := parser.NewMessage(data.Uid, def.ST_Client)
 	b, _ := m.Pack(cmd.Test, &pb.Test{
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
@@ -186,7 +190,7 @@ func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
-func (l *BaseLocal) AddHook(cmd uint16, h network.Call) {
+func (l *BaseLocal) AddHook(cmd uint16, h Call) {
 	if _, ok := l.m_hook[cmd]; !ok {
 		l.m_hook[cmd] = h
 	} else {
@@ -194,7 +198,7 @@ func (l *BaseLocal) AddHook(cmd uint16, h network.Call) {
 	}
 }
 
-func (l *BaseLocal) AddRoute(cmd uint16, h network.Call) {
+func (l *BaseLocal) AddRoute(cmd uint16, h Call) {
 	if _, ok := l.m_route[cmd]; !ok {
 		l.m_route[cmd] = h
 	} else {
@@ -202,7 +206,7 @@ func (l *BaseLocal) AddRoute(cmd uint16, h network.Call) {
 	}
 }
 
-func (l *BaseLocal) Route(conn *network.Conn, msg *network.Message) error {
+func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 
 	if msg.UserID() == 0 && msg.Cmd() != cmd.ReqGateLogin && msg.Cmd() != cmd.HeartBeat && msg.Cmd() != cmd.Regist {
 		return fmt.Errorf("msg wrong")
@@ -222,19 +226,19 @@ func (l *BaseLocal) Route(conn *network.Conn, msg *network.Message) error {
 		} else {
 			return fmt.Errorf("call: not find cmd %d", msg.Cmd())
 		}
-	case network.ST_Client:
+	case def.ST_Client:
 		return l.SendToClient(msg.UserID(), msg.Bytes())
-	case network.ST_Hall:
+	case def.ST_Hall:
 		return l.SendToHall(msg.UserID(), msg.Bytes())
-	case network.ST_Game:
+	case def.ST_Game:
 		return l.SendToGame(u.GameID(), msg.Bytes())
-	case network.ST_Gate:
+	case def.ST_Gate:
 		return l.SendToGate(u.GateID(), msg.Bytes())
 	}
 	return fmt.Errorf("call: not find cmd %d", msg.Cmd())
 }
 
-func (l *BaseLocal) SendModUid(uid uint32, buf []byte, t network.ServerType) error {
+func (l *BaseLocal) SendModUid(uid uint32, buf []byte, t def.ServerType) error {
 	if conns, ok := l.m_servers[t]; ok {
 		if len(conns) > 0 {
 			conn := conns[uid%uint32(len(conns))]
@@ -248,7 +252,7 @@ func (l *BaseLocal) SendModUid(uid uint32, buf []byte, t network.ServerType) err
 	}
 }
 
-func (l *BaseLocal) SendToSid(serverId uint32, buf []byte, t network.ServerType) error {
+func (l *BaseLocal) SendToSid(serverId uint32, buf []byte, t def.ServerType) error {
 	if servers, ok := l.m_servers[t]; ok {
 		for i := range servers {
 			if servers[i].ServerId == serverId {
@@ -271,7 +275,7 @@ func (l *BaseLocal) SendToClient(uid uint32, buf []byte) error {
 }
 
 func (l *BaseLocal) SendToGame(gameId uint32, buf []byte) error {
-	if conns, ok := l.m_servers[network.ST_Game]; ok {
+	if conns, ok := l.m_servers[def.ST_Game]; ok {
 		for _, s := range conns {
 			if s.ServerId == gameId {
 				s.Write(buf)
@@ -285,7 +289,7 @@ func (l *BaseLocal) SendToGame(gameId uint32, buf []byte) error {
 }
 
 func (l *BaseLocal) SendToGate(gateId uint32, buf []byte) error {
-	if conns, ok := l.m_servers[network.ST_Gate]; ok {
+	if conns, ok := l.m_servers[def.ST_Gate]; ok {
 		for _, s := range conns {
 			if s.ServerId == gateId {
 				s.Write(buf)
@@ -299,7 +303,7 @@ func (l *BaseLocal) SendToGate(gateId uint32, buf []byte) error {
 }
 
 func (l *BaseLocal) SendToHall(uid uint32, buf []byte) error {
-	return l.SendModUid(uid, buf, network.ST_Hall)
+	return l.SendModUid(uid, buf, def.ST_Hall)
 }
 
 func (l *BaseLocal) GetUser(uid uint32) IUser {

@@ -9,9 +9,9 @@ import (
 func main() {
 	serverConfig := &network.ServerConfig{
 		Addr:       ":6686",
-		ServerType: network.ST_Game,
+		ServerType: def.ST_Game,
 		ServerId:   1,
-		Subs:       []network.ServerType{network.ST_Gate},
+		Subs:       []def.ServerType{def.ST_Gate},
 	}
 	pollConfig := &network.PollConfig{
 		HeartBeat: time.Millisecond * 100,

@@ -5,6 +5,8 @@ package network
 import (
 	"errors"
 	"fmt"
+	"frbg/def"
+	"frbg/parser"
 	"net"
 	_ "net/http/pprof"
 	"reflect"
@@ -16,12 +18,12 @@ import (
 )
 
 type Handler interface {
-	Init()
-	Route(conn *Conn, msg *Message) error
-	Close(conn *Conn)
-	OnConnect(conn *Conn)
-	OnAccept(conn *Conn)
-	Tick()
+	Init()                                       // Handler的初始化
+	Route(conn *Conn, msg *parser.Message) error // 消息路由
+	Close(conn *Conn)                            // 连接关闭的回调
+	OnConnect(conn *Conn)                        // 连接成功的回调
+	OnAccept(conn *Conn)                         // 新连接的回调
+	Tick()                                       // 心跳
 }
 
 type PollConfig struct {
@@ -65,7 +67,6 @@ func NewPoll(conf *PollConfig) *Poll {
 	must(err)
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
-
 	return &Poll{
 		fdconns: make(map[int]*Conn),
 		epollFd: epollFd,
@@ -77,17 +78,25 @@ func NewPoll(conf *PollConfig) *Poll {
 
 func (p *Poll) Close() {
 	fmt.Println("poll close")
+	// 关闭连接connfd
+	for _, c := range p.fdconns {
+		c.Close()
+	}
+	// 关闭心跳
+	if p.ticker != nil {
+		p.ticker.Stop()
+	}
+	// 关闭epoll监听fd
 	if p.epollFd > 0 {
 		unix.Close(p.epollFd)
 	}
+	// 关闭eventFd
 	if p.eventFd > 0 {
 		unix.Close(p.eventFd)
 	}
+	// 关闭listenFd
 	if p.listenFd > 0 {
 		unix.Close(p.listenFd)
-	}
-	for _, c := range p.fdconns {
-		c.Close()
 	}
 }
 
@@ -98,10 +107,9 @@ func (p *Poll) LoopRun() {
 	}()
 
 	go func() {
-		for {
-			<-p.ticker.C
+		for _, ok := <-p.ticker.C; ok; {
 			// fmt.Println("ticker", t)
-			p.Trigger(ET_Timer)
+			p.Trigger(def.ET_Timer)
 		}
 	}()
 
@@ -114,16 +122,18 @@ func (p *Poll) LoopRun() {
 
 		if err := p.queue.ForEach(func(note interface{}) error {
 			switch t := note.(type) {
-			case EventType:
-				if t == ET_Timer {
+			case def.EventType:
+				if t == def.ET_Timer {
 					p.handle.Tick()
-				} else if t == ET_Close {
+				} else if t == def.ET_Close {
 					return errors.New("signal close")
-				} else if t == ET_Error {
+				} else if t == def.ET_Error {
 					return errors.New("error")
 				}
 			case *ServerConfig:
 				p.AddConnector(t)
+			default:
+				return fmt.Errorf("unknow type %v", t)
 			}
 			return nil
 		}); err != nil {
@@ -150,7 +160,7 @@ func (p *Poll) LoopRun() {
 					continue
 				}
 
-				msg, err := Parse(conn)
+				msg, err := parser.Parse(conn)
 				if err != nil {
 					p.Del(fd)
 					continue
@@ -237,8 +247,8 @@ func (p *Poll) Add(conn *net.TCPConn) {
 	}
 	p.fdconns[fd] = c
 	p.conn_num++
+	fmt.Printf("Add fd:%d addr:%v conn_num=%d conn=%v\n", fd, conn.RemoteAddr(), p.conn_num, conn)
 	p.handle.OnAccept(c)
-	fmt.Printf("Add fd:%d addr:%v conn_num=%d\n", fd, conn.RemoteAddr(), p.conn_num)
 }
 
 func socketFD(conn *net.TCPConn) int {

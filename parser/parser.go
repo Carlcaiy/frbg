@@ -1,12 +1,15 @@
-package network
+package parser
 
 import (
 	"encoding/binary"
 	"fmt"
+	"frbg/def"
 	"io"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
+
+type ServerType = def.ServerType
 
 const (
 	LenLen  = 2
@@ -38,6 +41,10 @@ func NewHeader(dest ServerType, uid uint32) *Header {
 
 func (h *Header) Cmd() uint16 {
 	return h.cmd
+}
+
+func (h *Header) SetCmd(cmd uint16) {
+	h.cmd = cmd
 }
 
 func (h *Header) Dest() ServerType {
@@ -162,6 +169,24 @@ func Pack(uid uint32, dest ServerType, cmd uint16, pro proto.Message) ([]byte, e
 	byteOrder.PutUint16(buf, length)
 
 	h := NewHeader(dest, uid)
+	h.cmd = cmd
+	h.inject(buf[LenLen:])
+
+	copy(buf[LenLen+HeadLen:], body)
+	return buf, nil
+}
+
+func Pack2(uid uint32, cmd uint16, pro proto.Message) ([]byte, error) {
+	body, err := proto.Marshal(pro)
+	if err != nil {
+		return nil, err
+	}
+	length := uint16(HeadLen + len(body))
+	buf := make([]byte, length+LenLen)
+
+	byteOrder.PutUint16(buf, length)
+
+	h := NewHeader(0, uid)
 	h.cmd = cmd
 	h.inject(buf[LenLen:])
 

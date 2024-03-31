@@ -1,15 +1,16 @@
 package network
 
 import (
+	"frbg/def"
 	"strconv"
 	"strings"
 )
 
 type ServerConfig struct {
-	Addr       string       // 服务地址
-	ServerType ServerType   // 服务类型
-	ServerId   uint32       // 服务ID
-	Subs       []ServerType // 订阅的服务类型
+	Addr       string           // 服务地址
+	ServerType def.ServerType   // 服务类型
+	ServerId   uint32           // 服务ID
+	Subs       []def.ServerType // 订阅的服务类型
 }
 
 func (s ServerConfig) IP() []byte {
@@ -40,7 +41,7 @@ func (s ServerConfig) Equal(a ServerConfig) bool {
 }
 
 // 是否被订阅
-func (p *ServerConfig) isSub(st ServerType) bool {
+func (p *ServerConfig) isSub(st def.ServerType) bool {
 	for i := range p.Subs {
 		if st == p.Subs[i] {
 			return true

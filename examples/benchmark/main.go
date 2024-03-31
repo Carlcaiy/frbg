@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
-	"frbg/network"
+	"frbg/parser"
 	"net"
 	"os"
 	"os/signal"
@@ -34,17 +35,17 @@ func main() {
 			}
 			var t time.Duration = 0
 			var c int = 0
-			req := func(servetType network.ServerType) {
-				msg := network.NewMessage(uid, servetType)
+			req := func(servetType parser.ServerType) {
+				msg := parser.NewMessage(uid, servetType)
 				bs, _ := msg.Pack(cmd.Test, &pb.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				})
 				conn.Write(bs)
 			}
-			req(network.ST_Gate)
+			req(def.ST_Gate)
 			for !close {
-				msg, err := network.Parse(conn)
+				msg, err := parser.Parse(conn)
 				if err != nil {
 					break
 				}
@@ -60,7 +61,7 @@ func main() {
 					p.EndTime = time.Now().UnixNano()
 					t += time.Duration(p.EndTime - p.StartTime)
 					c++
-					req(network.ST_Hall)
+					req(def.ST_Hall)
 				}
 			}
 			conn.Close()
