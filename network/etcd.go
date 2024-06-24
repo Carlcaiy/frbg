@@ -94,13 +94,7 @@ func (p *Etcd) parseValue(value []byte) {
 }
 
 func (p *Etcd) Put() {
-	value, err := json.Marshal(p.conf)
-	if err != nil {
-		fmt.Println("server marshal failed")
-		return
-	}
-	fmt.Println("put key", p.key(), "value", string(value))
-	p.cli.Put(context.TODO(), p.key(), string(value))
+	p.cli.Put(context.TODO(), p.key(), p.conf.Addr)
 }
 
 func (p *Etcd) Get() {

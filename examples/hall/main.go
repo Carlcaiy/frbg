@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"frbg/def"
 	"frbg/examples/hall/route"
 	"frbg/network"
 	"time"
@@ -17,9 +18,9 @@ func main() {
 
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
-		ServerType: network.ST_Hall,
+		ServerType: def.ST_Hall,
 		ServerId:   uint32(sid),
-		Subs:       []network.ServerType{network.ST_Game},
+		Subs:       []def.ServerType{def.ST_Game},
 	}
 
 	pollConfig := &network.PollConfig{

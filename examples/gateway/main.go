@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"frbg/def"
 	"frbg/examples/gateway/route"
 	"frbg/network"
 	"time"
@@ -18,9 +19,9 @@ func main() {
 
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
-		ServerType: network.ST_Gate,
+		ServerType: def.ST_Gate,
 		ServerId:   uint32(sid),
-		Subs:       []network.ServerType{network.ST_Hall},
+		Subs:       []def.ServerType{def.ST_Hall},
 	}
 	pollConfig := &network.PollConfig{
 		HeartBeat: time.Millisecond * 100,

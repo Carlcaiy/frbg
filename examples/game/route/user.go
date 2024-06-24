@@ -2,9 +2,11 @@ package route
 
 import (
 	"fmt"
+	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
 	"frbg/network"
+	"frbg/parser"
 	"math/rand"
 )
 
@@ -61,7 +63,7 @@ func (r *Room) Reconnect(uid uint32, gateId uint32) {
 			u.offline = false
 
 			fmt.Println(u.uid, u.gateId)
-			bs, _ := network.Pack(u.uid, network.ST_Client, cmd.SyncData, &pb.SyncData{
+			bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.SyncData, &pb.SyncData{
 				Data:   "Reconnect game success",
 				RoomId: r.roomId,
 			})
@@ -69,7 +71,7 @@ func (r *Room) Reconnect(uid uint32, gateId uint32) {
 
 			fmt.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
-				bs, _ := network.Pack(uid, network.ST_Client, cmd.Round, &pb.Empty{})
+				bs, _ := parser.Pack(uid, def.ST_Client, cmd.Round, &pb.Empty{})
 				r.l.SendToGate(u.gateId, bs)
 			}
 			return
@@ -83,7 +85,7 @@ func (r *Room) Start() {
 	fmt.Println("Start", "turn:", r.turn)
 	for i, u := range r.Users {
 		fmt.Printf("uid:%d seat:%d gateId:%d\n", u.uid, i, u.gateId)
-		bs, _ := network.Pack(u.uid, network.ST_Client, cmd.SyncData, &pb.SyncData{
+		bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.SyncData, &pb.SyncData{
 			Data:   "game start",
 			RoomId: r.roomId,
 			GameId: r.l.ServerId,
@@ -91,7 +93,7 @@ func (r *Room) Start() {
 		r.l.SendToGate(u.gateId, bs)
 	}
 	u := r.Users[r.turn]
-	bs, _ := network.Pack(u.uid, network.ST_Client, cmd.Round, &pb.Empty{})
+	bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Round, &pb.Empty{})
 	r.l.SendToGate(u.gateId, bs)
 }
 
@@ -111,7 +113,7 @@ func (r *Room) Tap(uid uint32, tap int32) {
 		tips = fmt.Sprintf("答对了%d", r.guess_num)
 	}
 	for _, u := range r.Users {
-		bs, _ := network.Pack(u.uid, network.ST_Client, cmd.Tap, &pb.Tap{
+		bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Tap, &pb.Tap{
 			Uid:    uid,
 			RoomId: r.roomId,
 			Tap:    tap,
@@ -121,19 +123,19 @@ func (r *Room) Tap(uid uint32, tap int32) {
 	}
 
 	if tap == r.guess_num {
-		bs, _ := network.Pack(uid, network.ST_Hall, cmd.GameOver, &pb.GameOver{
+		bs, _ := parser.Pack(uid, def.ST_Hall, cmd.GameOver, &pb.GameOver{
 			TempId: r.tempId,
 			RoomId: r.roomId,
 			Data:   "game over",
 		})
-		r.l.SendToSid(r.hallId, bs, network.ST_Hall)
+		r.l.SendToSid(r.hallId, bs, def.ST_Hall)
 		r.gameOver()
 		return
 	}
 
 	r.turn = (r.turn + 1) % len(r.Users)
 	u = r.Users[r.turn]
-	bs, _ := network.Pack(u.uid, network.ST_Client, cmd.Round, &pb.Empty{})
+	bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Round, &pb.Empty{})
 	r.l.SendToGate(u.gateId, bs)
 }
 
@@ -154,7 +156,7 @@ func (r *Room) SendOther(uid uint32, bs []byte) {
 			multi.Uids = append(multi.Uids, u.uid)
 		}
 	}
-	buf, _ := network.Pack(0, network.ST_Gate, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_Gate, cmd.GateMulti, multi)
 	r.hall.Write(buf)
 }
 
@@ -165,6 +167,6 @@ func (r *Room) SendAll(bs []byte) {
 	for _, u := range r.Users {
 		multi.Uids = append(multi.Uids, u.uid)
 	}
-	buf, _ := network.Pack(0, network.ST_Gate, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_Gate, cmd.GateMulti, multi)
 	r.hall.Write(buf)
 }

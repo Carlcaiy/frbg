@@ -2,10 +2,12 @@ package route
 
 import (
 	"fmt"
+	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
 	"frbg/local"
 	"frbg/network"
+	"frbg/parser"
 	"time"
 )
 
@@ -35,7 +37,7 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.Offline, l.offline)
 }
 
-func (l *Local) login(c *network.Conn, msg *network.Message) error {
+func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.ReqGateLogin)
 	msg.UnPack(data)
 	u, ok := l.GetUser(msg.UserID()).(*User)
@@ -52,13 +54,13 @@ func (l *Local) login(c *network.Conn, msg *network.Message) error {
 	}
 
 	if u.gameID > 0 && u.roomID > 0 {
-		buf, _ := network.Pack(msg.UserID(), network.ST_Game, cmd.Reconnect, &pb.Reconnect{
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.Reconnect, &pb.Reconnect{
 			GateId: u.gateID,
 			RoomId: u.roomID,
 		})
 		l.SendToGame(u.gameID, buf)
 	} else {
-		buf, _ := network.Pack(msg.UserID(), network.ST_Client, cmd.ResGateLogin, &pb.ResGateLogin{
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResGateLogin, &pb.ResGateLogin{
 			GameId: u.gameID,
 			RoomId: u.roomID,
 			HallId: l.ServerId,
@@ -68,7 +70,7 @@ func (l *Local) login(c *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) offline(c *network.Conn, msg *network.Message) error {
+func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
 	l.DelUser(msg.UserID())
 	return nil
 }
@@ -83,7 +85,7 @@ func (l *Local) load_room_templete() {
 	}
 }
 
-func (l *Local) gameOver(c *network.Conn, msg *network.Message) error {
+func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.GameOver)
 	msg.UnPack(data)
 
@@ -96,14 +98,14 @@ func (l *Local) gameOver(c *network.Conn, msg *network.Message) error {
 	if room != nil {
 		if room.sitCount == room.UserCount {
 			for _, user := range room.users {
-				bs, _ := network.Pack(user.UserID(), network.ST_Client, cmd.CountDown, &pb.Empty{})
+				bs, _ := parser.Pack(user.UserID(), def.ST_Client, cmd.CountDown, &pb.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 			l.Start(room.tevent)
 		}
 
 		for _, u := range room.users {
-			bs, _ := network.Pack(u.userID, network.ST_Client, cmd.GameOver, data)
+			bs, _ := parser.Pack(u.userID, def.ST_Client, cmd.GameOver, data)
 			l.SendToGate(u.gateID, bs)
 		}
 	}
@@ -111,7 +113,7 @@ func (l *Local) gameOver(c *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) getRoomList(c *network.Conn, msg *network.Message) error {
+func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 	fmt.Println("getRoomList")
 	data := new(pb.ReqRoomList)
 	msg.UnPack(data)
@@ -124,13 +126,13 @@ func (l *Local) getRoomList(c *network.Conn, msg *network.Message) error {
 			Tag:      1,
 		}
 	}
-	if buf, err := network.Pack(msg.UserID(), network.ST_Client, cmd.ResRoomList, res); err == nil {
+	if buf, err := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResRoomList, res); err == nil {
 		c.Write(buf)
 	}
 	return nil
 }
 
-func (l *Local) reqEnterRoom(c *network.Conn, msg *network.Message) error {
+func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.ReqEnterRoom)
 	msg.UnPack(data)
 	fmt.Printf("reqEnterRoom uid:%d tempId:%d\n", msg.UserID(), data.TempleteId)
@@ -175,7 +177,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *network.Message) error {
 					greq.Gates[i] = room.users[i].gateID
 					fmt.Printf("i:%d uid:%d gateid:%d\n", i, room.users[i].userID, room.users[i].gateID)
 				}
-				bs, _ := network.Pack(msg.UserID(), network.ST_Game, cmd.GameStart, greq)
+				bs, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.GameStart, greq)
 				l.SendToGame(room.GameID, bs)
 			}),
 		}
@@ -202,12 +204,12 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *network.Message) error {
 			}
 		}
 
-		bs, _ := network.Pack(msg.UserID(), network.ST_Client, cmd.ResEnterRoom, res)
+		bs, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResEnterRoom, res)
 		c.Write(bs)
 
 		if room.sitCount == room.UserCount {
 			for _, user := range room.users {
-				bs, _ := network.Pack(user.UserID(), network.ST_Client, cmd.CountDown, &pb.Empty{})
+				bs, _ := parser.Pack(user.UserID(), def.ST_Client, cmd.CountDown, &pb.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 
@@ -218,7 +220,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) reqLeaveRoom(c *network.Conn, msg *network.Message) error {
+func (l *Local) reqLeaveRoom(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.ReqLeaveRoom)
 	msg.UnPack(data)
 
@@ -241,7 +243,7 @@ func (l *Local) reqLeaveRoom(c *network.Conn, msg *network.Message) error {
 func (l *Local) Close(conn *network.Conn) {
 	l.BaseLocal.Close(conn)
 	// 大厅服，清理所有相关桌子
-	if conn.ServerType == network.ST_Game {
+	if conn.ServerType == def.ST_Game {
 		for _, room := range l.rooms {
 			if room.GameID == conn.ServerId {
 				room.status = 0

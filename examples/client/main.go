@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/pb"
-	"frbg/network"
+	"frbg/parser"
 	"io"
 	"net"
 	"net/http"
@@ -57,12 +58,12 @@ func main() {
 		panic(err)
 	}
 	add(cmd.ReqGateLogin, "请求登录", func() {
-		msg := network.NewMessage(uint32(uid), network.ST_Gate)
+		msg := parser.NewMessage(uint32(uid), def.ST_Gate)
 		bs, _ := msg.Pack(cmd.ReqGateLogin, &pb.ReqGateLogin{})
 		conn.Write(bs)
 	})
 	add(cmd.ReqRoomList, "请求房间列表", func() {
-		msg := network.NewMessage(uint32(uid), network.ST_Hall)
+		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
 		bs, _ := msg.Pack(cmd.ReqRoomList, &pb.ReqRoomList{})
 		conn.Write(bs)
 	})
@@ -70,7 +71,7 @@ func main() {
 		fmt.Println("请输入进入的房间")
 		roomId := uint32(0)
 		fmt.Scanln(&roomId)
-		msg := network.NewMessage(uint32(uid), network.ST_Hall)
+		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
 		bs, _ := msg.Pack(cmd.ReqEnterRoom, &pb.ReqEnterRoom{
 			TempleteId: roomId,
 		})
@@ -80,7 +81,7 @@ func main() {
 		fmt.Println("请输入键入的数值：")
 		num := int32(0)
 		fmt.Scanln(&num)
-		msg := network.NewMessage(uint32(uid), network.ST_Game)
+		msg := parser.NewMessage(uint32(uid), def.ST_Game)
 		bs, _ := msg.Pack(cmd.Tap, &pb.Tap{
 			RoomId: roomId,
 			Tap:    num,
@@ -88,7 +89,7 @@ func main() {
 		conn.Write(bs)
 	})
 	add(cmd.ReqLeaveRoom, "请求离开房间", func() {
-		msg := network.NewMessage(uint32(uid), network.ST_Hall)
+		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
 		bs, _ := msg.Pack(cmd.ReqLeaveRoom, &pb.ReqLeaveRoom{
 			RoomId: roomId,
 		})
@@ -98,7 +99,7 @@ func main() {
 	go func() {
 		show_op()
 		for {
-			msg, err := network.Parse(conn)
+			msg, err := parser.Parse(conn)
 			if err != nil {
 				break
 			}

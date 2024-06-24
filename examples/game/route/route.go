@@ -6,6 +6,7 @@ import (
 	"frbg/examples/pb"
 	"frbg/local"
 	"frbg/network"
+	"frbg/parser"
 )
 
 type Local struct {
@@ -30,14 +31,14 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.Offline, l.offline)
 }
 
-func (l *Local) offline(c *network.Conn, msg *network.Message) error {
+func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
 	if room, ok := l.users[msg.UserID()]; ok {
 		room.Offline(msg.UserID())
 	}
 	return nil
 }
 
-func (l *Local) reconnect(c *network.Conn, msg *network.Message) error {
+func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	pack := new(pb.Reconnect)
 	msg.UnPack(pack)
 	fmt.Println("reconnect", pack.String())
@@ -51,7 +52,7 @@ func (l *Local) reconnect(c *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) startGame(c *network.Conn, msg *network.Message) error {
+func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.StartGame)
 	msg.UnPack(data)
 	fmt.Println("startGame", data.String())
@@ -79,7 +80,7 @@ func (l *Local) startGame(c *network.Conn, msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) tapGame(c *network.Conn, msg *network.Message) error {
+func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
 	data := new(pb.Tap)
 	msg.UnPack(data)
 	fmt.Println("tap game")

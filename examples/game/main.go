@@ -1,6 +1,7 @@
 package main
 
 import (
+	"frbg/def"
 	"frbg/examples/game/route"
 	"frbg/network"
 	"time"
