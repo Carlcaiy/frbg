@@ -1,7 +1,7 @@
 package local
 
 import (
-	"fmt"
+	"log"
 	"time"
 )
 
@@ -49,7 +49,7 @@ func (t *Timer) Len() int {
 
 func (t *Timer) Pop() *TimerEvent {
 	if data, err := t.MinHeap.Pop(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return nil
 	} else {
 		return data.(*TimerEvent)
@@ -74,7 +74,7 @@ func (t *Timer) Stop(e *TimerEvent) {
 
 func (t *Timer) Start(e *TimerEvent) {
 	if e.index > 0 {
-		fmt.Println("timer hava started, use reset")
+		log.Println("timer hava started, use reset")
 		return
 	}
 	e.triggerTime = time.Now().Add(e.duration)

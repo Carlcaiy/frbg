@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 	"math/rand"
 )
 
@@ -51,7 +52,7 @@ func (r *Room) GetUser(uid uint32) *User {
 
 func (r *Room) Offline(uid uint32) {
 	if u := r.GetUser(uid); u != nil {
-		fmt.Printf("user :%d offline\n", uid)
+		log.Printf("user :%d offline\n", uid)
 		u.offline = true
 	}
 }
@@ -62,30 +63,30 @@ func (r *Room) Reconnect(uid uint32, gateId uint32) {
 			u.gateId = gateId
 			u.offline = false
 
-			fmt.Println(u.uid, u.gateId)
-			bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.SyncData, &pb.SyncData{
+			log.Println(u.uid, u.gateId)
+			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
 				Data:   "Reconnect game success",
 				RoomId: r.roomId,
 			})
 			r.l.SendToGate(u.gateId, bs)
 
-			fmt.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
+			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
-				bs, _ := parser.Pack(uid, def.ST_Client, cmd.Round, &pb.Empty{})
+				bs, _ := parser.Pack(uid, def.ST_User, cmd.Round, &proto.Empty{})
 				r.l.SendToGate(u.gateId, bs)
 			}
 			return
 		}
 	}
-	fmt.Printf("Reconnect error: not find uid:%d\n", uid)
+	log.Printf("Reconnect error: not find uid:%d\n", uid)
 }
 
 func (r *Room) Start() {
 	r.Reset()
-	fmt.Println("Start", "turn:", r.turn)
+	log.Println("Start", "turn:", r.turn)
 	for i, u := range r.Users {
-		fmt.Printf("uid:%d seat:%d gateId:%d\n", u.uid, i, u.gateId)
-		bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.SyncData, &pb.SyncData{
+		log.Printf("uid:%d seat:%d gateId:%d\n", u.uid, i, u.gateId)
+		bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
 			Data:   "game start",
 			RoomId: r.roomId,
 			GameId: r.l.ServerId,
@@ -93,14 +94,14 @@ func (r *Room) Start() {
 		r.l.SendToGate(u.gateId, bs)
 	}
 	u := r.Users[r.turn]
-	bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Round, &pb.Empty{})
+	bs, _ := parser.Pack(u.uid, def.ST_User, cmd.Round, &proto.Empty{})
 	r.l.SendToGate(u.gateId, bs)
 }
 
 func (r *Room) Tap(uid uint32, tap int32) {
 	u := r.Users[r.turn]
 	if uid != u.uid {
-		fmt.Printf("tap err, uid:%d should uid:%d\n", uid, u.uid)
+		log.Printf("tap err, uid:%d should uid:%d\n", uid, u.uid)
 		return
 	}
 
@@ -113,7 +114,7 @@ func (r *Room) Tap(uid uint32, tap int32) {
 		tips = fmt.Sprintf("答对了%d", r.guess_num)
 	}
 	for _, u := range r.Users {
-		bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Tap, &pb.Tap{
+		bs, _ := parser.Pack(u.uid, def.ST_User, cmd.Tap, &proto.Tap{
 			Uid:    uid,
 			RoomId: r.roomId,
 			Tap:    tap,
@@ -123,7 +124,7 @@ func (r *Room) Tap(uid uint32, tap int32) {
 	}
 
 	if tap == r.guess_num {
-		bs, _ := parser.Pack(uid, def.ST_Hall, cmd.GameOver, &pb.GameOver{
+		bs, _ := parser.Pack(uid, def.ST_Hall, cmd.GameOver, &proto.GameOver{
 			TempId: r.tempId,
 			RoomId: r.roomId,
 			Data:   "game over",
@@ -135,12 +136,12 @@ func (r *Room) Tap(uid uint32, tap int32) {
 
 	r.turn = (r.turn + 1) % len(r.Users)
 	u = r.Users[r.turn]
-	bs, _ := parser.Pack(u.uid, def.ST_Client, cmd.Round, &pb.Empty{})
+	bs, _ := parser.Pack(u.uid, def.ST_User, cmd.Round, &proto.Empty{})
 	r.l.SendToGate(u.gateId, bs)
 }
 
 func (r *Room) gameOver() {
-	fmt.Println("game over")
+	log.Println("game over")
 }
 
 func (r *Room) SendOne(bs []byte) {
@@ -148,7 +149,7 @@ func (r *Room) SendOne(bs []byte) {
 }
 
 func (r *Room) SendOther(uid uint32, bs []byte) {
-	multi := &pb.MultiMsg{
+	multi := &proto.MultiMsg{
 		Data: bs,
 	}
 	for _, u := range r.Users {
@@ -156,17 +157,17 @@ func (r *Room) SendOther(uid uint32, bs []byte) {
 			multi.Uids = append(multi.Uids, u.uid)
 		}
 	}
-	buf, _ := parser.Pack(0, def.ST_Gate, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.GateMulti, multi)
 	r.hall.Write(buf)
 }
 
 func (r *Room) SendAll(bs []byte) {
-	multi := &pb.MultiMsg{
+	multi := &proto.MultiMsg{
 		Data: bs,
 	}
 	for _, u := range r.Users {
 		multi.Uids = append(multi.Uids, u.uid)
 	}
-	buf, _ := parser.Pack(0, def.ST_Gate, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.GateMulti, multi)
 	r.hall.Write(buf)
 }

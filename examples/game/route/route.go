@@ -1,12 +1,12 @@
 package route
 
 import (
-	"fmt"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 )
 
 type Local struct {
@@ -39,9 +39,9 @@ func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
-	pack := new(pb.Reconnect)
+	pack := new(proto.Reconnect)
 	msg.UnPack(pack)
-	fmt.Println("reconnect", pack.String())
+	log.Println("reconnect", pack.String())
 	if pack.RoomId > 0 {
 		room, ok := l.rooms[pack.RoomId]
 		if ok {
@@ -53,9 +53,9 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.StartGame)
+	data := new(proto.StartGame)
 	msg.UnPack(data)
-	fmt.Println("startGame", data.String())
+	log.Println("startGame", data.String())
 	room, ok := l.rooms[data.RoomId]
 	if !ok {
 		room = &Room{
@@ -81,9 +81,9 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.Tap)
+	data := new(proto.Tap)
 	msg.UnPack(data)
-	fmt.Println("tap game")
+	log.Println("tap game")
 	if room, ok := l.rooms[data.RoomId]; ok {
 		room.Tap(msg.UserID(), data.Tap)
 	}

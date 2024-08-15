@@ -32,9 +32,9 @@ type Header struct {
 	userID uint32 // 用户UID
 }
 
-func NewHeader(dest ServerType, uid uint32) *Header {
+func NewHeader(dest uint8, uid uint32) *Header {
 	return &Header{
-		dest:   uint8(dest),
+		dest:   0,
 		userID: uid,
 	}
 }
@@ -158,7 +158,7 @@ func (m *Message) Pack(cmd uint16, pro proto.Message) ([]byte, error) {
 	return buf, nil
 }
 
-func Pack(uid uint32, dest ServerType, cmd uint16, pro proto.Message) ([]byte, error) {
+func Pack(uid uint32, dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return nil, err
@@ -176,24 +176,13 @@ func Pack(uid uint32, dest ServerType, cmd uint16, pro proto.Message) ([]byte, e
 	return buf, nil
 }
 
-func Pack2(uid uint32, cmd uint16, pro proto.Message) ([]byte, error) {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return nil, err
-	}
-	length := uint16(HeadLen + len(body))
-	buf := make([]byte, length+LenLen)
-
-	byteOrder.PutUint16(buf, length)
-
-	h := NewHeader(0, uid)
-	h.cmd = cmd
-	h.inject(buf[LenLen:])
-
-	copy(buf[LenLen+HeadLen:], body)
-	return buf, nil
-}
-
 func (m *Message) UnPack(pro proto.Message) error {
 	return proto.Unmarshal(m.body, pro)
+}
+
+type MsgData struct {
+	Uid  uint32
+	Dest uint8
+	Cmd  uint16
+	PM   proto.Message
 }

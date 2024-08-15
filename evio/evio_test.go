@@ -6,8 +6,8 @@ package evio
 
 import (
 	"bufio"
-	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -172,7 +172,7 @@ func startClient(network, addr string, nloops int) {
 			panic(err)
 		}
 		if string(data) != string(data2) {
-			fmt.Printf("mismatch %s/%d: %d vs %d bytes\n", onetwork, nloops, len(data), len(data2))
+			log.Printf("mismatch %s/%d: %d vs %d bytes\n", onetwork, nloops, len(data), len(data2))
 			//panic("mismatch")
 		}
 	}

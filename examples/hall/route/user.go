@@ -34,8 +34,8 @@ type RoomTemplete struct {
 
 type RoomInstance struct {
 	*RoomTemplete
-	sitCount uint32
-	status   int32
+	sitCount uint32 // 坐下数量
+	status   int32  // 房间状态 0等待中 1游戏中
 	users    []*User
 	conn     *network.Conn
 	roomID   uint32

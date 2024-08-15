@@ -1,15 +1,15 @@
 package local
 
 import (
-	"fmt"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
+	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type GRPC struct {
-	pb.RPCClient
+	proto.RPCClient
 	client *grpc.ClientConn
 	addr   string
 }
@@ -23,11 +23,11 @@ func NewGRPC(addr string) *GRPC {
 func (g *GRPC) Init() {
 	client, err := grpc.Dial("addr", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	g.client = client
-	g.RPCClient = pb.NewRPCClient(client)
+	g.RPCClient = proto.NewRPCClient(client)
 }
 
 func (g *GRPC) Close() {

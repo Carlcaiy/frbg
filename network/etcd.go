@@ -2,8 +2,8 @@ package network
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -12,13 +12,15 @@ import (
 	"go.etcd.io/etcd/client/v3/namespace"
 )
 
+var etcd *Etcd
+
 type Etcd struct {
-	cli  *clientv3.Client
-	conf *ServerConfig
-	cb   func(interface{})
+	cli         *clientv3.Client
+	conf        *ServerConfig
+	serverConfs map[int32]string
 }
 
-func NewEtcd(s *ServerConfig, callback func(interface{})) *Etcd {
+func NewEtcd(s *ServerConfig) *Etcd {
 	ret := new(Etcd)
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:         []string{"127.0.0.1:2379"},
@@ -36,7 +38,7 @@ func NewEtcd(s *ServerConfig, callback func(interface{})) *Etcd {
 	cli.Lease = namespace.NewLease(cli.Lease, "cyf/")
 	ret.cli = cli
 	ret.conf = s
-	ret.cb = callback
+	ret.serverConfs = make(map[int32]string)
 	return ret
 }
 
@@ -54,43 +56,33 @@ func (p *Etcd) key() string {
 	return fmt.Sprintf("server/%d/%d", p.conf.ServerType, p.conf.ServerId)
 }
 
-func (p *Etcd) parseKey(key string) {
-	fmt.Println("parseKey", key)
+func (p *Etcd) parseKey(key string) int32 {
 	strs := strings.Split(key, "/")
 	if len(strs) != 3 {
-		fmt.Println("key struct wrong", key)
-		return
+		log.Println("key struct wrong", key)
+		return 0
 	}
 	if strs[0] != "server" {
-		fmt.Println("without server prefix", strs[0])
-		return
+		log.Println("without server prefix", strs[0])
+		return 0
 	}
 	serverType, err := strconv.Atoi(strs[1])
 	if err != nil {
-		fmt.Println("parse server type error", strs[1])
-		return
+		log.Println("parse server type error", strs[1])
+		return 0
 	}
 	serverID, err := strconv.Atoi(strs[2])
 	if err != nil {
-		fmt.Println("parse server id error", strs[2])
-		return
+		log.Println("parse server id error", strs[2])
+		return 0
 	}
 
-	fmt.Printf("parseKey success serverType=%d serverID=%d\n", serverType, serverID)
+	return int32(serverType*100 + serverID)
 }
 
-func (p *Etcd) parseValue(value []byte) {
-	fmt.Println("parseValue", string(value))
-	if len(value) > 0 {
-		conf := new(ServerConfig)
-		if err := json.Unmarshal(value, conf); err != nil {
-			fmt.Println(err)
-			return
-		}
-		if p.conf.isSub(conf.ServerType) {
-			p.cb(conf)
-		}
-	}
+func (p *Etcd) parseValue(value []byte) string {
+	addr := string(value)
+	return addr
 }
 
 func (p *Etcd) Put() {
@@ -103,8 +95,9 @@ func (p *Etcd) Get() {
 		return
 	}
 	for _, kv := range res.Kvs {
-		p.parseKey(string(kv.Key))
-		p.parseValue(kv.Value)
+		stid := p.parseKey(string(kv.Key))
+		addr := p.parseValue(kv.Value)
+		p.serverConfs[stid] = addr
 	}
 }
 
@@ -126,13 +119,15 @@ func (p *Etcd) Watch() {
 			for _, event := range watch.Events {
 				switch event.Type {
 				case clientv3.EventTypePut:
-					fmt.Println("etcd event put")
-					p.parseKey(string(event.Kv.Key))
-					p.parseValue(event.Kv.Value)
+					stid := p.parseKey(string(event.Kv.Key))
+					addr := p.parseValue(event.Kv.Value)
+					log.Printf("etcd event put %d:%s", stid, addr)
+					p.serverConfs[stid] = addr
 				case clientv3.EventTypeDelete:
-					fmt.Println("etcd event delete")
-					p.parseKey(string(event.Kv.Key))
-					p.parseValue(event.Kv.Value)
+					stid := p.parseKey(string(event.Kv.Key))
+					addr := p.serverConfs[stid]
+					delete(p.serverConfs, stid)
+					log.Printf("etcd event delete %d:%s", stid, addr)
 				}
 			}
 		}

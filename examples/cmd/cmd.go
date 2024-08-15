@@ -1,5 +1,6 @@
 package cmd
 
+// 网关消息
 const (
 	GateBegin    = 1000 // Gate
 	ReqGateLogin = 1001 // 登录网关
@@ -12,19 +13,26 @@ const (
 	ResGateLeave = 1008 // 离开网关
 	Offline      = 1009 // 断线
 	Test         = 1010 // 测试
+	ToClient     = 1011 // 发送给客户端
 	GateEnd      = 1999 // Gate
 )
+
+// 大厅消息
 const (
-	HallBegin      = 2000 // Hall
-	ReqRoomList    = 2001 // 获取房间列表
-	ResRoomList    = 2002 // 获取房间列表
-	ReqEnterRoom   = 2003 // 进房请求
-	ResEnterRoom   = 2004 // 进房答复
-	ReportRoomData = 2005 // 上报桌子信息
-	ReqLeaveRoom   = 2006 // 请求离开房间
-	ResLeaveRoom   = 2007 // 答复离开房间
-	HallEnd        = 2999 // Hall
+	HallBegin    = 2000 // Hall
+	ReqRoomList  = 2001 // 获取房间列表
+	ResRoomList  = 2002 // 获取房间列表
+	ReqEnterRoom = 2003 // 进房请求
+	ResEnterRoom = 2004 // 进房答复
+	ReqLeaveRoom = 2006 // 请求离开房间
+	ResLeaveRoom = 2007 // 答复离开房间
+	SlotsEnter   = 2008 // 进入老虎机
+	SlotsSpin    = 2009 // 老虎机摇奖
+	SlotsLeave   = 2010 // 离开老虎机
+	HallEnd      = 2999 // Hall
 )
+
+// 游戏消息
 const (
 	GameBegin = 3000 // Game
 	GameStart = 3001 // 进入游戏

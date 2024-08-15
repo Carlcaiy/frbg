@@ -1,22 +1,22 @@
 package local
 
 import (
-	"fmt"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
+	"log"
 	"net"
 
 	"google.golang.org/grpc"
 )
 
 type GRPCServer struct {
-	handle pb.RPCServer
-	server *grpc.Server 
+	handle proto.RPCServer
+	server *grpc.Server
 	addr   string
 }
 
-func NewGRPCServer(addr string, method pb.RPCServer) *GRPCServer {
+func NewGRPCServer(addr string, method proto.RPCServer) *GRPCServer {
 	return &GRPCServer{
-		addr: addr,
+		addr:   addr,
 		handle: method,
 	}
 }
@@ -24,13 +24,13 @@ func NewGRPCServer(addr string, method pb.RPCServer) *GRPCServer {
 func (g *GRPCServer) Init() {
 	net, err := net.Listen("tcp", g.addr)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	g.server = grpc.NewServer()
 	err = g.server.Serve(net)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 }

@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 	"net"
 	"time"
 )
 
-type Call func(*network.Conn, *parser.Message) error
+type Handle func(*network.Conn, *parser.Message) error
 
 type IUser interface {
 	UserID() uint32
@@ -24,8 +25,8 @@ type BaseLocal struct {
 	*network.ServerConfig
 	m_users   map[uint32]IUser
 	m_servers map[def.ServerType][]*network.Conn
-	m_route   map[uint16]Call
-	m_hook    map[uint16]Call
+	m_route   map[uint16]Handle
+	m_hook    map[uint16]Handle
 	*Timer
 }
 
@@ -34,14 +35,14 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 		ServerConfig: sconf,
 		m_users:      make(map[uint32]IUser),
 		m_servers:    make(map[def.ServerType][]*network.Conn),
-		m_route:      make(map[uint16]Call),
+		m_route:      make(map[uint16]Handle),
 		Timer:        NewTimer(1024),
-		m_hook:       make(map[uint16]Call),
+		m_hook:       make(map[uint16]Handle),
 	}
 }
 
 func (l *BaseLocal) Init() {
-	fmt.Println("base.Init")
+	log.Println("base.Init")
 	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
 	l.AddRoute(cmd.Regist, l.Regist)
 	l.AddRoute(cmd.Test, l.TestRequest)
@@ -63,11 +64,11 @@ func (l *BaseLocal) TimerHeartBeat() {
 		if servers, ok := l.m_servers[t]; ok {
 			for _, s := range servers {
 				msg := parser.NewMessage(s.ServerId, t)
-				bs, _ := msg.Pack(cmd.HeartBeat, &pb.HeartBeat{
+				bs, _ := msg.Pack(cmd.HeartBeat, &proto.HeartBeat{
 					ServerType: uint32(t),
 					ServerId:   s.ServerId,
 				})
-				// fmt.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
+				// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
 				s.Write(bs)
 			}
 		}
@@ -79,19 +80,19 @@ func (l *BaseLocal) OnConnect(conn *network.Conn) {
 		// 更新server
 		for i := range sli {
 			if sli[i].ServerId == conn.ServerId {
-				fmt.Printf("AddConn origin:%+v new:%+v\n", sli[i], conn.ServerConfig)
+				log.Printf("AddConn origin:%+v new:%+v\n", sli[i], conn.ServerConfig)
 				sli[i] = conn
 				return
 			}
 		}
 	}
 	// 尾部加入server
-	fmt.Printf("AddConn new:%+v\n", conn.ServerConfig)
+	log.Printf("AddConn new:%+v\n", conn.ServerConfig)
 	l.m_servers[conn.ServerType] = append(l.m_servers[conn.ServerType], conn)
 
 	// 注册server
 	msg := parser.NewMessage(0, conn.ServerType)
-	bs, _ := msg.Pack(cmd.Regist, &pb.Regist{
+	bs, _ := msg.Pack(cmd.Regist, &proto.Regist{
 		ServerId:   l.ServerId,
 		ServerType: uint32(l.ServerType),
 	})
@@ -103,7 +104,7 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
-	fmt.Printf("DelConn:%+v\n", conn)
+	log.Printf("DelConn:%+v\n", conn)
 	// 如果是用户连接删除用户数据即可
 	if conn.ServerConfig == nil {
 		u, ok := conn.Context().(IUser)
@@ -118,7 +119,7 @@ func (l *BaseLocal) Close(conn *network.Conn) {
 		for i := range sli {
 			// 找到对应的元素，移到最后
 			if sli[i].ServerId == conn.ServerId {
-				fmt.Printf("DelConn index:%d new:%+v\n", i, conn)
+				log.Printf("DelConn index:%d new:%+v\n", i, conn)
 				sli[i] = nil
 				index = i
 			} else if index >= 0 {
@@ -140,7 +141,7 @@ func (l *BaseLocal) RangeUser(iter func(u IUser)) {
 }
 
 func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
-	data := new(pb.Regist)
+	data := new(proto.Regist)
 	msg.UnPack(data)
 	st := def.ServerType(data.ServerType)
 	if sli, ok := l.m_servers[st]; ok {
@@ -157,19 +158,19 @@ func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
 	}
 	conn.ServerConfig = conf
 	l.m_servers[st] = append(l.m_servers[st], conn)
-	fmt.Printf("regist serverId:%d serverType:%s addr:%s\n", conf.ServerId, conf.ServerType, conf.Addr)
+	log.Printf("regist serverId:%d serverType:%s addr:%s\n", conf.ServerId, conf.ServerType, conf.Addr)
 	return nil
 }
 
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
-	data := new(pb.HeartBeat)
+	data := new(proto.HeartBeat)
 	msg.UnPack(data)
-	// fmt.Println("receive HeartBeat", data.String())
+	// log.Println("receive HeartBeat", data.String())
 	return nil
 }
 
 func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
-	data := new(pb.Test)
+	data := new(proto.Test)
 	msg.UnPack(data)
 
 	l.AddUser(&UserImplement{
@@ -177,57 +178,66 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 		Conn:   conn,
 	})
 
-	m := parser.NewMessage(data.Uid, def.ST_Client)
-	b, _ := m.Pack(cmd.Test, &pb.Test{
+	m := parser.NewMessage(data.Uid, def.ST_User)
+	b, _ := m.Pack(cmd.Test, &proto.Test{
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
 	})
 
-	return l.SendToClient(data.Uid, b)
+	return l.SendToUser(data.Uid, b)
 }
 
 func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
-func (l *BaseLocal) AddHook(cmd uint16, h Call) {
+func (l *BaseLocal) AddHook(cmd uint16, h Handle) {
 	if _, ok := l.m_hook[cmd]; !ok {
 		l.m_hook[cmd] = h
 	} else {
-		fmt.Printf("err: hook.Add cmd:%d\n", cmd)
+		log.Printf("err: hook.Add cmd:%d\n", cmd)
 	}
 }
 
-func (l *BaseLocal) AddRoute(cmd uint16, h Call) {
+func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	if _, ok := l.m_route[cmd]; !ok {
 		l.m_route[cmd] = h
 	} else {
-		fmt.Printf("err: handler.Add cmd:%d\n", cmd)
+		log.Fatalf("err: handler.Add cmd:%d\n", cmd)
 	}
+}
+
+// 鉴权
+func (l *BaseLocal) Auth(conn *network.Conn, msg *parser.Message) error {
+	if msg.UserID() == 0 && msg.Cmd() != cmd.ReqGateLogin && msg.Cmd() != cmd.HeartBeat {
+		return fmt.Errorf("msg wrong")
+	}
+	return nil
 }
 
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 
-	if msg.UserID() == 0 && msg.Cmd() != cmd.ReqGateLogin && msg.Cmd() != cmd.HeartBeat && msg.Cmd() != cmd.Regist {
-		return fmt.Errorf("msg wrong")
+	if err := l.Auth(conn, msg); err != nil {
+		return err
 	}
+
 	u := l.GetUser(msg.UserID())
 
 	// 优先调用钩子
-	if f, ok := l.m_hook[msg.Cmd()]; ok {
-		f(conn, msg)
+	if hook, ok := l.m_hook[msg.Cmd()]; ok {
+		hook(conn, msg)
 	}
 
 	switch msg.Dest() {
 	// 优先调用与本服务
 	case l.ServerType:
-		if f, ok := l.m_route[msg.Cmd()]; ok {
-			return f(conn, msg)
+		if handle, ok := l.m_route[msg.Cmd()]; ok {
+			return handle(conn, msg)
 		} else {
 			return fmt.Errorf("call: not find cmd %d", msg.Cmd())
 		}
-	case def.ST_Client:
-		return l.SendToClient(msg.UserID(), msg.Bytes())
+	case def.ST_User:
+		return l.SendToUser(msg.UserID(), msg.Bytes())
 	case def.ST_Hall:
 		return l.SendToHall(msg.UserID(), msg.Bytes())
 	case def.ST_Game:
@@ -265,7 +275,11 @@ func (l *BaseLocal) SendToSid(serverId uint32, buf []byte, t def.ServerType) err
 }
 
 // attention: gateway use this function, other server should be careful
-func (l *BaseLocal) SendToClient(uid uint32, buf []byte) error {
+func (l *BaseLocal) SendToUser(uid uint32, buf []byte) error {
+	if l.ServerType != def.ST_Gate {
+		return fmt.Errorf("only gate can do this, st：%d", l.ServerType)
+	}
+
 	if u, ok := l.m_users[uid]; ok {
 		u.Write(buf)
 		return nil

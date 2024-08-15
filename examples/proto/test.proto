@@ -1,5 +1,5 @@
 syntax = "proto3";
-option go_package="../pb;pb";
+option go_package=".;proto";
 
 // 登录
 message ReqGateLogin {
@@ -74,6 +74,77 @@ message ReqEnterRoom {
 // 进房答复
 message ResEnterRoom {
     repeated uint32 uids = 1;
+}
+
+// 进入老虎机
+message ReqEnterSlots {
+    int32 slotsId = 1;
+}
+
+message SlotsElem {
+    int32 elem_id = 1;      // 元素id
+    string elem_name = 2;   // 元素名称
+    int32 multi3 = 3;       // 3个元素倍数
+    int32 multi4 = 4;       // 4个元素倍数
+    int32 multi5 = 5;       // 5个元素倍数
+}
+
+message SlotsLine {
+    int32 line_id = 1;
+    repeated int32 line_pos = 2;
+}
+
+message ResEnterSlots {
+    int32 GameId = 1;
+    repeated SlotsElem elems = 2;   // 元素
+    repeated int32 bet = 3;         // 下注额
+    repeated int32 level = 4;       // 下注等级
+    repeated int32 line = 5;        // 下注线
+    repeated SlotsLine lines = 6;   // 中奖线路
+}
+
+
+// 离开老虎机
+message ReqLeaveSlots {
+    int32 slotsId = 1;
+}
+
+// 老虎机摇奖
+message ReqSlotsSpin {
+    int32 uid = 1;
+    int32 gameId = 2;
+    int32 bet = 3;      // 下注
+    int32 level = 4;    // 级别
+    int32 lines = 5;    // 线数
+}
+
+// Free
+message SlotsFree {
+    repeated int32 pos = 1;     // free图标位置
+    int32 freeSpin = 2;         // 奖励免费摇奖次数
+}
+
+// Bonus
+message SlotsBonus {
+    repeated int32 pos = 1;    // bonus图标位置
+    repeated int32 board = 2;  // 界面
+    int64 win = 3;             // 中奖额度
+    int64 money = 4;           // 金币
+}
+
+// 老虎机摇奖
+message ResSlotsSpin {
+    int32 uid = 1;
+    int32 gameId = 2;
+    int64 money = 3;            // 金币
+    int64 win = 4;              // 赢钱
+    repeated int32 board = 5;   // 面板
+    repeated int32 lines = 6;   // 中奖线路
+    bool free = 7;              // 中免费游戏
+    SlotsFree free_data = 8;    // free数据
+    bool bonus = 9;
+    SlotsBonus bonus_data = 10; // bonus数据
+    int32 leftSpin = 11;        // 剩余免费摇奖次数
 }
 
 // 玩家离开房间

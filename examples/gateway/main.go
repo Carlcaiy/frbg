@@ -27,5 +27,5 @@ func main() {
 		HeartBeat: time.Millisecond * 100,
 		MaxConn:   50000,
 	}
-	network.Serve(serverConfig, pollConfig, route.NewLocal(serverConfig))
+	network.Serve(serverConfig, pollConfig, route.New(serverConfig))
 }

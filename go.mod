@@ -8,6 +8,7 @@ require (
 	github.com/kavu/go_reuseport v1.5.0
 	go.etcd.io/etcd/client/v3 v3.5.9
 	golang.org/x/sys v0.18.0
+	google.golang.org/appengine v1.6.7
 	google.golang.org/grpc v1.58.0
 	google.golang.org/protobuf v1.33.0
 )

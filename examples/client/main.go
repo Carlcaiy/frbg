@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/parser"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,17 +34,17 @@ func auth() {
 	client := &http.Client{}
 	response, err := client.PostForm(u, url.Values{"name": []string{"caiyunfeng"}, "password": []string{"123123"}})
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Println("Error sending request:", err)
 		return
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		fmt.Println("error reading response body:", err)
+		log.Println("error reading response body:", err)
 		return
 	}
 
-	fmt.Println("Response", string(body))
+	log.Println("Response", string(body))
 }
 
 func main() {
@@ -59,30 +60,30 @@ func main() {
 	}
 	add(cmd.ReqGateLogin, "请求登录", func() {
 		msg := parser.NewMessage(uint32(uid), def.ST_Gate)
-		bs, _ := msg.Pack(cmd.ReqGateLogin, &pb.ReqGateLogin{})
+		bs, _ := msg.Pack(cmd.ReqGateLogin, &proto.ReqGateLogin{})
 		conn.Write(bs)
 	})
 	add(cmd.ReqRoomList, "请求房间列表", func() {
 		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqRoomList, &pb.ReqRoomList{})
+		bs, _ := msg.Pack(cmd.ReqRoomList, &proto.ReqRoomList{})
 		conn.Write(bs)
 	})
 	add(cmd.ReqEnterRoom, "请求进房间", func() {
-		fmt.Println("请输入进入的房间")
+		log.Println("请输入进入的房间")
 		roomId := uint32(0)
 		fmt.Scanln(&roomId)
 		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqEnterRoom, &pb.ReqEnterRoom{
+		bs, _ := msg.Pack(cmd.ReqEnterRoom, &proto.ReqEnterRoom{
 			TempleteId: roomId,
 		})
 		conn.Write(bs)
 	})
 	add(cmd.Tap, "猜测一个数值", func() {
-		fmt.Println("请输入键入的数值：")
+		log.Println("请输入键入的数值：")
 		num := int32(0)
 		fmt.Scanln(&num)
 		msg := parser.NewMessage(uint32(uid), def.ST_Game)
-		bs, _ := msg.Pack(cmd.Tap, &pb.Tap{
+		bs, _ := msg.Pack(cmd.Tap, &proto.Tap{
 			RoomId: roomId,
 			Tap:    num,
 		})
@@ -90,7 +91,7 @@ func main() {
 	})
 	add(cmd.ReqLeaveRoom, "请求离开房间", func() {
 		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqLeaveRoom, &pb.ReqLeaveRoom{
+		bs, _ := msg.Pack(cmd.ReqLeaveRoom, &proto.ReqLeaveRoom{
 			RoomId: roomId,
 		})
 		conn.Write(bs)
@@ -103,65 +104,65 @@ func main() {
 			if err != nil {
 				break
 			}
-			fmt.Println("receive msg:", msg.Cmd())
+			log.Println("receive msg:", msg.Cmd())
 			switch msg.Cmd() {
 			case cmd.ResGateLogin:
-				p := new(pb.ResGateLogin)
+				p := new(proto.ResGateLogin)
 				err := msg.UnPack(p)
 				if err != nil {
-					fmt.Println(err)
+					log.Println(err)
 					continue
 				}
 				if p.Ret == 0 {
-					fmt.Println("login success")
+					log.Println("login success")
 					show_op()
 				} else if p.Ret == 1 {
-					fmt.Println("error: relogin")
+					log.Println("error: relogin")
 				}
 			case cmd.GateKick:
-				p := new(pb.GateKick)
+				p := new(proto.GateKick)
 				msg.UnPack(p)
-				if p.Type == pb.KickType_Unknow {
-					fmt.Println("游戏服务关闭")
-				} else if p.Type == pb.KickType_Squeeze {
-					fmt.Println("挤号")
-				} else if p.Type == pb.KickType_GameNotFound {
-					fmt.Println("服务未发现")
+				if p.Type == proto.KickType_Unknow {
+					log.Println("游戏服务关闭")
+				} else if p.Type == proto.KickType_Squeeze {
+					log.Println("挤号")
+				} else if p.Type == proto.KickType_GameNotFound {
+					log.Println("服务未发现")
 				} else {
-					fmt.Println("踢出：位置错误")
+					log.Println("踢出：位置错误")
 				}
 			case cmd.ResRoomList:
-				p := new(pb.ResRoomList)
+				p := new(proto.ResRoomList)
 				msg.UnPack(p)
-				fmt.Println(p.String())
+				log.Println(p.String())
 				show_op()
 			case cmd.ResEnterRoom:
-				p := new(pb.ResEnterRoom)
+				p := new(proto.ResEnterRoom)
 				msg.UnPack(p)
 				for _, uids := range p.Uids {
-					fmt.Println("房间玩家", uids)
+					log.Println("房间玩家", uids)
 				}
 			case cmd.GameStart:
-				p := new(pb.StartGame)
+				p := new(proto.StartGame)
 				msg.UnPack(p)
-				fmt.Println(p.String())
+				log.Println(p.String())
 			case cmd.SyncData:
-				p := new(pb.SyncData)
+				p := new(proto.SyncData)
 				msg.UnPack(p)
-				fmt.Println(p.String())
+				log.Println(p.String())
 				roomId = p.RoomId
 			case cmd.GameOver:
-				p := new(pb.GameOver)
+				p := new(proto.GameOver)
 				msg.UnPack(p)
-				fmt.Println(p.String())
+				log.Println(p.String())
 			case cmd.Tap:
-				p := new(pb.Tap)
+				p := new(proto.Tap)
 				msg.UnPack(p)
-				fmt.Println(p.String())
+				log.Println(p.String())
 			case cmd.Round:
 				show_op()
 			case cmd.CountDown:
-				fmt.Println("剩余时间10")
+				log.Println("剩余时间10")
 				// show_op()
 			}
 		}
@@ -177,9 +178,9 @@ func main() {
 func show_op() {
 	for {
 		for cmd, des := range des {
-			fmt.Printf("%d: %s\n", cmd, des)
+			log.Printf("%d: %s\n", cmd, des)
 		}
-		fmt.Println("选择想执行的操作")
+		log.Println("选择想执行的操作")
 		cmd := 0
 		fmt.Scanln(&cmd)
 		if f, ok := req[cmd]; ok {

@@ -218,7 +218,7 @@ func loopNote(s *server, l *loop, note interface{}) error {
 
 func loopRun(s *server, l *loop) {
 	defer func() {
-		//fmt.Println("-- loop stopped --", l.idx)
+		//log.Println("-- loop stopped --", l.idx)
 		s.signalShutdown()
 		s.wg.Done()
 	}()
@@ -227,7 +227,7 @@ func loopRun(s *server, l *loop) {
 		go loopTicker(s, l)
 	}
 
-	//fmt.Println("-- loop started --", l.idx)
+	//log.Println("-- loop started --", l.idx)
 	l.poll.Wait(func(fd int, note interface{}) error {
 		if fd == 0 {
 			return loopNote(s, l, note)

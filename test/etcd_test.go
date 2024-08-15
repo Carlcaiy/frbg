@@ -1,7 +1,6 @@
 package test
 
 import (
-	"fmt"
 	"frbg/def"
 	"frbg/network"
 	"testing"
@@ -13,8 +12,6 @@ func TestEtcd(t *testing.T) {
 		ServerType: def.ST_Game,
 		ServerId:   1,
 		Subs:       []def.ServerType{def.ST_Broadcast},
-	}, func(i interface{}) {
-		fmt.Println(i)
 	})
 	cli.Init()
 	// cli.Close()

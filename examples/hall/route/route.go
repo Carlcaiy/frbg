@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/hall/db"
+	"frbg/examples/hall/slots"
+	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 	"time"
 )
 
@@ -35,10 +38,13 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.GameOver, l.gameOver)
 	l.AddRoute(cmd.ReqGateLogin, l.login)
 	l.AddRoute(cmd.Offline, l.offline)
+	l.AddRoute(cmd.SlotsEnter, l.reqEnterSlots)
+	l.AddRoute(cmd.SlotsSpin, l.reqSlotsSpin)
+	l.AddRoute(cmd.SlotsLeave, l.reqLeaveSlots)
 }
 
 func (l *Local) login(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.ReqGateLogin)
+	data := new(proto.ReqGateLogin)
 	msg.UnPack(data)
 	u, ok := l.GetUser(msg.UserID()).(*User)
 	if !ok {
@@ -48,19 +54,19 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 			hallID: l.ServerId,
 		}
 		l.AddUser(u)
-		fmt.Printf("login add uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
+		log.Printf("login add uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
 	} else {
-		fmt.Printf("login contain uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
+		log.Printf("login contain uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
 	}
 
 	if u.gameID > 0 && u.roomID > 0 {
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.Reconnect, &pb.Reconnect{
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.Reconnect, &proto.Reconnect{
 			GateId: u.gateID,
 			RoomId: u.roomID,
 		})
 		l.SendToGame(u.gameID, buf)
 	} else {
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResGateLogin, &pb.ResGateLogin{
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Gate, cmd.ResGateLogin, &proto.ResGateLogin{
 			GameId: u.gameID,
 			RoomId: u.roomID,
 			HallId: l.ServerId,
@@ -86,7 +92,7 @@ func (l *Local) load_room_templete() {
 }
 
 func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.GameOver)
+	data := new(proto.GameOver)
 	msg.UnPack(data)
 
 	var room *RoomInstance
@@ -98,14 +104,14 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 	if room != nil {
 		if room.sitCount == room.UserCount {
 			for _, user := range room.users {
-				bs, _ := parser.Pack(user.UserID(), def.ST_Client, cmd.CountDown, &pb.Empty{})
+				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 			l.Start(room.tevent)
 		}
 
 		for _, u := range room.users {
-			bs, _ := parser.Pack(u.userID, def.ST_Client, cmd.GameOver, data)
+			bs, _ := parser.Pack(u.userID, def.ST_Gate, cmd.GameOver, data)
 			l.SendToGate(u.gateID, bs)
 		}
 	}
@@ -114,28 +120,32 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
-	fmt.Println("getRoomList")
-	data := new(pb.ReqRoomList)
-	msg.UnPack(data)
-	res := new(pb.ResRoomList)
-	res.Rooms = make([]*pb.RoomInfo, len(l.templetes))
+	log.Println("getRoomList")
+	data := new(proto.ReqRoomList)
+	if err := msg.UnPack(data); err != nil {
+		return err
+	}
+	res := new(proto.ResRoomList)
+	res.Rooms = make([]*proto.RoomInfo, len(l.templetes))
 	for i, temp := range l.templetes {
-		res.Rooms[i] = &pb.RoomInfo{
+		res.Rooms[i] = &proto.RoomInfo{
 			ServerId: 0,
 			RoomId:   temp.TempId,
 			Tag:      1,
 		}
 	}
-	if buf, err := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResRoomList, res); err == nil {
+	if buf, err := parser.Pack(msg.UserID(), def.ST_Gate, cmd.ResRoomList, res); err == nil {
 		c.Write(buf)
 	}
 	return nil
 }
 
 func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.ReqEnterRoom)
-	msg.UnPack(data)
-	fmt.Printf("reqEnterRoom uid:%d tempId:%d\n", msg.UserID(), data.TempleteId)
+	data := new(proto.ReqEnterRoom)
+	if err := msg.UnPack(data); err != nil {
+		return err
+	}
+	log.Printf("reqEnterRoom uid:%d tempId:%d\n", msg.UserID(), data.TempleteId)
 
 	user, ok := l.GetUser(msg.UserID()).(*User)
 	if !ok {
@@ -160,12 +170,12 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 			users:        make([]*User, temp.UserCount),
 			conn:         c,
 			roomID:       uint32(len(l.rooms)) + 1000,
-			tevent: local.NewDelayEvent(time.Second*10, func() {
+			tevent: local.NewDelayEvent(time.Second*3, func() {
 				if room.sitCount < room.UserCount {
 					return
 				}
 				room.status = 1
-				greq := &pb.StartGame{
+				greq := &proto.StartGame{
 					TempId: room.TempId,
 					RoomId: room.roomID,
 					HallId: l.ServerId,
@@ -175,10 +185,14 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 				for i := range greq.Uids {
 					greq.Uids[i] = room.users[i].userID
 					greq.Gates[i] = room.users[i].gateID
-					fmt.Printf("i:%d uid:%d gateid:%d\n", i, room.users[i].userID, room.users[i].gateID)
+					log.Printf("i:%d uid:%d gateid:%d\n", i, room.users[i].userID, room.users[i].gateID)
 				}
 				bs, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.GameStart, greq)
-				l.SendToGame(room.GameID, bs)
+				if err := l.SendToGame(room.GameID, bs); err == nil {
+					log.Printf("配桌成功")
+				} else {
+					log.Printf("配桌失败")
+				}
 			}),
 		}
 		l.rooms[room.roomID] = room
@@ -196,7 +210,9 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 			}
 		}
 
-		res := &pb.ResEnterRoom{}
+		db.SetRoom(user.userID, room.roomID)
+
+		res := &proto.ResEnterRoom{}
 		res.Uids = make([]uint32, 0, room.sitCount)
 		for i := range room.users {
 			if room.users[i] != nil {
@@ -204,12 +220,12 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 			}
 		}
 
-		bs, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResEnterRoom, res)
+		bs, _ := parser.Pack(msg.UserID(), def.ST_User, cmd.ResEnterRoom, res)
 		c.Write(bs)
 
 		if room.sitCount == room.UserCount {
 			for _, user := range room.users {
-				bs, _ := parser.Pack(user.UserID(), def.ST_Client, cmd.CountDown, &pb.Empty{})
+				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 
@@ -221,7 +237,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) reqLeaveRoom(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.ReqLeaveRoom)
+	data := new(proto.ReqLeaveRoom)
 	msg.UnPack(data)
 
 	if room, ok := l.rooms[data.RoomId]; ok {
@@ -231,13 +247,70 @@ func (l *Local) reqLeaveRoom(c *network.Conn, msg *parser.Message) error {
 					room.users[i] = nil
 					room.sitCount -= 1
 					l.Stop(room.tevent)
+					db.SetRoom(u.UserID(), 0)
 					return nil
 				}
 			}
+		} else {
+			return fmt.Errorf("游戏中不能离开")
 		}
 	}
 
 	return fmt.Errorf("reqLeaveRoom error %s", data)
+}
+
+// 请求进入老虎机
+func (l *Local) reqEnterSlots(c *network.Conn, msg *parser.Message) error {
+	req := new(proto.ReqEnterSlots)
+	if err := msg.UnPack(req); err != nil {
+		return err
+	}
+	conf := slots.GetSlotsData(msg.UserID(), req.SlotsId)
+	rsp := proto.ResEnterSlots{
+		GameId: req.SlotsId,
+		Bet:    conf.BetConf.Bet,
+		Level:  conf.BetConf.Level,
+		Line:   conf.BetConf.Lines,
+		Lines:  conf.RouteConf,
+		Elems:  conf.ElemConf,
+	}
+	bs, err := msg.Pack(cmd.SlotsEnter, &rsp)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+	return l.SendToGate(msg.UserID(), bs)
+}
+
+// 老虎机请求摇奖
+func (l *Local) reqSlotsSpin(c *network.Conn, msg *parser.Message) error {
+	req := new(proto.ReqSlotsSpin)
+	if err := msg.UnPack(req); err != nil {
+		return err
+	}
+
+	slotsData := slots.GetSlotsData(msg.UserID(), req.GameId)
+	rsp, err := slotsData.Spin(int64(req.Bet) * int64(req.Level))
+	if err != nil {
+		return err
+	}
+
+	bs, err := msg.Pack(cmd.SlotsEnter, rsp)
+	if err != nil {
+		return err
+	}
+
+	return l.SendToGate(msg.UserID(), bs)
+}
+
+// 离开老虎机
+func (l *Local) reqLeaveSlots(c *network.Conn, msg *parser.Message) error {
+	req := new(proto.ReqLeaveSlots)
+	if err := msg.UnPack(req); err != nil {
+		return err
+	}
+	slots.DelSlotsData(msg.UserID())
+	return nil
 }
 
 func (l *Local) Close(conn *network.Conn) {

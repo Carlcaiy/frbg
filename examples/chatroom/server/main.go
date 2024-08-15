@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"frbg/def"
 	"frbg/examples/chatroom/cmd"
 	"frbg/examples/chatroom/proto"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 )
 
 type Server struct {
@@ -27,8 +28,8 @@ func (c *Server) Init() {
 func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 	switch msg.Cmd() {
 	case cmd.ReqRoomList:
-		if buf, err := parser.Pack2(msg.UserID(), cmd.RespRoomList, &proto.RespRoomList{RoomIds: c.roomList}); err != nil {
-			fmt.Println(err)
+		if buf, err := parser.Pack(msg.UserID(), def.ST_User, cmd.RespRoomList, &proto.RespRoomList{RoomIds: c.roomList}); err != nil {
+			log.Println(err)
 			return err
 		} else {
 			conn.Write(buf)
@@ -36,14 +37,14 @@ func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 	case cmd.ReqJoinRoom:
 		data := &proto.ReqJoinRoom{}
 		msg.UnPack(data)
-		fmt.Println(data)
+		log.Println(data)
 		c.conns[int32(msg.UserID())] = conn
 		c.map_room_users[data.RoomId] = append(c.map_room_users[data.RoomId], int32(msg.UserID()))
-		if buf, err := parser.Pack2(msg.UserID(), cmd.RespJoinRoom, &proto.RespJoinRoom{
+		if buf, err := parser.Pack(msg.UserID(), def.ST_User, cmd.RespJoinRoom, &proto.RespJoinRoom{
 			RoomId:  data.RoomId,
 			UserIds: c.map_room_users[data.RoomId],
 		}); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return err
 		} else {
 			conn.Write(buf)
@@ -53,10 +54,10 @@ func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 		if err := msg.UnPack(data); err != nil {
 			return err
 		}
-		fmt.Println(data)
+		log.Println(data)
 		for _, uid := range c.map_room_users[data.Room] {
 			if conn, ok := c.conns[uid]; ok {
-				buf, _ := parser.Pack2(uint32(uid), cmd.PushMsg, data)
+				buf, _ := parser.Pack(uint32(uid), def.ST_User, cmd.PushMsg, data)
 				conn.Write(buf)
 			}
 		}
@@ -76,7 +77,7 @@ func (c *Server) OnConnect(conn *network.Conn) {
 
 // 新连接的回调
 func (c *Server) OnAccept(conn *network.Conn) {
-	fmt.Println(conn.TCPConn.RemoteAddr().String())
+	log.Println(conn.TCPConn.RemoteAddr().String())
 	c.history[conn.TCPConn.RemoteAddr().String()]++
 }
 

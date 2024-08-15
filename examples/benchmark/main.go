@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/parser"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -28,7 +29,7 @@ func main() {
 	for u := 100; u < num+100; u++ {
 		wg.Add(1)
 		go func(uid uint32) {
-			fmt.Println("新增连接", uid)
+			log.Println("新增连接", uid)
 			conn, err := net.Dial("tcp", fmt.Sprintf(":%d", gateid))
 			if err != nil {
 				panic(err)
@@ -37,7 +38,7 @@ func main() {
 			var c int = 0
 			req := func(servetType parser.ServerType) {
 				msg := parser.NewMessage(uid, servetType)
-				bs, _ := msg.Pack(cmd.Test, &pb.Test{
+				bs, _ := msg.Pack(cmd.Test, &proto.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				})
@@ -49,13 +50,13 @@ func main() {
 				if err != nil {
 					break
 				}
-				fmt.Println("receive msg:", msg.Cmd())
+				log.Println("receive msg:", msg.Cmd())
 				switch msg.Cmd() {
 				case cmd.Test:
-					p := new(pb.Test)
+					p := new(proto.Test)
 					err := msg.UnPack(p)
 					if err != nil {
-						fmt.Println(err)
+						log.Println(err)
 						continue
 					}
 					p.EndTime = time.Now().UnixNano()
@@ -65,7 +66,7 @@ func main() {
 				}
 			}
 			conn.Close()
-			fmt.Printf("total=%v count=%v single=%v\n", t, c, time.Duration(int(t)/c))
+			log.Printf("total=%v count=%v single=%v\n", t, c, time.Duration(int(t)/c))
 			wg.Done()
 		}(uint32(u))
 		time.Sleep(time.Millisecond)

@@ -3,19 +3,18 @@ package def
 type ServerType int32
 
 const (
-	ST_InValid   ServerType = iota // 无效的服务器
-	ST_Client                      // 客户端
-	ST_Gate                        // 网关服
-	ST_Login                       // 登录服
-	ST_Hall                        // 大厅服
-	ST_Broadcast                   // 广播服
-	ST_Money                       // 金币服
-	ST_Game                        // 游戏服
+	ST_User      = 1 // 客户端
+	ST_Gate      = 2 // 网关服
+	ST_Login     = 3 // 登录服
+	ST_Hall      = 4 // 大厅服
+	ST_Broadcast = 5 // 广播服
+	ST_Money     = 6 // 金币服
+	ST_Game      = 7 // 游戏服
 )
 
 func (s ServerType) String() string {
 	switch s {
-	case ST_Client:
+	case ST_User:
 		return "客户端"
 	case ST_Gate:
 		return "网关服"

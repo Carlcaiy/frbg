@@ -2,11 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"frbg/def"
 	"frbg/examples/chatroom/cmd"
 	"frbg/examples/chatroom/proto"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 
 	pproto "google.golang.org/protobuf/proto"
 )
@@ -32,9 +33,9 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 	case cmd.RespRoomList:
 		data := &proto.RespRoomList{}
 		msg.UnPack(data)
-		fmt.Println(data)
-		if buf, err := parser.Pack2(c.uid, cmd.ReqJoinRoom, &proto.ReqJoinRoom{RoomId: data.RoomIds[0]}); err != nil {
-			fmt.Println(err)
+		log.Println(data)
+		if buf, err := parser.Pack(c.uid, def.ST_Gate, cmd.ReqJoinRoom, &proto.ReqJoinRoom{RoomId: data.RoomIds[0]}); err != nil {
+			log.Println(err)
 			return err
 		} else {
 			conn.Write(buf)
@@ -43,13 +44,13 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 		data := &proto.RespJoinRoom{}
 		msg.UnPack(data)
 		c.roomid = data.RoomId
-		fmt.Println(data)
-		if buf, err := parser.Pack2(c.uid, cmd.SendMsg, &proto.Send{
+		log.Println(data)
+		if buf, err := parser.Pack(c.uid, def.ST_Gate, cmd.SendMsg, &proto.Send{
 			Uid:  int32(c.uid),
 			Data: "你好啊",
 			Room: data.RoomId,
 		}); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return err
 		} else {
 			conn.Write(buf)
@@ -59,13 +60,13 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 		if err := msg.UnPack(data); err != nil {
 			return err
 		}
-		fmt.Println(data)
+		log.Println(data)
 	}
 	return nil
 }
 
 func (c *Client) Send(msg string) {
-	buf, _ := parser.Pack2(c.uid, cmd.SendMsg, &proto.Send{
+	buf, _ := parser.Pack(c.uid, def.ST_Gate, cmd.SendMsg, &proto.Send{
 		Uid:  int32(c.uid),
 		Room: c.roomid,
 		Data: msg,
@@ -75,14 +76,14 @@ func (c *Client) Send(msg string) {
 
 // 连接关闭的回调
 func (c *Client) Close(conn *network.Conn) {
-	fmt.Println("Close")
+	log.Println("Close")
 }
 
 // 连接成功的回调(Client)
 func (c *Client) OnConnect(conn *network.Conn) {
-	data, err := parser.Pack2(c.uid, cmd.ReqRoomList, &proto.Empty{})
+	data, err := parser.Pack(c.uid, def.ST_Gate, cmd.ReqRoomList, &proto.Empty{})
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	c.conn = conn

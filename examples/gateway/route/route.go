@@ -4,17 +4,18 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/pb"
+	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
 	"frbg/parser"
+	"log"
 )
 
 type Local struct {
 	*local.BaseLocal
 }
 
-func NewLocal(st *network.ServerConfig) *Local {
+func New(st *network.ServerConfig) *Local {
 	return &Local{
 		BaseLocal: local.NewBase(st),
 	}
@@ -30,18 +31,18 @@ func (l *Local) Init() {
 }
 
 func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
-	data := new(pb.ReqGateLogin)
+	data := new(proto.ReqGateLogin)
 	msg.UnPack(data)
 	user, ok := l.GetUser(msg.UserID()).(*User)
 	if ok {
 		if c != user.Conn {
-			buf, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.GateKick, &pb.GateKick{
-				Type: pb.KickType_Squeeze,
+			buf, _ := parser.Pack(msg.UserID(), def.ST_User, cmd.GateKick, &proto.GateKick{
+				Type: proto.KickType_Squeeze,
 			})
 			user.Write(buf)
 			user.Conn = c
 		} else {
-			buf, _ := parser.Pack(msg.UserID(), def.ST_Client, cmd.ResGateLogin, &pb.ResGateLogin{
+			buf, _ := parser.Pack(msg.UserID(), def.ST_User, cmd.ResGateLogin, &proto.ResGateLogin{
 				Ret: 1,
 			})
 			c.Write(buf)
@@ -54,7 +55,7 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 		c.SetContext(u)
 		l.AddUser(u)
 
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Hall, cmd.ReqGateLogin, &pb.ReqGateLogin{
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Hall, cmd.ReqGateLogin, &proto.ReqGateLogin{
 			GateId: l.ServerId,
 		})
 		l.SendModUid(u.uid, buf, def.ST_Hall)
@@ -63,7 +64,7 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) resGateLogin(c *network.Conn, msg *parser.Message) error {
-	pack := new(pb.ResGateLogin)
+	pack := new(proto.ResGateLogin)
 	msg.UnPack(pack)
 
 	user, ok := l.GetUser(msg.UserID()).(*User)
@@ -76,7 +77,7 @@ func (l *Local) resGateLogin(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
-	pack := new(pb.MultiMsg)
+	pack := new(proto.MultiMsg)
 	msg.UnPack(pack)
 	for _, uid := range pack.Uids {
 		if user := l.GetUser(uid); user != nil {
@@ -88,9 +89,9 @@ func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
 
 // 记录游戏服务ID
 func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
-	pack := new(pb.SyncData)
+	pack := new(proto.SyncData)
 	msg.UnPack(pack)
-	fmt.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID(), pack.GameId, pack.RoomId)
+	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID(), pack.GameId, pack.RoomId)
 	if user, ok := l.GetUser(msg.UserID()).(*User); ok && user != nil {
 		user.gameId = pack.GameId
 	}
@@ -101,8 +102,8 @@ func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
 func (l *Local) reqLeaveGate(c *network.Conn, msg *parser.Message) error {
 	u, ok := c.Context().(*User)
 	if ok {
-		b, _ := parser.Pack(u.UserID(), def.ST_Client, cmd.ResGateLeave, &pb.Empty{})
-		l.SendToClient(u.UserID(), b)
+		b, _ := parser.Pack(u.UserID(), def.ST_User, cmd.ResGateLeave, &proto.Empty{})
+		l.SendToUser(u.UserID(), b)
 		l.DelUser(u.UserID())
 		return nil
 	}
@@ -116,30 +117,30 @@ func (l *Local) Close(conn *network.Conn) {
 		u, ok := conn.Context().(*User)
 		if ok {
 			if u.gameId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &pb.Offline{})
-				l.SendToSid(u.gameId, b, def.ST_Game)
+				bs, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
+				l.SendToSid(u.gameId, bs, def.ST_Game)
 			} else if u.hallId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &pb.Offline{})
-				l.SendToSid(u.hallId, b, def.ST_Hall)
+				bs, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
+				l.SendToSid(u.hallId, bs, def.ST_Hall)
 			}
 		}
 	} else if conn.ServerType == def.ST_Game {
 		l.RangeUser(func(u local.IUser) {
 			if u.GameID() == conn.ServerId {
-				b, _ := parser.Pack(u.UserID(), def.ST_Client, cmd.GateKick, &pb.GateKick{
-					Type: pb.KickType_GameNotFound,
+				b, _ := parser.Pack(u.UserID(), def.ST_User, cmd.GateKick, &proto.GateKick{
+					Type: proto.KickType_GameNotFound,
 				})
-				l.SendToClient(u.UserID(), b)
+				l.SendToUser(u.UserID(), b)
 			}
 		})
-	} else if conn.ServerType == def.ST_Client {
+	} else if conn.ServerType == def.ST_User {
 		u, ok := conn.Context().(*User)
 		if ok {
 			if u.gameId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &pb.Offline{})
+				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
 				l.SendToSid(u.gameId, b, def.ST_Game)
 			} else if u.hallId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &pb.Offline{})
+				b, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
 				l.SendToSid(u.hallId, b, def.ST_Hall)
 			}
 		}

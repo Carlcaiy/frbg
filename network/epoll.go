@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/parser"
+	"log"
 	"net"
 	_ "net/http/pprof"
 	"reflect"
@@ -77,7 +78,7 @@ func NewPoll(conf *PollConfig) *Poll {
 }
 
 func (p *Poll) Close() {
-	fmt.Println("poll close")
+	log.Println("poll close")
 	// 关闭连接connfd
 	for _, c := range p.fdconns {
 		c.Close()
@@ -108,7 +109,7 @@ func (p *Poll) LoopRun() {
 
 	go func() {
 		for _, ok := <-p.ticker.C; ok; {
-			// fmt.Println("ticker", t)
+			// log.Println("ticker", t)
 			p.Trigger(def.ET_Timer)
 		}
 	}()
@@ -130,8 +131,6 @@ func (p *Poll) LoopRun() {
 				} else if t == def.ET_Error {
 					return errors.New("error")
 				}
-			case *ServerConfig:
-				p.AddConnector(t)
 			default:
 				return fmt.Errorf("unknow type %v", t)
 			}
@@ -141,7 +140,7 @@ func (p *Poll) LoopRun() {
 		}
 
 		for i := 0; i < n; i++ {
-			// fmt.Println("i:", i, "Fd:", events[i].Fd, "Events", events[i].Events, "pad", events[i].Pad, "listenFd", p.epollFd)
+			// log.Println("i:", i, "Fd:", events[i].Fd, "Events", events[i].Events, "pad", events[i].Pad, "listenFd", p.epollFd)
 			fd := int(events[i].Fd)
 			if p.eventFd == fd {
 				data := make([]byte, 8)
@@ -149,14 +148,14 @@ func (p *Poll) LoopRun() {
 			} else if p.listenFd == fd {
 				conn, err := p.listener.AcceptTCP()
 				if err != nil {
-					fmt.Println("AcceptTCP", err)
+					log.Println("AcceptTCP", err)
 					continue
 				}
 				p.Add(conn)
 			} else {
 				conn := p.fdconns[fd]
 				if conn == nil {
-					fmt.Println("Get conn", err)
+					log.Println("Get conn", err)
 					continue
 				}
 
@@ -165,13 +164,13 @@ func (p *Poll) LoopRun() {
 					p.Del(fd)
 					continue
 				}
-				// fmt.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID(), msg.Cmd(), msg.Dest())
+				// log.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID(), msg.Cmd(), msg.Dest())
 				if p.handle != nil {
 					if err := p.handle.Route(conn, msg); err != nil {
-						fmt.Println(err)
+						log.Println(err)
 					}
 				} else {
-					fmt.Println("handle nil, can't deal message")
+					log.Println("handle nil, can't deal message")
 				}
 			}
 		}
@@ -180,7 +179,7 @@ func (p *Poll) LoopRun() {
 
 func (p *Poll) AddListener(conf *ServerConfig) {
 	if conf.Addr == "" {
-		fmt.Println("error addr", conf.Addr)
+		log.Println("error addr", conf.Addr)
 		return
 	}
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
@@ -188,14 +187,14 @@ func (p *Poll) AddListener(conf *ServerConfig) {
 	must(err)
 	p.listenFd = listenFD(listener)
 	p.listener = listener
-	fmt.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
+	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
 }
 
 func (p *Poll) AddConnector(conf *ServerConfig) {
 	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	fd := socketFD(conn)
@@ -207,7 +206,7 @@ func (p *Poll) AddConnector(conf *ServerConfig) {
 	p.fdconns[fd] = ptr
 	p.handle.OnConnect(ptr)
 
-	fmt.Printf("AddConnector fd:%d conf:%+v\n", fd, conf)
+	log.Printf("AddConnector fd:%d conf:%+v\n", fd, conf)
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)})
 }
 
@@ -219,11 +218,11 @@ func (p *Poll) Trigger(tri interface{}) {
 func (p *Poll) Del(fd int) {
 	err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_DEL, fd, nil)
 	if err != nil {
-		fmt.Println("Del", err)
+		log.Println("Del", err)
 		return
 	}
 	server := p.fdconns[fd]
-	fmt.Printf("Del fd:%d addr:%v conn_num=%d\n", fd, server.RemoteAddr(), p.conn_num)
+	log.Printf("Del fd:%d addr:%v conn_num=%d\n", fd, server.RemoteAddr(), p.conn_num)
 	p.handle.Close(server)
 	delete(p.fdconns, fd)
 	p.conn_num--
@@ -232,13 +231,13 @@ func (p *Poll) Del(fd int) {
 
 func (p *Poll) Add(conn *net.TCPConn) {
 	if p.conn_num >= p.config.MaxConn {
-		fmt.Println("conn num too much.", p.config.MaxConn)
+		log.Println("conn num too much.", p.config.MaxConn)
 		return
 	}
 	fd := socketFD(conn)
 	err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)})
 	if err != nil {
-		fmt.Println("Add", err)
+		log.Println("Add", err)
 		return
 	}
 	c := &Conn{
@@ -247,7 +246,7 @@ func (p *Poll) Add(conn *net.TCPConn) {
 	}
 	p.fdconns[fd] = c
 	p.conn_num++
-	fmt.Printf("Add fd:%d addr:%v conn_num=%d conn=%v\n", fd, conn.RemoteAddr(), p.conn_num, conn)
+	log.Printf("Add fd:%d addr:%v conn_num=%d conn=%v\n", fd, conn.RemoteAddr(), p.conn_num, conn)
 	p.handle.OnAccept(c)
 }
 
