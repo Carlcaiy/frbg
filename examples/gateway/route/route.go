@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
+	"frbg/examples/db"
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
@@ -27,7 +28,6 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.GateMulti, l.multi)
 	l.AddRoute(cmd.ReqGateLeave, l.reqLeaveGate)
 	l.AddHook(cmd.SyncData, l.sync)
-	l.AddHook(cmd.ResGateLogin, l.resGateLogin)
 }
 
 func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
@@ -41,11 +41,13 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 			})
 			user.Write(buf)
 			user.Conn = c
+			db.SetGate(msg.UserID(), l.ServerId)
 		} else {
 			buf, _ := parser.Pack(msg.UserID(), def.ST_User, cmd.ResGateLogin, &proto.ResGateLogin{
 				Ret: 1,
 			})
 			c.Write(buf)
+			db.SetGate(msg.UserID(), l.ServerId)
 		}
 	} else {
 		u := &User{
@@ -54,25 +56,13 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 		}
 		c.SetContext(u)
 		l.AddUser(u)
-
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Hall, cmd.ReqGateLogin, &proto.ReqGateLogin{
-			GateId: l.ServerId,
-		})
-		l.SendModUid(u.uid, buf, def.ST_Hall)
+		db.SetGate(msg.UserID(), l.ServerId)
 	}
-	return nil
-}
 
-func (l *Local) resGateLogin(c *network.Conn, msg *parser.Message) error {
-	pack := new(proto.ResGateLogin)
-	msg.UnPack(pack)
-
-	user, ok := l.GetUser(msg.UserID()).(*User)
-	if !ok {
-		return fmt.Errorf("resGateLogin not find user:%d", msg.UserID())
+	if gid := db.GetGame(msg.UserID()); gid > 0 {
+		buf, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
+		l.SendToGame(gid, buf)
 	}
-	user.hallId = pack.HallId
-	// user.gameId = pack.GameID
 	return nil
 }
 
@@ -105,6 +95,7 @@ func (l *Local) reqLeaveGate(c *network.Conn, msg *parser.Message) error {
 		b, _ := parser.Pack(u.UserID(), def.ST_User, cmd.ResGateLeave, &proto.Empty{})
 		l.SendToUser(u.UserID(), b)
 		l.DelUser(u.UserID())
+		db.SetGate(msg.UserID(), 0)
 		return nil
 	}
 	return fmt.Errorf("reqLeaveGate not find user: %d", c.Fd)

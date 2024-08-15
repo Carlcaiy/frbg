@@ -1,7 +1,7 @@
 package slots
 
 import (
-	"frbg/examples/hall/db"
+	"frbg/examples/db"
 	"frbg/examples/proto"
 	"log"
 	"sync"

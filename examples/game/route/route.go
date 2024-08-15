@@ -2,6 +2,7 @@ package route
 
 import (
 	"frbg/examples/cmd"
+	"frbg/examples/db"
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
@@ -68,13 +69,14 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 		l.rooms[data.RoomId] = room
 	}
 	room.Users = make([]*User, len(data.Uids))
-	for i := range room.Users {
+	for i, u := range room.Users {
 		room.Users[i] = &User{
 			uid:    data.Uids[i],
 			gateId: data.Gates[i],
 			tap:    0,
 		}
 		l.users[data.Uids[i]] = room
+		db.SetGame(u.uid, l.ServerId)
 	}
 	room.Start()
 	return nil

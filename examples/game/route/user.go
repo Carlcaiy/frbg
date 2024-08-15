@@ -84,6 +84,8 @@ func (r *Room) Reconnect(uid uint32, gateId uint32) {
 func (r *Room) Start() {
 	r.Reset()
 	log.Println("Start", "turn:", r.turn)
+
+	// 同步所有数据
 	for i, u := range r.Users {
 		log.Printf("uid:%d seat:%d gateId:%d\n", u.uid, i, u.gateId)
 		bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
@@ -93,6 +95,8 @@ func (r *Room) Start() {
 		})
 		r.l.SendToGate(u.gateId, bs)
 	}
+
+	// 当前回合
 	u := r.Users[r.turn]
 	bs, _ := parser.Pack(u.uid, def.ST_User, cmd.Round, &proto.Empty{})
 	r.l.SendToGate(u.gateId, bs)

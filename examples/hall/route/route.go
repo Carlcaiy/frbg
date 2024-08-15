@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/examples/cmd"
-	"frbg/examples/hall/db"
+	"frbg/examples/db"
 	"frbg/examples/hall/slots"
 	"frbg/examples/proto"
 	"frbg/local"
@@ -36,44 +36,10 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.ReqEnterRoom, l.reqEnterRoom)
 	l.AddRoute(cmd.ReqLeaveRoom, l.reqLeaveRoom)
 	l.AddRoute(cmd.GameOver, l.gameOver)
-	l.AddRoute(cmd.ReqGateLogin, l.login)
 	l.AddRoute(cmd.Offline, l.offline)
 	l.AddRoute(cmd.SlotsEnter, l.reqEnterSlots)
 	l.AddRoute(cmd.SlotsSpin, l.reqSlotsSpin)
 	l.AddRoute(cmd.SlotsLeave, l.reqLeaveSlots)
-}
-
-func (l *Local) login(c *network.Conn, msg *parser.Message) error {
-	data := new(proto.ReqGateLogin)
-	msg.UnPack(data)
-	u, ok := l.GetUser(msg.UserID()).(*User)
-	if !ok {
-		u = &User{
-			userID: msg.UserID(),
-			gateID: data.GateId,
-			hallID: l.ServerId,
-		}
-		l.AddUser(u)
-		log.Printf("login add uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
-	} else {
-		log.Printf("login contain uid:%d game:%d room:%d gate:%d\n", msg.UserID(), u.gameID, u.roomID, data.GateId)
-	}
-
-	if u.gameID > 0 && u.roomID > 0 {
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.Reconnect, &proto.Reconnect{
-			GateId: u.gateID,
-			RoomId: u.roomID,
-		})
-		l.SendToGame(u.gameID, buf)
-	} else {
-		buf, _ := parser.Pack(msg.UserID(), def.ST_Gate, cmd.ResGateLogin, &proto.ResGateLogin{
-			GameId: u.gameID,
-			RoomId: u.roomID,
-			HallId: l.ServerId,
-		})
-		c.Write(buf)
-	}
-	return nil
 }
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
@@ -188,7 +154,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 					log.Printf("i:%d uid:%d gateid:%d\n", i, room.users[i].userID, room.users[i].gateID)
 				}
 				bs, _ := parser.Pack(msg.UserID(), def.ST_Game, cmd.GameStart, greq)
-				if err := l.SendToGame(room.GameID, bs); err == nil {
+				if err := l.SendModUid(room.roomID, bs, def.ST_Game); err == nil {
 					log.Printf("配桌成功")
 				} else {
 					log.Printf("配桌失败")
@@ -200,7 +166,6 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 
 	if room != nil {
 		user.roomID = room.roomID
-		user.gameID = room.GameID
 
 		for i := range room.users {
 			if room.users[i] == nil {

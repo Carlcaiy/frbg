@@ -8,7 +8,6 @@ import (
 type User struct {
 	userID        uint32
 	gateID        uint32
-	gameID        uint32
 	hallID        uint32
 	roomID        uint32
 	*network.Conn // 玩家可能从不同的网关过来，所以需要存一下网关ID
@@ -19,7 +18,7 @@ func (u *User) UserID() uint32 {
 }
 
 func (u *User) GameID() uint32 {
-	return u.gameID
+	return 0
 }
 
 func (u *User) GateID() uint32 {
