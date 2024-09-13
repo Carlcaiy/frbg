@@ -20,7 +20,6 @@ func main() {
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Hall,
 		ServerId:   uint32(sid),
-		Subs:       []def.ServerType{def.ST_Game},
 	}
 
 	pollConfig := &network.PollConfig{

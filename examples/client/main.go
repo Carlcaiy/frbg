@@ -17,7 +17,7 @@ import (
 	"syscall"
 )
 
-var uid int = 123
+var uid uint32 = 123
 var roomId uint32 = 0
 var gateid int = 6666
 
@@ -48,52 +48,46 @@ func auth() {
 }
 
 func main() {
-	flag.IntVar(&uid, "u", 123, "-u 123")
+	var uid64 = 0
+	flag.IntVar(&uid64, "u", 123, "-u 123")
 	flag.IntVar(&gateid, "p", 6666, "-p 6666")
 	flag.Parse()
-
+	uid = uint32(uid64)
 	auth()
 
 	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", gateid))
 	if err != nil {
 		panic(err)
 	}
-	add(cmd.ReqGateLogin, "请求登录", func() {
-		msg := parser.NewMessage(uint32(uid), def.ST_Gate)
-		bs, _ := msg.Pack(cmd.ReqGateLogin, &proto.ReqGateLogin{})
+	add(cmd.Login, "请求登录", func() {
+		bs := parser.NewMessage(uid, def.ST_Gate, cmd.Login, 1, &proto.ReqGateLogin{}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.ReqRoomList, "请求房间列表", func() {
-		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqRoomList, &proto.ReqRoomList{})
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqRoomList, 1, &proto.ReqRoomList{}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.ReqEnterRoom, "请求进房间", func() {
 		log.Println("请输入进入的房间")
 		roomId := uint32(0)
 		fmt.Scanln(&roomId)
-		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqEnterRoom, &proto.ReqEnterRoom{
-			TempleteId: roomId,
-		})
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqEnterRoom, 1, &proto.ReqEnterRoom{}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.Tap, "猜测一个数值", func() {
 		log.Println("请输入键入的数值：")
 		num := int32(0)
 		fmt.Scanln(&num)
-		msg := parser.NewMessage(uint32(uid), def.ST_Game)
-		bs, _ := msg.Pack(cmd.Tap, &proto.Tap{
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.Tap, 1, &proto.Tap{
 			RoomId: roomId,
 			Tap:    num,
-		})
+		}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.ReqLeaveRoom, "请求离开房间", func() {
-		msg := parser.NewMessage(uint32(uid), def.ST_Hall)
-		bs, _ := msg.Pack(cmd.ReqLeaveRoom, &proto.ReqLeaveRoom{
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqLeaveRoom, 1, &proto.ReqLeaveRoom{
 			RoomId: roomId,
-		})
+		}).Pack()
 		conn.Write(bs)
 	})
 
@@ -104,9 +98,9 @@ func main() {
 			if err != nil {
 				break
 			}
-			log.Println("receive msg:", msg.Cmd())
-			switch msg.Cmd() {
-			case cmd.ResGateLogin:
+			log.Println("receive msg:", msg.Cmd)
+			switch msg.Cmd {
+			case cmd.Login:
 				p := new(proto.ResGateLogin)
 				err := msg.UnPack(p)
 				if err != nil {

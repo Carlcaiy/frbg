@@ -160,11 +160,10 @@ message Offline {
 
 // 开始游戏
 message StartGame {
-    uint32 roomId = 1;   // 房间ID
-    uint32 hallId = 2;     // 大厅ID
-    repeated uint32 uids = 3;  // 所有玩家的uid
-    repeated uint32 gates = 4;     // 服务ID
-    uint32 tempId = 5;   // 模板ID
+    uint32 roomId = 1;          // 房间ID
+    uint32 hallId = 2;          // 大厅ID
+    repeated uint32 uids = 3;   // 所有玩家的uid
+    uint32 tempId = 4;          // 模板ID
 }
 
 // 同步数据

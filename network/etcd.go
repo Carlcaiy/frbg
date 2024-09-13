@@ -44,12 +44,9 @@ func NewEtcd(s *ServerConfig) *Etcd {
 
 func (p *Etcd) Init() {
 	p.Put()
-
 	// 如果有订阅需求的才去获取，正常只需要上报就行
-	if len(p.conf.Subs) > 0 {
-		p.Get()
-		go p.Watch()
-	}
+	p.Get()
+	go p.Watch()
 }
 
 func (p *Etcd) key() string {

@@ -11,7 +11,6 @@ func TestEtcd(t *testing.T) {
 		Addr:       "127.0.0.1:8888",
 		ServerType: def.ST_Game,
 		ServerId:   1,
-		Subs:       []def.ServerType{def.ST_Broadcast},
 	})
 	cli.Init()
 	// cli.Close()

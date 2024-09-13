@@ -12,7 +12,6 @@ func main() {
 		Addr:       ":6686",
 		ServerType: def.ST_Game,
 		ServerId:   1,
-		Subs:       []def.ServerType{def.ST_Gate},
 	}
 	pollConfig := &network.PollConfig{
 		HeartBeat: time.Millisecond * 100,

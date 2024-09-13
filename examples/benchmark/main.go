@@ -36,9 +36,13 @@ func main() {
 			}
 			var t time.Duration = 0
 			var c int = 0
-			req := func(servetType parser.ServerType) {
-				msg := parser.NewMessage(uid, servetType)
-				bs, _ := msg.Pack(cmd.Test, &proto.Test{
+			req := func(servetType def.ServerType) {
+				msg := &parser.Message{
+					UserID: uid,
+					DestST: uint8(servetType),
+					Cmd:    cmd.Test,
+				}
+				bs, _ := msg.PackProto(&proto.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				})
@@ -50,8 +54,8 @@ func main() {
 				if err != nil {
 					break
 				}
-				log.Println("receive msg:", msg.Cmd())
-				switch msg.Cmd() {
+				log.Println("receive msg:", msg.Cmd)
+				switch msg.Cmd {
 				case cmd.Test:
 					p := new(proto.Test)
 					err := msg.UnPack(p)

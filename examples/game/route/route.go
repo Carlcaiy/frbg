@@ -33,20 +33,22 @@ func (l *Local) Init() {
 }
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
-	if room, ok := l.users[msg.UserID()]; ok {
-		room.Offline(msg.UserID())
+	if room, ok := l.users[msg.UserID]; ok {
+		room.Offline(msg.UserID)
 	}
 	return nil
 }
 
 func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	pack := new(proto.Reconnect)
-	msg.UnPack(pack)
+	if err := msg.UnPack(pack); err != nil {
+		return err
+	}
 	log.Println("reconnect", pack.String())
 	if pack.RoomId > 0 {
 		room, ok := l.rooms[pack.RoomId]
 		if ok {
-			room.Reconnect(msg.UserID(), pack.GateId)
+			room.Reconnect(msg.UserID, pack.GateId)
 		}
 	}
 
@@ -71,9 +73,8 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	room.Users = make([]*User, len(data.Uids))
 	for i, u := range room.Users {
 		room.Users[i] = &User{
-			uid:    data.Uids[i],
-			gateId: data.Gates[i],
-			tap:    0,
+			uid: data.Uids[i],
+			tap: 0,
 		}
 		l.users[data.Uids[i]] = room
 		db.SetGame(u.uid, l.ServerId)
@@ -87,7 +88,7 @@ func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
 	msg.UnPack(data)
 	log.Println("tap game")
 	if room, ok := l.rooms[data.RoomId]; ok {
-		room.Tap(msg.UserID(), data.Tap)
+		room.Tap(msg.UserID, data.Tap)
 	}
 
 	return nil

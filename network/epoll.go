@@ -61,7 +61,7 @@ type Poll struct {
 	handle   Handler
 }
 
-func NewPoll(conf *PollConfig) *Poll {
+func NewPoll(conf *PollConfig, handle Handler) *Poll {
 	epollFd, err := unix.EpollCreate1(0)
 	must(err)
 	eventFd, err := unix.Eventfd(0, unix.EFD_CLOEXEC) // unix.EFD_NONBLOCK|unix.EFD_CLOEXEC
@@ -74,6 +74,7 @@ func NewPoll(conf *PollConfig) *Poll {
 		eventFd: eventFd,
 		ticker:  time.NewTicker(conf.HeartBeat),
 		config:  conf,
+		handle:  handle,
 	}
 }
 
@@ -164,7 +165,7 @@ func (p *Poll) LoopRun() {
 					p.Del(fd)
 					continue
 				}
-				// log.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID(), msg.Cmd(), msg.Dest())
+				// log.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID, msg.Cmd, msg.Dest())
 				if p.handle != nil {
 					if err := p.handle.Route(conn, msg); err != nil {
 						log.Println(err)

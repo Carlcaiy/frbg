@@ -23,10 +23,9 @@ func Serve(sconf *ServerConfig, pconf *PollConfig, handle Handler) {
 
 	handle.Init()
 
-	poll := NewPoll(pconf)
+	poll := NewPoll(pconf, handle)
 	poll.AddListener(sconf)
 
-	poll.handle = handle
 	go poll.LoopRun()
 
 	etcd = NewEtcd(sconf)

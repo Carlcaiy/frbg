@@ -29,7 +29,7 @@ func (c *Client) Parse(ccmd uint16, proto pproto.Message) {
 
 // 消息路由
 func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
-	switch msg.Cmd() {
+	switch msg.Cmd {
 	case cmd.RespRoomList:
 		data := &proto.RespRoomList{}
 		msg.UnPack(data)

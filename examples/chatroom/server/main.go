@@ -26,9 +26,9 @@ func (c *Server) Init() {
 
 // 消息路由
 func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
-	switch msg.Cmd() {
+	switch msg.Cmd {
 	case cmd.ReqRoomList:
-		if buf, err := parser.Pack(msg.UserID(), def.ST_User, cmd.RespRoomList, &proto.RespRoomList{RoomIds: c.roomList}); err != nil {
+		if buf, err := parser.Pack(msg.UserID, def.ST_User, cmd.RespRoomList, &proto.RespRoomList{RoomIds: c.roomList}); err != nil {
 			log.Println(err)
 			return err
 		} else {
@@ -38,9 +38,9 @@ func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 		data := &proto.ReqJoinRoom{}
 		msg.UnPack(data)
 		log.Println(data)
-		c.conns[int32(msg.UserID())] = conn
-		c.map_room_users[data.RoomId] = append(c.map_room_users[data.RoomId], int32(msg.UserID()))
-		if buf, err := parser.Pack(msg.UserID(), def.ST_User, cmd.RespJoinRoom, &proto.RespJoinRoom{
+		c.conns[int32(msg.UserID)] = conn
+		c.map_room_users[data.RoomId] = append(c.map_room_users[data.RoomId], int32(msg.UserID))
+		if buf, err := parser.Pack(msg.UserID, def.ST_User, cmd.RespJoinRoom, &proto.RespJoinRoom{
 			RoomId:  data.RoomId,
 			UserIds: c.map_room_users[data.RoomId],
 		}); err != nil {

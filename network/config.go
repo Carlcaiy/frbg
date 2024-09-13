@@ -1,16 +1,14 @@
 package network
 
 import (
-	"frbg/def"
 	"strconv"
 	"strings"
 )
 
 type ServerConfig struct {
-	Addr       string           // 服务地址
-	ServerType def.ServerType   // 服务类型
-	ServerId   uint32           // 服务ID
-	Subs       []def.ServerType // 订阅的服务类型
+	Addr       string // 服务地址
+	ServerType uint8  // 服务类型
+	ServerId   uint32 // 服务ID
 }
 
 func (s ServerConfig) IP() []byte {
@@ -22,30 +20,4 @@ func (s ServerConfig) Port() int {
 	strs := strings.Split(s.Addr, ":")
 	port, _ := strconv.Atoi(strs[1])
 	return port
-}
-
-// 配置相同
-func (s ServerConfig) Equal(a ServerConfig) bool {
-	if s.Addr != a.Addr || s.ServerType != a.ServerType || s.ServerId != a.ServerId {
-		return false
-	}
-	if len(s.Subs) != len(a.Subs) {
-		return false
-	}
-	for i := 0; i < len(a.Subs); i++ {
-		if s.Subs[i] != a.Subs[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// 是否被订阅
-func (p *ServerConfig) isSub(st def.ServerType) bool {
-	for i := range p.Subs {
-		if st == p.Subs[i] {
-			return true
-		}
-	}
-	return false
 }

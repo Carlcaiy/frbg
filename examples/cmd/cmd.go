@@ -3,8 +3,7 @@ package cmd
 // 网关消息
 const (
 	GateBegin    = 1000 // Gate
-	ReqGateLogin = 1001 // 登录网关
-	ResGateLogin = 1002 // 登录成功
+	Login        = 1001 // 登录网关
 	GateKick     = 1003 // 网关踢人
 	GateMulti    = 1004 // 多播
 	HeartBeat    = 1005 // 心跳
