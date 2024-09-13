@@ -9,7 +9,7 @@ import (
 
 func Client(sconf *ServerConfig, pconf *PollConfig, handle Handler) {
 
-	poll := NewPoll(pconf, handle)
+	poll := NewPoll(sconf, pconf, handle)
 	go poll.LoopRun()
 
 	poll.AddConnector(sconf)

@@ -94,7 +94,7 @@ func main() {
 	go func() {
 		show_op()
 		for {
-			msg, err := parser.Parse(conn)
+			msg, err := parser.Read(conn)
 			if err != nil {
 				break
 			}
@@ -102,7 +102,7 @@ func main() {
 			switch msg.Cmd {
 			case cmd.Login:
 				p := new(proto.ResGateLogin)
-				err := msg.UnPack(p)
+				err := msg.Unpack(p)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -115,7 +115,7 @@ func main() {
 				}
 			case cmd.GateKick:
 				p := new(proto.GateKick)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				if p.Type == proto.KickType_Unknow {
 					log.Println("游戏服务关闭")
 				} else if p.Type == proto.KickType_Squeeze {
@@ -127,31 +127,31 @@ func main() {
 				}
 			case cmd.ResRoomList:
 				p := new(proto.ResRoomList)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				log.Println(p.String())
 				show_op()
 			case cmd.ResEnterRoom:
 				p := new(proto.ResEnterRoom)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				for _, uids := range p.Uids {
 					log.Println("房间玩家", uids)
 				}
 			case cmd.GameStart:
 				p := new(proto.StartGame)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				log.Println(p.String())
 			case cmd.SyncData:
 				p := new(proto.SyncData)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				log.Println(p.String())
 				roomId = p.RoomId
 			case cmd.GameOver:
 				p := new(proto.GameOver)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				log.Println(p.String())
 			case cmd.Tap:
 				p := new(proto.Tap)
-				msg.UnPack(p)
+				msg.Unpack(p)
 				log.Println(p.String())
 			case cmd.Round:
 				show_op()

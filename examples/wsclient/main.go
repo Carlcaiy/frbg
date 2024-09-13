@@ -44,7 +44,7 @@ func main() {
 			log.Println(err)
 			break
 		}
-		msg.UnPack(test)
+		msg.Unpack(test)
 		log.Println("receive msg:", test)
 
 		time.Sleep(time.Second)

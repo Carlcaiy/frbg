@@ -23,8 +23,9 @@ func Serve(sconf *ServerConfig, pconf *PollConfig, handle Handler) {
 
 	handle.Init()
 
-	poll := NewPoll(pconf, handle)
-	poll.AddListener(sconf)
+	poll := NewPoll(sconf, pconf, handle)
+	poll.addListener()
+	poll.addUngrader()
 
 	go poll.LoopRun()
 

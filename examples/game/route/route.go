@@ -41,7 +41,7 @@ func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	pack := new(proto.Reconnect)
-	if err := msg.UnPack(pack); err != nil {
+	if err := msg.Unpack(pack); err != nil {
 		return err
 	}
 	log.Println("reconnect", pack.String())
@@ -57,7 +57,7 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.StartGame)
-	msg.UnPack(data)
+	msg.Unpack(data)
 	log.Println("startGame", data.String())
 	room, ok := l.rooms[data.RoomId]
 	if !ok {
@@ -85,7 +85,7 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.Tap)
-	msg.UnPack(data)
+	msg.Unpack(data)
 	log.Println("tap game")
 	if room, ok := l.rooms[data.RoomId]; ok {
 		room.Tap(msg.UserID, data.Tap)

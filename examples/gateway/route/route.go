@@ -32,7 +32,7 @@ func (l *Local) Init() {
 
 func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.ReqGateLogin)
-	msg.UnPack(data)
+	msg.Unpack(data)
 	user, ok := l.GetUser(msg.UserID).(*User)
 	if ok {
 		if c != user.Conn {
@@ -68,7 +68,7 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
 	pack := new(proto.MultiMsg)
-	msg.UnPack(pack)
+	msg.Unpack(pack)
 	for _, uid := range pack.Uids {
 		if user := l.GetUser(uid); user != nil {
 			user.Write(pack.Data)
@@ -80,7 +80,7 @@ func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
 // 记录游戏服务ID
 func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
 	pack := new(proto.SyncData)
-	msg.UnPack(pack)
+	msg.Unpack(pack)
 	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID, pack.GameId, pack.RoomId)
 	if user, ok := l.GetUser(msg.UserID).(*User); ok && user != nil {
 		user.gameId = pack.GameId

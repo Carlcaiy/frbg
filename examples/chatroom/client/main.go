@@ -32,7 +32,7 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 	switch msg.Cmd {
 	case cmd.RespRoomList:
 		data := &proto.RespRoomList{}
-		msg.UnPack(data)
+		msg.Unpack(data)
 		log.Println(data)
 		if buf, err := parser.Pack(c.uid, def.ST_Gate, cmd.ReqJoinRoom, &proto.ReqJoinRoom{RoomId: data.RoomIds[0]}); err != nil {
 			log.Println(err)
@@ -42,7 +42,7 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 		}
 	case cmd.RespJoinRoom:
 		data := &proto.RespJoinRoom{}
-		msg.UnPack(data)
+		msg.Unpack(data)
 		c.roomid = data.RoomId
 		log.Println(data)
 		if buf, err := parser.Pack(c.uid, def.ST_Gate, cmd.SendMsg, &proto.Send{
@@ -57,7 +57,7 @@ func (c *Client) Route(conn *network.Conn, msg *parser.Message) error {
 		}
 	case cmd.PushMsg:
 		data := &proto.Send{}
-		if err := msg.UnPack(data); err != nil {
+		if err := msg.Unpack(data); err != nil {
 			return err
 		}
 		log.Println(data)

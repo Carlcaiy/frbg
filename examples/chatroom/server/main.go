@@ -36,7 +36,7 @@ func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 		}
 	case cmd.ReqJoinRoom:
 		data := &proto.ReqJoinRoom{}
-		msg.UnPack(data)
+		msg.Unpack(data)
 		log.Println(data)
 		c.conns[int32(msg.UserID)] = conn
 		c.map_room_users[data.RoomId] = append(c.map_room_users[data.RoomId], int32(msg.UserID))
@@ -51,7 +51,7 @@ func (c *Server) Route(conn *network.Conn, msg *parser.Message) error {
 		}
 	case cmd.SendMsg:
 		data := &proto.Send{}
-		if err := msg.UnPack(data); err != nil {
+		if err := msg.Unpack(data); err != nil {
 			return err
 		}
 		log.Println(data)

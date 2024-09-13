@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gobwas/ws"
 	reuseport "github.com/kavu/go_reuseport"
 	"golang.org/x/sys/unix"
 )
@@ -49,19 +50,21 @@ func (c *Conn) SetContext(d interface{}) {
 }
 
 type Poll struct {
-	epollFd  int
-	eventFd  int
-	listenFd int
-	listener *net.TCPListener
-	fdconns  map[int]*Conn
-	conn_num int
-	ticker   *time.Ticker
-	config   *PollConfig
-	queue    esqueue
-	handle   Handler
+	epollFd    int
+	eventFd    int
+	listenFd   int
+	listener   *net.TCPListener
+	fdconns    map[int]*Conn
+	conn_num   int
+	ticker     *time.Ticker
+	pollConfig *PollConfig
+	queue      esqueue
+	handle     Handler
+	upgrader   *ws.Upgrader
+	serverConf *ServerConfig
 }
 
-func NewPoll(conf *PollConfig, handle Handler) *Poll {
+func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	epollFd, err := unix.EpollCreate1(0)
 	must(err)
 	eventFd, err := unix.Eventfd(0, unix.EFD_CLOEXEC) // unix.EFD_NONBLOCK|unix.EFD_CLOEXEC
@@ -69,12 +72,13 @@ func NewPoll(conf *PollConfig, handle Handler) *Poll {
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
 	return &Poll{
-		fdconns: make(map[int]*Conn),
-		epollFd: epollFd,
-		eventFd: eventFd,
-		ticker:  time.NewTicker(conf.HeartBeat),
-		config:  conf,
-		handle:  handle,
+		fdconns:    make(map[int]*Conn),
+		epollFd:    epollFd,
+		eventFd:    eventFd,
+		ticker:     time.NewTicker(pconf.HeartBeat),
+		pollConfig: pconf,
+		handle:     handle,
+		serverConf: sconf,
 	}
 }
 
@@ -115,6 +119,19 @@ func (p *Poll) LoopRun() {
 		}
 	}()
 
+	u := ws.Upgrader{
+		ReadBufferSize:  1024 * 64,
+		WriteBufferSize: 1024 * 64,
+		OnHeader: func(key, value []byte) (err error) {
+			log.Printf("non-websocket header: %q=%q", key, value)
+			return
+		},
+		Protocol: func(b []byte) bool {
+			log.Println(string(b))
+			return true
+		},
+	}
+
 	events := make([]unix.EpollEvent, 64)
 	for {
 		n, err := unix.EpollWait(p.epollFd, events, 100)
@@ -152,6 +169,14 @@ func (p *Poll) LoopRun() {
 					log.Println("AcceptTCP", err)
 					continue
 				}
+
+				if p.upgrader != nil {
+					_, err = u.Upgrade(conn)
+					if err != nil {
+						log.Printf("upgrade error: %s", err)
+						return
+					}
+				}
 				p.Add(conn)
 			} else {
 				conn := p.fdconns[fd]
@@ -160,8 +185,9 @@ func (p *Poll) LoopRun() {
 					continue
 				}
 
-				msg, err := parser.Parse(conn)
+				msg, err := parser.WsRead(conn)
 				if err != nil {
+					log.Println("parser.WsRead", err)
 					p.Del(fd)
 					continue
 				}
@@ -169,6 +195,7 @@ func (p *Poll) LoopRun() {
 				if p.handle != nil {
 					if err := p.handle.Route(conn, msg); err != nil {
 						log.Println(err)
+
 					}
 				} else {
 					log.Println("handle nil, can't deal message")
@@ -178,8 +205,9 @@ func (p *Poll) LoopRun() {
 	}
 }
 
-func (p *Poll) AddListener(conf *ServerConfig) {
-	if conf.Addr == "" {
+func (p *Poll) addListener() {
+	conf := p.serverConf
+	if p.serverConf.Addr == "" {
 		log.Println("error addr", conf.Addr)
 		return
 	}
@@ -190,6 +218,24 @@ func (p *Poll) AddListener(conf *ServerConfig) {
 	p.listener = listener
 	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
+}
+
+func (p *Poll) addUngrader() {
+	if p.serverConf.ServerType != def.ST_WsGate {
+		return
+	}
+	p.upgrader = &ws.Upgrader{
+		ReadBufferSize:  1024 * 64,
+		WriteBufferSize: 1024 * 64,
+		OnHeader: func(key, value []byte) (err error) {
+			log.Printf("non-websocket header: %q=%q", key, value)
+			return
+		},
+		Protocol: func(b []byte) bool {
+			log.Println(string(b))
+			return true
+		},
+	}
 }
 
 func (p *Poll) AddConnector(conf *ServerConfig) {
@@ -231,8 +277,8 @@ func (p *Poll) Del(fd int) {
 }
 
 func (p *Poll) Add(conn *net.TCPConn) {
-	if p.conn_num >= p.config.MaxConn {
-		log.Println("conn num too much.", p.config.MaxConn)
+	if p.conn_num >= p.pollConfig.MaxConn {
+		log.Println("conn num too much.", p.pollConfig.MaxConn)
 		return
 	}
 	fd := socketFD(conn)

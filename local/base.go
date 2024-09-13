@@ -25,8 +25,8 @@ type BaseLocal struct {
 	*network.ServerConfig
 	m_users   map[uint32]IUser
 	m_servers map[uint8][]*network.Conn
-	m_route   map[uint16]Handle
-	m_hook    map[uint16]Handle
+	m_route   map[uint16]Handle // 路由
+	m_hook    map[uint16]Handle // 钩子路由
 	*Timer
 }
 
@@ -131,7 +131,7 @@ func (l *BaseLocal) RangeUser(iter func(u IUser)) {
 
 func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
 	data := new(proto.Regist)
-	msg.UnPack(data)
+	msg.Unpack(data)
 	st := uint8(data.ServerType)
 	if sli, ok := l.m_servers[st]; ok {
 		for i := range sli {
@@ -153,7 +153,7 @@ func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
 
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	data := new(proto.HeartBeat)
-	if err := msg.UnPack(data); err != nil {
+	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 	log.Println("HeartBeat", data.String())
@@ -162,7 +162,7 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 
 func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 	data := new(proto.Test)
-	if err := msg.UnPack(data); err != nil {
+	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 

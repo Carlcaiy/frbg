@@ -50,7 +50,7 @@ func main() {
 			}
 			req(def.ST_Gate)
 			for !close {
-				msg, err := parser.Parse(conn)
+				msg, err := parser.Read(conn)
 				if err != nil {
 					break
 				}
@@ -58,7 +58,7 @@ func main() {
 				switch msg.Cmd {
 				case cmd.Test:
 					p := new(proto.Test)
-					err := msg.UnPack(p)
+					err := msg.Unpack(p)
 					if err != nil {
 						log.Println(err)
 						continue

@@ -59,7 +59,7 @@ func (l *Local) load_room_templete() {
 
 func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.GameOver)
-	msg.UnPack(data)
+	msg.Unpack(data)
 
 	var room *RoomInstance
 	if r, ok := l.rooms[data.RoomId]; ok {
@@ -88,7 +88,7 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 	log.Println("getRoomList")
 	data := new(proto.ReqRoomList)
-	if err := msg.UnPack(data); err != nil {
+	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 	res := new(proto.ResRoomList)
@@ -108,7 +108,7 @@ func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.ReqEnterRoom)
-	if err := msg.UnPack(data); err != nil {
+	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 	log.Printf("reqEnterRoom uid:%d tempId:%d\n", msg.UserID, data.TempleteId)
@@ -201,7 +201,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) reqLeaveRoom(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.ReqLeaveRoom)
-	msg.UnPack(data)
+	msg.Unpack(data)
 
 	if room, ok := l.rooms[data.RoomId]; ok {
 		if room.status == 0 {
@@ -225,7 +225,7 @@ func (l *Local) reqLeaveRoom(c *network.Conn, msg *parser.Message) error {
 // 请求进入老虎机
 func (l *Local) reqEnterSlots(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.ReqEnterSlots)
-	if err := msg.UnPack(req); err != nil {
+	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 	conf := slots.GetSlotsData(msg.UserID, req.SlotsId)
@@ -248,7 +248,7 @@ func (l *Local) reqEnterSlots(c *network.Conn, msg *parser.Message) error {
 // 老虎机请求摇奖
 func (l *Local) reqSlotsSpin(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.ReqSlotsSpin)
-	if err := msg.UnPack(req); err != nil {
+	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 
@@ -269,7 +269,7 @@ func (l *Local) reqSlotsSpin(c *network.Conn, msg *parser.Message) error {
 // 离开老虎机
 func (l *Local) reqLeaveSlots(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.ReqLeaveSlots)
-	if err := msg.UnPack(req); err != nil {
+	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 	slots.DelSlotsData(msg.UserID)

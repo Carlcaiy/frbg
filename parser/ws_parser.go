@@ -13,7 +13,7 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 		return nil, err
 	}
 	length := byteOrder.Uint16(all[:2])
-	if int(length) != len(all[2:]) {
+	if int(length) != len(all) {
 		return nil, fmt.Errorf("binary unpack len error")
 	}
 	if length < HeaderLen {
