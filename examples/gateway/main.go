@@ -10,21 +10,26 @@ import (
 )
 
 func main() {
-
-	port := 6666
+	wsport := 8080
+	port := 8081
 	sid := 1
-	flag.IntVar(&port, "p", 6666, "-p 6666")
+	flag.IntVar(&wsport, "p", 8080, "-p 6666")
+	flag.IntVar(&port, "p", 8081, "-p 6666")
 	flag.IntVar(&sid, "s", 1, "-s 1")
 	flag.Parse()
-
+	wsserverConfig := &network.ServerConfig{
+		Addr:       fmt.Sprintf(":%d", wsport),
+		ServerType: def.ST_WsGate,
+		ServerId:   uint32(sid),
+	}
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
-		ServerType: def.ST_WsGate,
+		ServerType: def.ST_Gate,
 		ServerId:   uint32(sid),
 	}
 	pollConfig := &network.PollConfig{
 		HeartBeat: time.Millisecond * 100,
 		MaxConn:   50000,
 	}
-	network.Serve(serverConfig, pollConfig, route.New(serverConfig))
+	network.Serve(pollConfig, route.New(serverConfig), serverConfig, wsserverConfig)
 }

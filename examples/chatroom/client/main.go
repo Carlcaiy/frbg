@@ -100,6 +100,11 @@ func (c *Client) Tick() {
 
 }
 
+// 心跳
+func (c *Client) OnEtcd(conf *network.ServerConfig) {
+
+}
+
 func main() {
 	uid := 0
 	flag.IntVar(&uid, "uid", 0, "-uid 1")

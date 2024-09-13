@@ -18,9 +18,10 @@ type Etcd struct {
 	cli         *clientv3.Client
 	conf        *ServerConfig
 	serverConfs map[int32]string
+	handle      Handler
 }
 
-func NewEtcd(s *ServerConfig) *Etcd {
+func NewEtcd(s *ServerConfig, handle Handler) *Etcd {
 	ret := new(Etcd)
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:         []string{"127.0.0.1:2379"},
@@ -53,28 +54,28 @@ func (p *Etcd) key() string {
 	return fmt.Sprintf("server/%d/%d", p.conf.ServerType, p.conf.ServerId)
 }
 
-func (p *Etcd) parseKey(key string) int32 {
+func (p *Etcd) parseKey(key string) (uint8, uint32) {
 	strs := strings.Split(key, "/")
 	if len(strs) != 3 {
 		log.Println("key struct wrong", key)
-		return 0
+		return 0, 0
 	}
 	if strs[0] != "server" {
 		log.Println("without server prefix", strs[0])
-		return 0
+		return 0, 0
 	}
 	serverType, err := strconv.Atoi(strs[1])
 	if err != nil {
 		log.Println("parse server type error", strs[1])
-		return 0
+		return 0, 0
 	}
 	serverID, err := strconv.Atoi(strs[2])
 	if err != nil {
 		log.Println("parse server id error", strs[2])
-		return 0
+		return 0, 0
 	}
 
-	return int32(serverType*100 + serverID)
+	return uint8(serverType), uint32(serverID)
 }
 
 func (p *Etcd) parseValue(value []byte) string {
@@ -92,9 +93,13 @@ func (p *Etcd) Get() {
 		return
 	}
 	for _, kv := range res.Kvs {
-		stid := p.parseKey(string(kv.Key))
+		serverType, serverId := p.parseKey(string(kv.Key))
 		addr := p.parseValue(kv.Value)
-		p.serverConfs[stid] = addr
+		p.handle.OnEtcd(&ServerConfig{
+			ServerType: serverType,
+			ServerId:   serverId,
+			Addr:       addr,
+		})
 	}
 }
 
@@ -110,21 +115,30 @@ func (p *Etcd) Watch() {
 	watchCh := p.cli.Watch(context.TODO(), "server", clientv3.WithPrefix())
 	for {
 		select {
-		case <-closech:
+		// case <-closech:
+		// 	return
+		case <-p.cli.Ctx().Done():
+			log.Println("ectd done")
 			return
 		case watch := <-watchCh:
 			for _, event := range watch.Events {
 				switch event.Type {
 				case clientv3.EventTypePut:
-					stid := p.parseKey(string(event.Kv.Key))
+					serverType, serverId := p.parseKey(string(event.Kv.Key))
 					addr := p.parseValue(event.Kv.Value)
-					log.Printf("etcd event put %d:%s", stid, addr)
-					p.serverConfs[stid] = addr
+					log.Printf("etcd event put %d:%d:%s", serverType, serverId, addr)
+					p.handle.OnEtcd(&ServerConfig{
+						ServerType: serverType,
+						ServerId:   serverId,
+						Addr:       addr,
+					})
 				case clientv3.EventTypeDelete:
-					stid := p.parseKey(string(event.Kv.Key))
-					addr := p.serverConfs[stid]
-					delete(p.serverConfs, stid)
-					log.Printf("etcd event delete %d:%s", stid, addr)
+					serverType, serverId := p.parseKey(string(event.Kv.Key))
+					p.handle.OnEtcd(&ServerConfig{
+						ServerType: serverType,
+						ServerId:   serverId,
+					})
+					log.Printf("etcd event delete %d:%d", serverType, serverId)
 				}
 			}
 		}

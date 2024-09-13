@@ -27,5 +27,5 @@ func main() {
 		MaxConn:   50000,
 	}
 
-	network.Serve(serverConfig, pollConfig, route.NewLocal(serverConfig))
+	network.Serve(pollConfig, route.NewLocal(serverConfig), serverConfig)
 }

@@ -44,7 +44,6 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 func (l *BaseLocal) Init() {
 	log.Println("base.Init")
 	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
-	l.AddRoute(cmd.Regist, l.Regist)
 	l.AddRoute(cmd.Test, l.TestRequest)
 	l.StartTimer(time.Minute, l.TimerHeartBeat, true)
 }
@@ -62,9 +61,9 @@ func (l *BaseLocal) StartTimer(dur time.Duration, f func(), loop bool) {
 func (l *BaseLocal) TimerHeartBeat() {
 	for t, m_servers := range l.m_servers {
 		for _, s := range m_servers {
-			bs := parser.NewMessage(s.ServerId, t, cmd.HeartBeat, 1, &proto.HeartBeat{
+			bs := parser.NewMessage(0, t, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
 				ServerType: uint32(t),
-				ServerId:   s.ServerId,
+				ServerId:   uint32(s.ServerId),
 			}).Pack()
 			// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
 			s.Write(bs)
@@ -89,6 +88,10 @@ func (l *BaseLocal) OnConnect(conn *network.Conn) {
 }
 
 func (l *BaseLocal) OnAccept(conn *network.Conn) {
+
+}
+
+func (l *BaseLocal) OnEtcd(conf *network.ServerConfig) {
 
 }
 
@@ -127,28 +130,6 @@ func (l *BaseLocal) RangeUser(iter func(u IUser)) {
 	for _, u := range l.m_users {
 		iter(u)
 	}
-}
-
-func (l *BaseLocal) Regist(conn *network.Conn, msg *parser.Message) error {
-	data := new(proto.Regist)
-	msg.Unpack(data)
-	st := uint8(data.ServerType)
-	if sli, ok := l.m_servers[st]; ok {
-		for i := range sli {
-			if sli[i].ServerConfig != nil && sli[i].ServerId == data.ServerId {
-				return fmt.Errorf("re register config: %+v", sli[i])
-			}
-		}
-	}
-	conf := &network.ServerConfig{
-		Addr:       conn.RemoteAddr().String(),
-		ServerType: st,
-		ServerId:   data.ServerId,
-	}
-	conn.ServerConfig = conf
-	l.m_servers[st] = append(l.m_servers[st], conn)
-	log.Printf("regist serverId:%d serverType:%s addr:%s\n", conf.ServerId, conf.ServerType, conf.Addr)
-	return nil
 }
 
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {

@@ -86,6 +86,11 @@ func (c *Server) Tick() {
 
 }
 
+// 心跳
+func (c *Server) OnEtcd(conf *network.ServerConfig) {
+
+}
+
 func main() {
 	server := &Server{}
 	sconf := &network.ServerConfig{
@@ -95,5 +100,5 @@ func main() {
 		HeartBeat: 1,
 		MaxConn:   1000,
 	}
-	network.Serve(sconf, pconf, server)
+	network.Serve(pconf, server, sconf)
 }

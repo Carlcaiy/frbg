@@ -26,6 +26,7 @@ type Handler interface {
 	OnConnect(conn *Conn)                        // 连接成功的回调
 	OnAccept(conn *Conn)                         // 新连接的回调
 	Tick()                                       // 心跳
+	OnEtcd(conf *ServerConfig)
 }
 
 type PollConfig struct {
@@ -82,8 +83,16 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	}
 }
 
+func (p *Poll) Init() {
+	p.addListener()
+	p.addUngrader()
+	go p.LoopRun()
+}
+
 func (p *Poll) Close() {
 	log.Println("poll close")
+	p.Trigger(def.ET_Close)
+
 	// 关闭连接connfd
 	for _, c := range p.fdconns {
 		c.Close()
@@ -118,19 +127,6 @@ func (p *Poll) LoopRun() {
 			p.Trigger(def.ET_Timer)
 		}
 	}()
-
-	u := ws.Upgrader{
-		ReadBufferSize:  1024 * 64,
-		WriteBufferSize: 1024 * 64,
-		OnHeader: func(key, value []byte) (err error) {
-			log.Printf("non-websocket header: %q=%q", key, value)
-			return
-		},
-		Protocol: func(b []byte) bool {
-			log.Println(string(b))
-			return true
-		},
-	}
 
 	events := make([]unix.EpollEvent, 64)
 	for {
@@ -171,7 +167,7 @@ func (p *Poll) LoopRun() {
 				}
 
 				if p.upgrader != nil {
-					_, err = u.Upgrade(conn)
+					_, err = p.upgrader.Upgrade(conn)
 					if err != nil {
 						log.Printf("upgrade error: %s", err)
 						return
@@ -179,8 +175,8 @@ func (p *Poll) LoopRun() {
 				}
 				p.Add(conn)
 			} else {
-				conn := p.fdconns[fd]
-				if conn == nil {
+				conn, ok := p.fdconns[fd]
+				if !ok {
 					log.Println("Get conn", err)
 					continue
 				}
@@ -195,7 +191,8 @@ func (p *Poll) LoopRun() {
 				if p.handle != nil {
 					if err := p.handle.Route(conn, msg); err != nil {
 						log.Println(err)
-
+						p.Del(fd)
+						continue
 					}
 				} else {
 					log.Println("handle nil, can't deal message")
@@ -268,12 +265,12 @@ func (p *Poll) Del(fd int) {
 		log.Println("Del", err)
 		return
 	}
-	server := p.fdconns[fd]
-	log.Printf("Del fd:%d addr:%v conn_num=%d\n", fd, server.RemoteAddr(), p.conn_num)
-	p.handle.Close(server)
+	conn := p.fdconns[fd]
+	log.Printf("Del fd:%d addr:%v conn_num=%d\n", fd, conn.RemoteAddr(), p.conn_num)
+	p.handle.Close(conn)
 	delete(p.fdconns, fd)
 	p.conn_num--
-	server.Close()
+	conn.Close()
 }
 
 func (p *Poll) Add(conn *net.TCPConn) {
