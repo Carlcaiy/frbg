@@ -109,6 +109,7 @@ func Del(serverType uint8, serverId uint8) {
 }
 
 func watch() {
+	log.Println("start etcd watch coroutine")
 	watchCh := client.Watch(context.TODO(), "server", etcd.WithPrefix())
 	for watch := range watchCh {
 		for _, event := range watch.Events {

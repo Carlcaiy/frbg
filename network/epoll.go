@@ -8,6 +8,7 @@ import (
 	"frbg/def"
 	"frbg/parser"
 	"frbg/register"
+	"frbg/ticker"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -59,7 +60,6 @@ type Poll struct {
 	listener   *net.TCPListener
 	fdconns    map[int]*Conn
 	conn_num   int
-	ticker     *time.Ticker
 	pollConfig *PollConfig
 	queue      *esqueue
 	handle     Handler
@@ -78,7 +78,6 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 		fdconns:    make(map[int]*Conn),
 		epollFd:    epollFd,
 		eventFd:    eventFd,
-		ticker:     time.NewTicker(pconf.HeartBeat),
 		pollConfig: pconf,
 		handle:     handle,
 		serverConf: sconf,
@@ -122,6 +121,14 @@ func (p *Poll) Init() {
 	p.listener = listener
 	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
+
+	// 添加定时事件
+	ticker.AddEvent(func() {
+		p.Trigger(def.ET_Timer)
+	})
+
+	// 开始轮询
+	go p.LoopRun()
 }
 
 func (p *Poll) Close() {
@@ -134,10 +141,6 @@ func (p *Poll) Close() {
 	// 关闭连接connfd
 	for _, c := range p.fdconns {
 		c.Close()
-	}
-	// 关闭心跳
-	if p.ticker != nil {
-		p.ticker.Stop()
 	}
 	// 关闭epoll监听fd
 	if p.epollFd > 0 {
@@ -159,18 +162,7 @@ func (p *Poll) LoopRun() {
 		wg.Done()
 	}()
 
-	go func() {
-		for {
-			_, ok := <-p.ticker.C
-			if ok {
-				p.Trigger(def.ET_Timer)
-			} else {
-				log.Println("ticker close")
-				break
-			}
-		}
-	}()
-
+	log.Printf("start looprun coroutine,st:%d sid:%d addr:%s", p.serverConf.ServerType, p.serverConf.ServerId, p.serverConf.Addr)
 	events := make([]unix.EpollEvent, 64)
 	for {
 		n, err := unix.EpollWait(p.epollFd, events, 100)

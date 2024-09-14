@@ -6,8 +6,13 @@ import (
 	"frbg/def"
 	"frbg/examples/hall/route"
 	"frbg/network"
+	"frbg/ticker"
 	"time"
 )
+
+func init() {
+	ticker.Init(time.Second)
+}
 
 func main() {
 	port := 6676
