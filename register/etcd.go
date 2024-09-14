@@ -52,14 +52,14 @@ func Get(serverType uint8, serverId uint8) string {
 	return ""
 }
 
-func Put(serverType uint8, serverId uint32, addr string) error {
+func Put(serverType uint8, serverId uint8, addr string) error {
 	init_client()
 	key = fmt.Sprintf("server/%d/%d", serverType, serverId)
 	_, err := client.Put(context.TODO(), key, addr)
 	return err
 }
 
-func parseKey(key string) (uint8, uint32) {
+func parseKey(key string) (uint8, uint8) {
 	strs := strings.Split(key, "/")
 	if len(strs) != 3 {
 		log.Println("key struct wrong", key)
@@ -80,7 +80,7 @@ func parseKey(key string) (uint8, uint32) {
 		return 0, 0
 	}
 
-	return uint8(serverType), uint32(serverID)
+	return uint8(serverType), uint8(serverID)
 }
 
 func get() {

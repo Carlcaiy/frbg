@@ -6,6 +6,7 @@ import (
 	"frbg/def"
 	"frbg/examples/gateway/route"
 	"frbg/network"
+	"frbg/register"
 	"time"
 )
 
@@ -31,8 +32,10 @@ func main() {
 		HeartBeat: time.Millisecond * 100,
 		MaxConn:   50000,
 	}
-	handle := route.New(serverConfig)
-	network.Serve(pollConfig, handle, serverConfig)
-	network.Serve(pollConfig, handle, wsserverConfig)
+	register.Put(serverConfig.ServerType, serverConfig.ServerId, serverConfig.Addr)
+	router := route.New(serverConfig)
+	network.Serve(pollConfig, router, serverConfig)
+	network.Serve(pollConfig, router, wsserverConfig)
 	network.Wait()
+	register.Del()
 }
