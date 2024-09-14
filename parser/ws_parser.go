@@ -2,10 +2,18 @@ package parser
 
 import (
 	"fmt"
+	"frbg/def"
 	"io"
 
 	"github.com/gobwas/ws/wsutil"
 )
+
+func Read(r io.ReadWriter, st uint8) (p *Message, err error) {
+	if st == def.ST_WsGate {
+		return WsRead(r)
+	}
+	return TcpRead(r)
+}
 
 func WsRead(r io.ReadWriter) (p *Message, err error) {
 	all, err := wsutil.ReadServerBinary(r)

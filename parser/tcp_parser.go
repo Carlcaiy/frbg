@@ -22,7 +22,7 @@ func (m *Message) Bytes() []byte {
 	return m.All
 }
 
-func Read(r io.Reader) (p *Message, err error) {
+func TcpRead(r io.Reader) (p *Message, err error) {
 	lenBs := make([]byte, 2)
 	// 长度
 	_, err = io.ReadFull(r, lenBs[:2])

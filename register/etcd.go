@@ -13,7 +13,7 @@ import (
 )
 
 var client *etcd.Client
-var serverMap map[string]string
+var serverMap map[uint16]string
 
 func init_client() {
 	if client != nil {
@@ -36,55 +36,64 @@ func init_client() {
 	cli.Watcher = namespace.NewWatcher(cli.Watcher, "cyf/")
 	cli.Lease = namespace.NewLease(cli.Lease, "cyf/")
 	client = cli
-	serverMap = make(map[string]string)
+	serverMap = make(map[uint16]string)
 	get_configs()
 	go watch()
 }
 
-func Get(serverType uint8, serverId uint8) string {
+func Get(svid uint16) string {
 	init_client()
 	if client == nil {
 		return ""
 	}
-	key := fmt.Sprintf("server/%d/%d", serverType, serverId)
-	if addr, ok := serverMap[key]; ok {
+	if addr, ok := serverMap[svid]; ok {
 		return addr
 	}
 	return ""
 }
 
-func Put(serverType uint8, serverId uint8, addr string) error {
+func Gets(serverType uint8) []uint8 {
+	init_client()
+	if client == nil {
+		return nil
+	}
+	var listId []uint8
+	for svid := range serverMap {
+		st := uint8(svid / 100)
+		if st == serverType {
+			listId = append(listId, uint8(svid-(svid/100)*100))
+		}
+	}
+	return listId
+}
+
+func Put(svid uint16, addr string) error {
 	init_client()
 	if client == nil {
 		return fmt.Errorf("etcd init failed")
 	}
-	key := fmt.Sprintf("server/%d/%d", serverType, serverId)
+	key := fmt.Sprintf("server/%d", svid)
 	_, err := client.Put(context.TODO(), key, addr)
 	return err
 }
 
-func parseKey(key string) (uint8, uint8) {
-	strs := strings.Split(key, "/")
-	if len(strs) != 3 {
-		log.Println("key struct wrong", key)
-		return 0, 0
+func parseKey(key []byte) uint16 {
+	strs := strings.Split(string(key), "/")
+	if len(strs) != 2 {
+		log.Println("key struct wrong", string(key))
+		client.Delete(context.TODO(), string(key))
+		return 0
 	}
 	if strs[0] != "server" {
 		log.Println("without server prefix", strs[0])
-		return 0, 0
+		return 0
 	}
-	serverType, err := strconv.Atoi(strs[1])
+	svid, err := strconv.Atoi(strs[1])
 	if err != nil {
 		log.Println("parse server type error", strs[1])
-		return 0, 0
+		return 0
 	}
-	serverID, err := strconv.Atoi(strs[2])
-	if err != nil {
-		log.Println("parse server id error", strs[2])
-		return 0, 0
-	}
-
-	return uint8(serverType), uint8(serverID)
+	return uint16(svid)
 }
 
 func get_configs() {
@@ -96,14 +105,16 @@ func get_configs() {
 		return
 	}
 	for _, kv := range res.Kvs {
-		serverMap[string(kv.Key)] = string(kv.Value)
-		log.Printf("get_configs:%s:%s", string(kv.Key), string(kv.Value))
+		if key := parseKey(kv.Key); key > 0 {
+			serverMap[key] = string(kv.Value)
+			log.Printf("get_configs:%d:%s", key, string(kv.Value))
+		}
 	}
 }
 
-func Del(serverType uint8, serverId uint8) {
+func Del(svid uint16) {
 	if client != nil {
-		key := fmt.Sprintf("server/%d/%d", serverType, serverId)
+		key := fmt.Sprintf("server/%d", svid)
 		client.Delete(context.TODO(), key)
 	}
 }
@@ -115,15 +126,15 @@ func watch() {
 		for _, event := range watch.Events {
 			switch event.Type {
 			case etcd.EventTypePut:
-				key := string(event.Kv.Key)
+				key := parseKey(event.Kv.Key)
 				addr := string(event.Kv.Value)
 				serverMap[key] = addr
-				log.Printf("etcd event put %s:%s", key, addr)
+				log.Printf("etcd event put %d:%s", key, addr)
 			case etcd.EventTypeDelete:
-				key := string(event.Kv.Key)
+				key := parseKey(event.Kv.Key)
 				addr := serverMap[key]
 				delete(serverMap, key)
-				log.Printf("etcd event delete %s:%s", key, addr)
+				log.Printf("etcd event delete %d:%s", key, addr)
 			}
 		}
 	}

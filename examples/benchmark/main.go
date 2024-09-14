@@ -50,7 +50,7 @@ func main() {
 			}
 			req(def.ST_Gate)
 			for !close {
-				msg, err := parser.Read(conn)
+				msg, err := parser.TcpRead(conn)
 				if err != nil {
 					break
 				}

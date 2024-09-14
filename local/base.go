@@ -10,7 +10,6 @@ import (
 	"frbg/register"
 	"log"
 	"net"
-	"sort"
 	"time"
 )
 
@@ -79,12 +78,6 @@ func (l *BaseLocal) OnConnect(conn *network.Conn) {
 
 func (l *BaseLocal) OnAccept(conn *network.Conn) {
 
-}
-
-func (l *BaseLocal) OnEtcd(conf *network.ServerConfig) {
-	l.m_servers[conf.Svid()] = &network.Conn{
-		ServerConfig: conf,
-	}
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
@@ -164,6 +157,7 @@ func (l *BaseLocal) Auth(conn *network.Conn, msg *parser.Message) error {
 
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 
+	log.Println(msg)
 	if err := l.Auth(conn, msg); err != nil {
 		return err
 	}
@@ -196,20 +190,12 @@ func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 }
 
 func (l *BaseLocal) SendModUid(uid uint32, buf []byte, serverType uint8) error {
-	list := make([]*network.Conn, 0, 2)
-	for t, s := range l.m_servers {
-		if t/100 == uint16(serverType) {
-			list = append(list, s)
-		}
-	}
-	if len(list) > 0 {
-		sort.Slice(list, func(i, j int) bool { return list[i].ServerId < list[j].ServerId })
-		conn := list[uid%uint32(len(list))]
-		_, err := conn.Write(buf)
-		return err
-	} else {
+	sids := register.Gets(serverType)
+	if len(sids) == 0 {
 		return fmt.Errorf("error not find server %d", serverType)
 	}
+	serverId := sids[int(uid)%len(sids)]
+	return l.SendToSid(serverId, buf, serverType)
 }
 
 // attention: gateway use this function, other server should be careful
@@ -226,11 +212,11 @@ func (l *BaseLocal) SendToUser(uid uint32, buf []byte) error {
 }
 
 func (l *BaseLocal) SendToGame(gameId uint8, buf []byte) error {
-	return l.SendToSid(def.ST_Game, buf, gameId)
+	return l.SendToSid(gameId, buf, def.ST_Game)
 }
 
 func (l *BaseLocal) SendToGate(gateId uint8, buf []byte) error {
-	return l.SendToSid(def.ST_Gate, buf, gateId)
+	return l.SendToSid(gateId, buf, def.ST_Gate)
 }
 
 func (l *BaseLocal) SendToSid(serverId uint8, buf []byte, serverType uint8) error {
@@ -246,7 +232,7 @@ func (l *BaseLocal) GetServer(serverType uint8, serverId uint8) *network.Conn {
 	if conns, ok := l.m_servers[key]; ok {
 		return conns
 	}
-	addr := register.Get(serverType, serverId)
+	addr := register.Get(key)
 	if addr == "" {
 		return nil
 	}

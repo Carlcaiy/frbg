@@ -94,7 +94,7 @@ func main() {
 	go func() {
 		show_op()
 		for {
-			msg, err := parser.Read(conn)
+			msg, err := parser.TcpRead(conn)
 			if err != nil {
 				break
 			}

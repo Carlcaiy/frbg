@@ -15,7 +15,7 @@ import (
 )
 
 var uid int = 123
-var gateid int = 8080
+var gateid int = 6667
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -23,7 +23,7 @@ func init() {
 
 func main() {
 	flag.IntVar(&uid, "u", 123, "-u 123")
-	flag.IntVar(&gateid, "p", 8080, "-p 8080")
+	flag.IntVar(&gateid, "p", 6667, "-p 8080")
 	flag.Parse()
 
 	conn, _, _, err := ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", gateid))
@@ -32,7 +32,7 @@ func main() {
 		return
 	}
 	for {
-		bs := parser.NewMessage(uint32(uid), def.ST_Gate, cmd.Test, 1, &proto.Test{Uid: 11111, StartTime: time.Now().Unix()}).Pack()
+		bs := parser.NewMessage(uint32(uid), def.ST_Hall, cmd.Test, 1, &proto.Test{Uid: 11111, StartTime: time.Now().Unix()}).Pack()
 		if err = parser.WsWrite(conn, bs); err != nil {
 			log.Println("send msg:", err)
 			break

@@ -1,6 +1,10 @@
 package parser
 
-import "google.golang.org/protobuf/proto"
+import (
+	"fmt"
+
+	"google.golang.org/protobuf/proto"
+)
 
 type Message struct {
 	DestST uint8  // 目标服务器类型
@@ -22,6 +26,10 @@ func NewMessage(uid uint32, dest uint8, cmd uint16, gateId uint8, pro proto.Mess
 		Body:   body,
 		Cmd:    cmd,
 	}
+}
+
+func (m *Message) String() string {
+	return fmt.Sprintf("DestST:%d GateID:%d UserID:%d Ver:%d Hold:%d Cmd:%d Len:%d", m.DestST, m.GateID, m.UserID, m.Ver, m.Hold, m.Cmd, len(m.All))
 }
 
 func (m *Message) Pack() []byte {

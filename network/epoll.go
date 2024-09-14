@@ -28,7 +28,6 @@ type Handler interface {
 	OnConnect(conn *Conn)                        // 连接成功的回调
 	OnAccept(conn *Conn)                         // 新连接的回调
 	Tick()                                       // 心跳
-	OnEtcd(conf *ServerConfig)
 }
 
 type PollConfig struct {
@@ -94,7 +93,7 @@ func (p *Poll) Init() {
 
 	// 注册etcd
 	if p.pollConfig.Etcd {
-		register.Put(conf.ServerType, conf.ServerId, conf.Addr)
+		register.Put(conf.Svid(), conf.Addr)
 	}
 
 	// 是否为websocket
@@ -135,7 +134,7 @@ func (p *Poll) Close() {
 	log.Println("poll close")
 
 	if p.pollConfig.Etcd {
-		register.Del(p.serverConf.ServerType, p.serverConf.ServerId)
+		register.Del(p.serverConf.Svid())
 	}
 
 	// 关闭连接connfd
@@ -216,7 +215,7 @@ func (p *Poll) LoopRun() {
 					continue
 				}
 
-				msg, err := parser.WsRead(conn)
+				msg, err := parser.Read(conn, p.serverConf.ServerType)
 				if err != nil {
 					log.Println("parser.WsRead", err)
 					p.Del(fd)
