@@ -24,15 +24,12 @@ func init() {
 
 func Serve(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
 	mainpoll = NewPoll(sconf, pconf, handle)
-	mainpoll.addListener()
-	go mainpoll.LoopRun()
+	mainpoll.Init()
 }
 
 func WsServe(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
 	wspoll = NewPoll(sconf, pconf, handle)
-	wspoll.addListener()
-	wspoll.addUngrader()
-	go wspoll.LoopRun()
+	wspoll.Init()
 }
 
 func Wait() {
@@ -41,13 +38,17 @@ func Wait() {
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
 		mainpoll.Trigger(def.ET_Close)
-		wspoll.Trigger(def.ET_Close)
+		if wspoll != nil {
+			wspoll.Trigger(def.ET_Close)
+		}
 		log.Println("signal kill")
 	}
 	wg.Wait()
 	log.Println("free")
 	mainpoll.Close()
-	wspoll.Close()
+	if wspoll != nil {
+		wspoll.Close()
+	}
 }
 
 func NewClient(sconf *ServerConfig) *Conn {

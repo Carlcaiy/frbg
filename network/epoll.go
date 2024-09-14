@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"frbg/def"
 	"frbg/parser"
+	"frbg/register"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -32,6 +33,7 @@ type Handler interface {
 type PollConfig struct {
 	HeartBeat time.Duration // 心跳间隔时间
 	MaxConn   int           // 最大连接数
+	Etcd      bool
 }
 
 type Conn struct {
@@ -85,10 +87,49 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 }
 
 func (p *Poll) Init() {
+	conf := p.serverConf
+	if conf == nil || conf.Addr == "" {
+		log.Println("error addr", conf.Addr)
+		return
+	}
+
+	// 注册etcd
+	if p.pollConfig.Etcd {
+		register.Put(conf.ServerType, conf.ServerId, conf.Addr)
+	}
+
+	// 是否为websocket
+	if conf.ServerType == def.ST_WsGate {
+		p.upgrader = &ws.Upgrader{
+			ReadBufferSize:  1024 * 64,
+			WriteBufferSize: 1024 * 64,
+			OnHeader: func(key, value []byte) (err error) {
+				log.Printf("non-websocket header: %q=%q", key, value)
+				return
+			},
+			Protocol: func(b []byte) bool {
+				log.Println(string(b))
+				return true
+			},
+		}
+	}
+
+	// 监听tcp
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
+	reuseport.Listen("tcp", conf.Addr)
+	must(err)
+	p.listenFd = listenFD(listener)
+	p.listener = listener
+	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
+	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
 }
 
 func (p *Poll) Close() {
 	log.Println("poll close")
+
+	if p.pollConfig.Etcd {
+		register.Del(p.serverConf.ServerType, p.serverConf.ServerId)
+	}
 
 	// 关闭连接connfd
 	for _, c := range p.fdconns {
@@ -201,39 +242,6 @@ func (p *Poll) LoopRun() {
 				}
 			}
 		}
-	}
-}
-
-func (p *Poll) addListener() {
-	conf := p.serverConf
-	if p.serverConf.Addr == "" {
-		log.Println("error addr", conf.Addr)
-		return
-	}
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
-	reuseport.Listen("tcp", conf.Addr)
-	must(err)
-	p.listenFd = listenFD(listener)
-	p.listener = listener
-	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
-	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
-}
-
-func (p *Poll) addUngrader() {
-	if p.serverConf.ServerType != def.ST_WsGate {
-		return
-	}
-	p.upgrader = &ws.Upgrader{
-		ReadBufferSize:  1024 * 64,
-		WriteBufferSize: 1024 * 64,
-		OnHeader: func(key, value []byte) (err error) {
-			log.Printf("non-websocket header: %q=%q", key, value)
-			return
-		},
-		Protocol: func(b []byte) bool {
-			log.Println(string(b))
-			return true
-		},
 	}
 }
 

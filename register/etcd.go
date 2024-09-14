@@ -14,7 +14,6 @@ import (
 
 var client *etcd.Client
 var serverMap map[string]string
-var key string
 
 func init_client() {
 	if client != nil {
@@ -59,7 +58,7 @@ func Put(serverType uint8, serverId uint8, addr string) error {
 	if client == nil {
 		return fmt.Errorf("etcd init failed")
 	}
-	key = fmt.Sprintf("server/%d/%d", serverType, serverId)
+	key := fmt.Sprintf("server/%d/%d", serverType, serverId)
 	_, err := client.Put(context.TODO(), key, addr)
 	return err
 }
@@ -102,8 +101,9 @@ func get_configs() {
 	}
 }
 
-func Del() {
+func Del(serverType uint8, serverId uint8) {
 	if client != nil {
+		key := fmt.Sprintf("server/%d/%d", serverType, serverId)
 		client.Delete(context.TODO(), key)
 	}
 }
