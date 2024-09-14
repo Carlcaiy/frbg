@@ -1,6 +1,7 @@
 package network
 
 import (
+	"frbg/def"
 	"log"
 	"os"
 	"os/signal"
@@ -23,12 +24,15 @@ func init() {
 
 func Serve(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
 	mainpoll = NewPoll(sconf, pconf, handle)
-	mainpoll.Init()
+	mainpoll.addListener()
+	go mainpoll.LoopRun()
 }
 
 func WsServe(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
 	wspoll = NewPoll(sconf, pconf, handle)
-	wspoll.Init()
+	wspoll.addListener()
+	wspoll.addUngrader()
+	go wspoll.LoopRun()
 }
 
 func Wait() {
@@ -36,10 +40,14 @@ func Wait() {
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
-		wspoll.Close()
-		mainpoll.Close()
+		mainpoll.Trigger(def.ET_Close)
+		wspoll.Trigger(def.ET_Close)
+		log.Println("signal kill")
 	}
 	wg.Wait()
+	log.Println("free")
+	mainpoll.Close()
+	wspoll.Close()
 }
 
 func NewClient(sconf *ServerConfig) *Conn {

@@ -21,10 +21,11 @@ func init_client() {
 		return
 	}
 	cli, err := etcd.New(etcd.Config{
-		Endpoints:         []string{"127.0.0.1:2379"},
-		AutoSyncInterval:  time.Second,
-		DialTimeout:       time.Second * 3,
-		DialKeepAliveTime: time.Second * 5,
+		Endpoints:            []string{"127.0.0.1:2379"},
+		AutoSyncInterval:     time.Second,
+		DialTimeout:          time.Second * 3,
+		DialKeepAliveTime:    time.Second * 5,
+		DialKeepAliveTimeout: time.Hour,
 		// Username:          "cyf",
 		// Password:          "cyf123",
 	})
@@ -36,7 +37,8 @@ func init_client() {
 	cli.Watcher = namespace.NewWatcher(cli.Watcher, "cyf/")
 	cli.Lease = namespace.NewLease(cli.Lease, "cyf/")
 	client = cli
-	get()
+	serverMap = make(map[string]string)
+	get_configs()
 	go watch()
 }
 
@@ -86,18 +88,24 @@ func parseKey(key string) (uint8, uint8) {
 	return uint8(serverType), uint8(serverID)
 }
 
-func get() {
+func get_configs() {
+	if client == nil {
+		return
+	}
 	res, err := client.Get(context.TODO(), "server/", etcd.WithPrefix())
 	if err != nil {
 		return
 	}
 	for _, kv := range res.Kvs {
 		serverMap[string(kv.Key)] = string(kv.Value)
+		log.Printf("get_configs:%s:%s", string(kv.Key), string(kv.Value))
 	}
 }
 
 func Del() {
-	client.Delete(context.TODO(), key)
+	if client != nil {
+		client.Delete(context.TODO(), key)
+	}
 }
 
 func watch() {

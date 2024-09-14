@@ -14,9 +14,9 @@ func main() {
 	wsport := 8080
 	port := 8081
 	sid := 1
-	flag.IntVar(&wsport, "p", 8080, "-p 6666")
+	flag.IntVar(&wsport, "wp", 8080, "-wp 6666")
 	flag.IntVar(&port, "p", 8081, "-p 6666")
-	flag.IntVar(&sid, "s", 1, "-s 1")
+	flag.IntVar(&sid, "sid", 1, "-sid 1")
 	flag.Parse()
 	wsserverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", wsport),
@@ -29,13 +29,13 @@ func main() {
 		ServerId:   uint8(sid),
 	}
 	pollConfig := &network.PollConfig{
-		HeartBeat: time.Millisecond * 100,
+		HeartBeat: time.Second,
 		MaxConn:   50000,
 	}
 	register.Put(serverConfig.ServerType, serverConfig.ServerId, serverConfig.Addr)
 	router := route.New(serverConfig)
 	network.Serve(pollConfig, router, serverConfig)
-	network.Serve(pollConfig, router, wsserverConfig)
+	network.WsServe(pollConfig, router, wsserverConfig)
 	network.Wait()
 	register.Del()
 }

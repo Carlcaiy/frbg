@@ -59,7 +59,7 @@ type Poll struct {
 	conn_num   int
 	ticker     *time.Ticker
 	pollConfig *PollConfig
-	queue      esqueue
+	queue      *esqueue
 	handle     Handler
 	upgrader   *ws.Upgrader
 	serverConf *ServerConfig
@@ -80,18 +80,15 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 		pollConfig: pconf,
 		handle:     handle,
 		serverConf: sconf,
+		queue:      new(esqueue),
 	}
 }
 
 func (p *Poll) Init() {
-	p.addListener()
-	p.addUngrader()
-	go p.LoopRun()
 }
 
 func (p *Poll) Close() {
 	log.Println("poll close")
-	p.Trigger(def.ET_Close)
 
 	// 关闭连接connfd
 	for _, c := range p.fdconns {
@@ -122,9 +119,14 @@ func (p *Poll) LoopRun() {
 	}()
 
 	go func() {
-		for _, ok := <-p.ticker.C; ok; {
-			// log.Println("ticker", t)
-			p.Trigger(def.ET_Timer)
+		for {
+			_, ok := <-p.ticker.C
+			if ok {
+				p.Trigger(def.ET_Timer)
+			} else {
+				log.Println("ticker close")
+				break
+			}
 		}
 	}()
 
