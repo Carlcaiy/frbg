@@ -54,6 +54,9 @@ func Get(serverType uint8, serverId uint8) string {
 
 func Put(serverType uint8, serverId uint8, addr string) error {
 	init_client()
+	if client == nil {
+		return fmt.Errorf("etcd init failed")
+	}
 	key = fmt.Sprintf("server/%d/%d", serverType, serverId)
 	_, err := client.Put(context.TODO(), key, addr)
 	return err
