@@ -144,7 +144,7 @@ func (l *Local) reqEnterRoom(c *network.Conn, msg *parser.Message) error {
 				greq := &proto.StartGame{
 					TempId: room.TempId,
 					RoomId: room.roomID,
-					HallId: l.ServerId,
+					HallId: uint32(l.ServerId),
 					Uids:   make([]uint32, room.sitCount),
 				}
 				for i := range greq.Uids {
@@ -242,7 +242,7 @@ func (l *Local) reqEnterSlots(c *network.Conn, msg *parser.Message) error {
 		log.Println(err.Error())
 		return err
 	}
-	return l.SendToGate(msg.UserID, bs)
+	return l.SendToGate(msg.GateID, bs)
 }
 
 // 老虎机请求摇奖
@@ -263,7 +263,7 @@ func (l *Local) reqSlotsSpin(c *network.Conn, msg *parser.Message) error {
 		return err
 	}
 
-	return l.SendToGate(msg.UserID, bs)
+	return l.SendToGate(msg.GateID, bs)
 }
 
 // 离开老虎机

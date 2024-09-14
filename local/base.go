@@ -7,8 +7,10 @@ import (
 	"frbg/examples/proto"
 	"frbg/network"
 	"frbg/parser"
+	"frbg/register"
 	"log"
 	"net"
+	"sort"
 	"time"
 )
 
@@ -16,15 +18,15 @@ type Handle func(*network.Conn, *parser.Message) error
 
 type IUser interface {
 	UserID() uint32
-	GameID() uint32
-	GateID() uint32
+	GameID() uint8
+	GateID() uint8
 	net.Conn
 }
 
 type BaseLocal struct {
 	*network.ServerConfig
 	m_users   map[uint32]IUser
-	m_servers map[uint8][]*network.Conn
+	m_servers map[uint16]*network.Conn
 	m_route   map[uint16]Handle // 路由
 	m_hook    map[uint16]Handle // 钩子路由
 	*Timer
@@ -34,7 +36,7 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 	return &BaseLocal{
 		ServerConfig: sconf,
 		m_users:      make(map[uint32]IUser),
-		m_servers:    make(map[uint8][]*network.Conn),
+		m_servers:    make(map[uint16]*network.Conn),
 		m_route:      make(map[uint16]Handle),
 		Timer:        NewTimer(1024),
 		m_hook:       make(map[uint16]Handle),
@@ -59,32 +61,20 @@ func (l *BaseLocal) StartTimer(dur time.Duration, f func(), loop bool) {
 }
 
 func (l *BaseLocal) TimerHeartBeat() {
-	for t, m_servers := range l.m_servers {
-		for _, s := range m_servers {
-			bs := parser.NewMessage(0, t, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
-				ServerType: uint32(t),
-				ServerId:   uint32(s.ServerId),
-			}).Pack()
-			// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
-			s.Write(bs)
-		}
+	for _, s := range l.m_servers {
+		bs := parser.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
+			ServerType: uint32(s.ServerType),
+			ServerId:   uint32(s.ServerId),
+		}).Pack()
+		// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
+		s.Write(bs)
 	}
 }
 
+// 连接成功的回调
 func (l *BaseLocal) OnConnect(conn *network.Conn) {
-	if sli, ok := l.m_servers[conn.ServerType]; ok {
-		// 更新server
-		for i := range sli {
-			if sli[i].ServerId == conn.ServerId {
-				log.Printf("AddConn origin:%+v new:%+v\n", sli[i], conn.ServerConfig)
-				sli[i] = conn
-				return
-			}
-		}
-	}
-	// 尾部加入server
 	log.Printf("AddConn new:%+v\n", conn.ServerConfig)
-	l.m_servers[conn.ServerType] = append(l.m_servers[conn.ServerType], conn)
+	l.m_servers[conn.Svid()] = conn
 }
 
 func (l *BaseLocal) OnAccept(conn *network.Conn) {
@@ -92,7 +82,9 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 }
 
 func (l *BaseLocal) OnEtcd(conf *network.ServerConfig) {
-
+	l.m_servers[conf.Svid()] = &network.Conn{
+		ServerConfig: conf,
+	}
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
@@ -105,25 +97,7 @@ func (l *BaseLocal) Close(conn *network.Conn) {
 		}
 		return
 	}
-
-	if sli, ok := l.m_servers[conn.ServerType]; ok {
-		index := -1
-		for i := range sli {
-			// 找到对应的元素，移到最后
-			if sli[i].ServerId == conn.ServerId {
-				log.Printf("DelConn index:%d new:%+v\n", i, conn)
-				sli[i] = nil
-				index = i
-			} else if index >= 0 {
-				sli[i], sli[index] = sli[index], sli[i]
-				index = i
-			}
-		}
-		if index >= 0 {
-			// 长度-1
-			l.m_servers[conn.ServerType] = sli[:index]
-		}
-	}
+	delete(l.m_servers, conn.Svid())
 }
 
 func (l *BaseLocal) RangeUser(iter func(u IUser)) {
@@ -221,30 +195,21 @@ func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 	return fmt.Errorf("call: not find cmd %d", msg.Cmd)
 }
 
-func (l *BaseLocal) SendModUid(uid uint32, buf []byte, t uint8) error {
-	if conns, ok := l.m_servers[t]; ok {
-		if len(conns) > 0 {
-			conn := conns[uid%uint32(len(conns))]
-			conn.Write(buf)
-			return nil
-		} else {
-			return fmt.Errorf("server %s size = 0", t)
+func (l *BaseLocal) SendModUid(uid uint32, buf []byte, serverType uint8) error {
+	list := make([]*network.Conn, 0, 2)
+	for t, s := range l.m_servers {
+		if t/100 == uint16(serverType) {
+			list = append(list, s)
 		}
+	}
+	if len(list) > 0 {
+		sort.Slice(list, func(i, j int) bool { return list[i].ServerId < list[j].ServerId })
+		conn := list[uid%uint32(len(list))]
+		_, err := conn.Write(buf)
+		return err
 	} else {
-		return fmt.Errorf("error not find server %s", t)
+		return fmt.Errorf("error not find server %d", serverType)
 	}
-}
-
-func (l *BaseLocal) SendToSid(serverId uint32, buf []byte, t uint8) error {
-	if servers, ok := l.m_servers[t]; ok {
-		for i := range servers {
-			if servers[i].ServerId == serverId {
-				servers[i].Write(buf)
-				return nil
-			}
-		}
-	}
-	return fmt.Errorf("SendToSid: serverType=%s serverId=%d not found", t, serverId)
 }
 
 // attention: gateway use this function, other server should be careful
@@ -260,32 +225,36 @@ func (l *BaseLocal) SendToUser(uid uint32, buf []byte) error {
 	}
 }
 
-func (l *BaseLocal) SendToGame(gameId uint32, buf []byte) error {
-	if conns, ok := l.m_servers[def.ST_Game]; ok {
-		for _, s := range conns {
-			if s.ServerId == gameId {
-				s.Write(buf)
-				return nil
-			}
-		}
-		return fmt.Errorf("game server %d not find", gameId)
-	} else {
-		return fmt.Errorf("error not find game server")
-	}
+func (l *BaseLocal) SendToGame(gameId uint8, buf []byte) error {
+	return l.SendToSid(def.ST_Game, buf, gameId)
 }
 
-func (l *BaseLocal) SendToGate(gateId uint32, buf []byte) error {
-	if conns, ok := l.m_servers[def.ST_Gate]; ok {
-		for _, s := range conns {
-			if s.ServerId == gateId {
-				s.Write(buf)
-				return nil
-			}
-		}
-		return fmt.Errorf("game server %d not find", gateId)
-	} else {
-		return fmt.Errorf("error not find gate server")
+func (l *BaseLocal) SendToGate(gateId uint8, buf []byte) error {
+	return l.SendToSid(def.ST_Gate, buf, gateId)
+}
+
+func (l *BaseLocal) SendToSid(serverId uint8, buf []byte, serverType uint8) error {
+	if svr := l.GetServer(serverType, serverId); svr != nil {
+		svr.Write(buf)
+		return nil
 	}
+	return fmt.Errorf("SendToSid: serverType=%d serverId=%d not found", serverType, serverId)
+}
+
+func (l *BaseLocal) GetServer(serverType uint8, serverId uint8) *network.Conn {
+	key := uint16(serverType)*100 + uint16(serverId)
+	if conns, ok := l.m_servers[key]; ok {
+		return conns
+	}
+	addr := register.Get(serverType, serverId)
+	if addr == "" {
+		return nil
+	}
+	return network.NewClient(&network.ServerConfig{
+		ServerType: serverType,
+		ServerId:   serverId,
+		Addr:       addr,
+	})
 }
 
 func (l *BaseLocal) SendToHall(uid uint32, buf []byte) error {

@@ -33,25 +33,25 @@ func GetRoom(uid uint32) (uint32, error) {
 }
 
 // 设置玩家桌子
-func SetGate(uid uint32, gateId uint32) error {
+func SetGate(uid uint32, gateId uint8) error {
 	_, err := redis_cli.Do("HSET", keyUserOnline(uid), "gateId", gateId)
 	return err
 }
 
 // 获取玩家桌子
-func GetGate(uid uint32) uint32 {
+func GetGate(uid uint32) uint8 {
 	deskId, _ := redis.Int64(redis_cli.Do("HGET", keyUserOnline(uid), "gateId"))
-	return uint32(deskId)
+	return uint8(deskId)
 }
 
 // 设置玩家桌子
-func SetGame(uid uint32, gameId uint32) error {
+func SetGame(uid uint32, gameId uint8) error {
 	_, err := redis_cli.Do("HSET", keyUserOnline(uid), "gameId", gameId)
 	return err
 }
 
 // 获取玩家桌子
-func GetGame(uid uint32) uint32 {
+func GetGame(uid uint32) uint8 {
 	gameId, _ := redis.Int64(redis_cli.Do("HGET", keyUserOnline(uid), "gameId"))
-	return uint32(gameId)
+	return uint8(gameId)
 }

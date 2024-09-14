@@ -235,13 +235,18 @@ func (p *Poll) addUngrader() {
 	}
 }
 
-func (p *Poll) AddConnector(conf *ServerConfig) {
+func (p *Poll) AddConnector(conf *ServerConfig) (*Conn, error) {
 	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
 		log.Println(err)
-		return
+		return nil, err
 	}
 	fd := socketFD(conn)
+	log.Printf("AddConnector fd:%d conf:%+v\n", fd, conf)
+	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	ptr := &Conn{
 		TCPConn:      conn,
 		ServerConfig: conf,
@@ -249,9 +254,7 @@ func (p *Poll) AddConnector(conf *ServerConfig) {
 	}
 	p.fdconns[fd] = ptr
 	p.handle.OnConnect(ptr)
-
-	log.Printf("AddConnector fd:%d conf:%+v\n", fd, conf)
-	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)})
+	return ptr, nil
 }
 
 func (p *Poll) Trigger(tri interface{}) {

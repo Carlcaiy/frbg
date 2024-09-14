@@ -48,7 +48,7 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	if pack.RoomId > 0 {
 		room, ok := l.rooms[pack.RoomId]
 		if ok {
-			room.Reconnect(msg.UserID, pack.GateId)
+			room.Reconnect(msg.UserID, uint8(pack.GateId))
 		}
 	}
 
@@ -63,7 +63,7 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	if !ok {
 		room = &Room{
 			hall:   c,
-			hallId: data.HallId,
+			hallId: uint8(data.HallId),
 			roomId: data.RoomId,
 			tempId: data.TempId,
 			l:      l,

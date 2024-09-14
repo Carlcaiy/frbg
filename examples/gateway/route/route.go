@@ -17,9 +17,11 @@ type Local struct {
 }
 
 func New(st *network.ServerConfig) *Local {
-	return &Local{
+	l := &Local{
 		BaseLocal: local.NewBase(st),
 	}
+	l.Init()
+	return l
 }
 
 func (l *Local) Init() {
@@ -83,7 +85,7 @@ func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
 	msg.Unpack(pack)
 	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID, pack.GameId, pack.RoomId)
 	if user, ok := l.GetUser(msg.UserID).(*User); ok && user != nil {
-		user.gameId = pack.GameId
+		user.gameId = uint8(pack.GameId)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 
 type User struct {
 	uid     uint32
-	gateId  uint32 // 网关ID
+	gateId  uint8 // 网关ID
 	tap     int32
 	offline bool
 }
@@ -25,7 +25,7 @@ type RoomTemplete struct {
 
 type Room struct {
 	hall      *network.Conn
-	hallId    uint32
+	hallId    uint8
 	roomId    uint32
 	tempId    uint32
 	l         *Local
@@ -57,7 +57,7 @@ func (r *Room) Offline(uid uint32) {
 	}
 }
 
-func (r *Room) Reconnect(uid uint32, gateId uint32) {
+func (r *Room) Reconnect(uid uint32, gateId uint8) {
 	for i, u := range r.Users {
 		if u.uid == uid {
 			u.gateId = gateId
@@ -91,7 +91,7 @@ func (r *Room) Start() {
 		bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
 			Data:   "game start",
 			RoomId: r.roomId,
-			GameId: r.l.ServerId,
+			GameId: uint32(r.l.ServerId),
 		})
 		r.l.SendToGate(u.gateId, bs)
 	}

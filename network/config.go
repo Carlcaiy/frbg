@@ -8,7 +8,7 @@ import (
 type ServerConfig struct {
 	Addr       string // 服务地址
 	ServerType uint8  // 服务类型
-	ServerId   uint32 // 服务ID
+	ServerId   uint8  // 服务ID
 }
 
 func (s *ServerConfig) IP() []byte {

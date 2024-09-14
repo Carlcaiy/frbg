@@ -19,7 +19,7 @@ func main() {
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Hall,
-		ServerId:   uint32(sid),
+		ServerId:   uint8(sid),
 	}
 
 	pollConfig := &network.PollConfig{

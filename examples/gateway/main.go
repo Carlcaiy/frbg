@@ -20,16 +20,19 @@ func main() {
 	wsserverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", wsport),
 		ServerType: def.ST_WsGate,
-		ServerId:   uint32(sid),
+		ServerId:   uint8(sid),
 	}
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Gate,
-		ServerId:   uint32(sid),
+		ServerId:   uint8(sid),
 	}
 	pollConfig := &network.PollConfig{
 		HeartBeat: time.Millisecond * 100,
 		MaxConn:   50000,
 	}
-	network.Serve(pollConfig, route.New(serverConfig), serverConfig, wsserverConfig)
+	handle := route.New(serverConfig)
+	network.Serve(pollConfig, handle, serverConfig)
+	network.Serve(pollConfig, handle, wsserverConfig)
+	network.Wait()
 }

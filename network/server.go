@@ -9,9 +9,8 @@ import (
 )
 
 var wg sync.WaitGroup
-
-// 控制所有使用select阻塞功能的组件结束阻塞
-var closech = make(chan struct{})
+var mainpoll *Poll
+var wspoll *Poll
 
 type IClose interface {
 	Close()
@@ -22,26 +21,34 @@ func init() {
 	log.SetOutput(os.Stdout)
 }
 
-func Serve(pconf *PollConfig, handle Handler, sconfs ...*ServerConfig) {
+func Serve(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
+	mainpoll = NewPoll(sconf, pconf, handle)
+	mainpoll.Init()
+}
 
-	handle.Init()
+func WsServe(pconf *PollConfig, handle Handler, sconf *ServerConfig) {
+	wspoll = NewPoll(sconf, pconf, handle)
+	wspoll.Init()
+}
 
-	closer := []IClose{}
-	for i := range sconfs {
-		poll := NewPoll(sconfs[i], pconf, handle)
-		poll.Init()
-		etcd = NewEtcd(sconfs[i], handle)
-		etcd.Init()
-		closer = append(closer, poll, etcd)
-	}
-
+func Wait() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
-		for _, c := range closer {
-			c.Close()
-		}
+		wspoll.Close()
+		mainpoll.Close()
 	}
 	wg.Wait()
+}
+
+func NewClient(sconf *ServerConfig) *Conn {
+	if mainpoll == nil {
+		return nil
+	}
+	conn, err := mainpoll.AddConnector(sconf)
+	if err != nil {
+		return nil
+	}
+	return conn
 }
