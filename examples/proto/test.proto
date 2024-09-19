@@ -4,14 +4,14 @@ import "enum.proto";
 
 
 // 登录
-message ReqGateLogin {
+message LoginReq {
     string password = 1;
     int32 from = 2;
     uint32 gateId = 3;
 }
 
 // 登录成功
-message ResGateLogin {
+message LoginRsp {
     int32 ret = 1;
     uint32 gameId = 2;
     uint32 roomId = 3;
@@ -19,7 +19,7 @@ message ResGateLogin {
 }
 
 // 离开
-message ReqGateLeave {
+message LogoutReq {
     
 }
 
@@ -208,7 +208,7 @@ message GameOver {
 }
 
 // 多播消息
-message MultiMsg {
+message MultiBroadcast {
     repeated uint32 uids = 1;
     bytes data = 2;
 }

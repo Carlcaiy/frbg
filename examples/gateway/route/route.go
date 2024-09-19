@@ -26,15 +26,17 @@ func New(st *network.ServerConfig) *Local {
 
 func (l *Local) Init() {
 	l.BaseLocal.Init()
-	l.AddRoute(cmd.Login, l.reqGateLogin)
-	l.AddRoute(cmd.GateMulti, l.multi)
-	l.AddRoute(cmd.ReqGateLeave, l.reqLeaveGate)
+	l.AddRoute(cmd.Login, l.login)
+	l.AddRoute(cmd.MultiBroadcast, l.multiBroadcast)
+	l.AddRoute(cmd.Logout, l.logout)
 	l.AddHook(cmd.SyncData, l.sync)
 }
 
-func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
-	data := new(proto.ReqGateLogin)
-	msg.Unpack(data)
+func (l *Local) login(c *network.Conn, msg *parser.Message) error {
+	req := new(proto.LoginReq)
+	if err := msg.Unpack(req); err != nil {
+		return err
+	}
 	user, ok := l.GetUser(msg.UserID).(*User)
 	if ok {
 		if c != user.Conn {
@@ -45,7 +47,7 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 			user.Conn = c
 			db.SetGate(msg.UserID, l.ServerId)
 		} else {
-			buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.ResGateLogin{
+			buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
 				Ret: 1,
 			})
 			c.Write(buf)
@@ -68,12 +70,14 @@ func (l *Local) reqGateLogin(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
-	pack := new(proto.MultiMsg)
-	msg.Unpack(pack)
-	for _, uid := range pack.Uids {
+func (l *Local) multiBroadcast(c *network.Conn, msg *parser.Message) error {
+	req := new(proto.MultiBroadcast)
+	if err := msg.Unpack(req); err != nil {
+		return err
+	}
+	for _, uid := range req.Uids {
 		if user := l.GetUser(uid); user != nil {
-			user.Write(pack.Data)
+			user.Write(req.Data)
 		}
 	}
 	return nil
@@ -81,20 +85,24 @@ func (l *Local) multi(c *network.Conn, msg *parser.Message) error {
 
 // 记录游戏服务ID
 func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
-	pack := new(proto.SyncData)
-	msg.Unpack(pack)
-	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID, pack.GameId, pack.RoomId)
+	req := new(proto.SyncData)
+	if err := msg.Unpack(req); err != nil {
+		return err
+	}
+	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID, req.GameId, req.RoomId)
 	if user, ok := l.GetUser(msg.UserID).(*User); ok && user != nil {
-		user.gameId = uint8(pack.GameId)
+		user.gameId = uint8(req.GameId)
 	}
 	return nil
 }
 
 // 离开网关
-func (l *Local) reqLeaveGate(c *network.Conn, msg *parser.Message) error {
+func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
 	u, ok := c.Context().(*User)
 	if ok {
-		b, _ := parser.Pack(u.UserID(), def.ST_User, cmd.ResGateLeave, &proto.Empty{})
+		b, _ := parser.Pack(u.UserID(), def.ST_User, msg.Cmd, &proto.CommonRsp{
+			Code: proto.ErrorCode_Success,
+		})
 		l.SendToUser(u.UserID(), b)
 		l.DelUser(u.UserID())
 		db.SetGate(msg.UserID, 0)

@@ -2,18 +2,18 @@ package cmd
 
 // 网关消息
 const (
-	GateBegin    = 1000 // Gate
-	Login        = 1001 // 登录网关
-	GateKick     = 1003 // 网关踢人
-	GateMulti    = 1004 // 多播
-	HeartBeat    = 1005 // 心跳
-	Regist       = 1006 // 注册
-	ReqGateLeave = 1007 // 离开网关
-	ResGateLeave = 1008 // 离开网关
-	Offline      = 1009 // 断线
-	Test         = 1010 // 测试
-	ToClient     = 1011 // 发送给客户端
-	GateEnd      = 1999 // Gate
+	GateBegin      = 1000 // Gate
+	Login          = 1001 // 登录网关
+	GateKick       = 1003 // 网关踢人
+	MultiBroadcast = 1004 // 多播
+	HeartBeat      = 1005 // 心跳
+	Regist         = 1006 // 注册
+	Logout         = 1007 // 离开网关
+	ResGateLeave   = 1008 // 离开网关
+	Offline        = 1009 // 断线
+	Test           = 1010 // 测试
+	ToClient       = 1011 // 发送给客户端
+	GateEnd        = 1999 // Gate
 )
 
 // 大厅消息

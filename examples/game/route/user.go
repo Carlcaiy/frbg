@@ -153,7 +153,7 @@ func (r *Room) SendOne(bs []byte) {
 }
 
 func (r *Room) SendOther(uid uint32, bs []byte) {
-	multi := &proto.MultiMsg{
+	multi := &proto.MultiBroadcast{
 		Data: bs,
 	}
 	for _, u := range r.Users {
@@ -161,17 +161,17 @@ func (r *Room) SendOther(uid uint32, bs []byte) {
 			multi.Uids = append(multi.Uids, u.uid)
 		}
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBroadcast, multi)
 	r.hall.Write(buf)
 }
 
 func (r *Room) SendAll(bs []byte) {
-	multi := &proto.MultiMsg{
+	multi := &proto.MultiBroadcast{
 		Data: bs,
 	}
 	for _, u := range r.Users {
 		multi.Uids = append(multi.Uids, u.uid)
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.GateMulti, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBroadcast, multi)
 	r.hall.Write(buf)
 }

@@ -60,7 +60,7 @@ func main() {
 		panic(err)
 	}
 	add(cmd.Login, "请求登录", func() {
-		bs := parser.NewMessage(uid, def.ST_Gate, cmd.Login, 1, &proto.ReqGateLogin{}).Pack()
+		bs := parser.NewMessage(uid, def.ST_Gate, cmd.Login, 1, &proto.LoginReq{}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.GetRoomList, "请求房间列表", func() {
@@ -101,7 +101,7 @@ func main() {
 			log.Println("receive msg:", msg.Cmd)
 			switch msg.Cmd {
 			case cmd.Login:
-				p := new(proto.ResGateLogin)
+				p := new(proto.LoginRsp)
 				err := msg.Unpack(p)
 				if err != nil {
 					log.Println(err)
