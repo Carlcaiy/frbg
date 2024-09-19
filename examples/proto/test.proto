@@ -1,5 +1,7 @@
 syntax = "proto3";
 option go_package=".;proto";
+import "enum.proto";
+
 
 // 登录
 message ReqGateLogin {
@@ -19,13 +21,6 @@ message ResGateLogin {
 // 离开
 message ReqGateLeave {
     
-}
-
-// 踢出类型
-enum KickType {
-    Unknow = 0;   // Kick
-    Squeeze = 1;    // 挤号
-    GameNotFound = 2;   // 游戏服
 }
 
 // 踢人
@@ -50,8 +45,27 @@ message GatePushMsg {
     string data = 1;
 }
 
+// 请求游戏列表
+message GetGameListReq {
+    repeated int32 gids = 1;        // 游戏id len=0全部数据 len>0游戏数据
+}
+
+// 房间信息
+message GameInfo {
+    uint32 gameId = 1;              // 游戏id
+    GameStatus status = 2;          // 游戏状态
+    uint32 startTime = 3;           // 开始时间
+    uint32 endTime = 4;             // 结束时间
+}
+
+// 答复游戏列表
+message GetGameListRsp {
+    repeated GameInfo games = 1;
+}
+
 // 请求房间列表
-message ReqRoomList {
+message GetRoomListReq {
+    int32 gameId = 1;
 }
 
 // 房间信息
@@ -62,22 +76,22 @@ message RoomInfo {
 }
 
 // 答复房间列表
-message ResRoomList {
+message GetRoomListRsp {
     repeated RoomInfo rooms = 1;
 }
 
 // 请求进入房间
-message ReqEnterRoom {
+message EnterRoomReq {
     uint32 templeteId = 1;
 }
 
 // 进房答复
-message ResEnterRoom {
+message EnterRoomRsp {
     repeated uint32 uids = 1;
 }
 
 // 进入老虎机
-message ReqEnterSlots {
+message EnterSlotsReq {
     int32 slotsId = 1;
 }
 
@@ -94,7 +108,7 @@ message SlotsLine {
     repeated int32 line_pos = 2;
 }
 
-message ResEnterSlots {
+message EnterSlotsRsp {
     int32 GameId = 1;
     repeated SlotsElem elems = 2;   // 元素
     repeated int32 bet = 3;         // 下注额
@@ -105,12 +119,12 @@ message ResEnterSlots {
 
 
 // 离开老虎机
-message ReqLeaveSlots {
+message LeaveSlotsReq {
     int32 slotsId = 1;
 }
 
 // 老虎机摇奖
-message ReqSlotsSpin {
+message SlotsSpinReq {
     int32 uid = 1;
     int32 gameId = 2;
     int32 bet = 3;      // 下注
@@ -133,7 +147,7 @@ message SlotsBonus {
 }
 
 // 老虎机摇奖
-message ResSlotsSpin {
+message SlotsSpinRsp {
     int32 uid = 1;
     int32 gameId = 2;
     int64 money = 3;            // 金币
@@ -148,7 +162,7 @@ message ResSlotsSpin {
 }
 
 // 玩家离开房间
-message ReqLeaveRoom {
+message LeaveRoomReq {
     uint32 gateId = 1;
     uint32 roomId = 2;
 }
@@ -212,4 +226,9 @@ message Test {
     uint32 uid = 1;
     int64 startTime = 2;
     int64 endTime = 3;
+}
+
+// 通用回复
+message CommonRsp {
+    ErrorCode code = 1;
 }

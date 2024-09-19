@@ -63,15 +63,15 @@ func main() {
 		bs := parser.NewMessage(uid, def.ST_Gate, cmd.Login, 1, &proto.ReqGateLogin{}).Pack()
 		conn.Write(bs)
 	})
-	add(cmd.ReqRoomList, "请求房间列表", func() {
-		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqRoomList, 1, &proto.ReqRoomList{}).Pack()
+	add(cmd.GetRoomList, "请求房间列表", func() {
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.GetRoomList, 1, &proto.GetRoomListReq{}).Pack()
 		conn.Write(bs)
 	})
-	add(cmd.ReqEnterRoom, "请求进房间", func() {
+	add(cmd.EnterRoom, "请求进房间", func() {
 		log.Println("请输入进入的房间")
 		roomId := uint32(0)
 		fmt.Scanln(&roomId)
-		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqEnterRoom, 1, &proto.ReqEnterRoom{}).Pack()
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.EnterRoom, 1, &proto.EnterRoomRsp{}).Pack()
 		conn.Write(bs)
 	})
 	add(cmd.Tap, "猜测一个数值", func() {
@@ -84,8 +84,8 @@ func main() {
 		}).Pack()
 		conn.Write(bs)
 	})
-	add(cmd.ReqLeaveRoom, "请求离开房间", func() {
-		bs := parser.NewMessage(uid, def.ST_Hall, cmd.ReqLeaveRoom, 1, &proto.ReqLeaveRoom{
+	add(cmd.LeaveRoom, "请求离开房间", func() {
+		bs := parser.NewMessage(uid, def.ST_Hall, cmd.LeaveRoom, 1, &proto.LeaveRoomReq{
 			RoomId: roomId,
 		}).Pack()
 		conn.Write(bs)
@@ -125,13 +125,13 @@ func main() {
 				} else {
 					log.Println("踢出：位置错误")
 				}
-			case cmd.ResRoomList:
-				p := new(proto.ResRoomList)
+			case cmd.GetRoomList:
+				p := new(proto.GetRoomListRsp)
 				msg.Unpack(p)
 				log.Println(p.String())
 				show_op()
-			case cmd.ResEnterRoom:
-				p := new(proto.ResEnterRoom)
+			case cmd.EnterRoom:
+				p := new(proto.EnterRoomRsp)
 				msg.Unpack(p)
 				for _, uids := range p.Uids {
 					log.Println("房间玩家", uids)

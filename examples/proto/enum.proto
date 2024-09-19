@@ -1,0 +1,26 @@
+syntax = "proto3";
+option go_package=".;proto";
+
+// 错误码
+enum ErrorCode {
+    Success = 0;
+    Failed = 1;
+}
+
+// 大厅游戏状态
+enum GameStatus {
+    Custom = 0; // 无标签游戏
+    New = 1; // 新游戏
+    Hot = 2; // 热门游戏
+    Recommend = 3; // 推荐游戏
+    Coming = 4; // 即将上线
+    Scrap = 5; // 即将下线
+    Fixing = 6; // 维护状态
+}
+
+// 踢出类型
+enum KickType {
+    Unknow = 0;   // Kick
+    Squeeze = 1;    // 挤号
+    GameNotFound = 2;   // 游戏服
+}

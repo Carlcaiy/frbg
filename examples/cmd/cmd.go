@@ -18,17 +18,15 @@ const (
 
 // 大厅消息
 const (
-	HallBegin    = 2000 // Hall
-	ReqRoomList  = 2001 // 获取房间列表
-	ResRoomList  = 2002 // 获取房间列表
-	ReqEnterRoom = 2003 // 进房请求
-	ResEnterRoom = 2004 // 进房答复
-	ReqLeaveRoom = 2006 // 请求离开房间
-	ResLeaveRoom = 2007 // 答复离开房间
-	SlotsEnter   = 2008 // 进入老虎机
-	SlotsSpin    = 2009 // 老虎机摇奖
-	SlotsLeave   = 2010 // 离开老虎机
-	HallEnd      = 2999 // Hall
+	HallBegin   = 2000 // Hall
+	GetGameList = 2001 // 获取游戏列表
+	GetRoomList = 2002 // 获取房间列表
+	EnterRoom   = 2003 // 进房请求
+	LeaveRoom   = 2006 // 请求离开房间
+	SlotsEnter  = 2008 // 进入老虎机
+	SlotsSpin   = 2009 // 老虎机摇奖
+	SlotsLeave  = 2010 // 离开老虎机
+	HallEnd     = 2999 // Hall
 )
 
 // 游戏消息

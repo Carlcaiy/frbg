@@ -97,7 +97,7 @@ func (s *SlotsData) shuffle() {
 }
 
 // 摇奖
-func (s *SlotsData) Spin(bet int64) (*proto.ResSlotsSpin, error) {
+func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 	free := false
 	win := int64(0)
 	lines := make([]int32, 0)
@@ -152,7 +152,7 @@ func (s *SlotsData) Spin(bet int64) (*proto.ResSlotsSpin, error) {
 			}
 		}
 	}
-	rsp := &proto.ResSlotsSpin{
+	rsp := &proto.SlotsSpinRsp{
 		Money:    0,
 		Win:      win,
 		Board:    board,

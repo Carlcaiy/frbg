@@ -67,3 +67,7 @@ func (m *Message) PackProto(pro proto.Message) ([]byte, error) {
 func (m *Message) Unpack(pro proto.Message) error {
 	return proto.Unmarshal(m.Body, pro)
 }
+
+func (m *Message) Bytes() []byte {
+	return m.All
+}
