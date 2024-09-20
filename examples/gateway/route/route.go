@@ -37,8 +37,9 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	user, ok := l.GetUser(msg.UserID).(*User)
-	if ok {
+	user := new(User)
+	err := db.GetUser(msg.UserID, user)
+	if err == nil {
 		if c != user.Conn {
 			buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.GateKick, &proto.GateKick{
 				Type: proto.KickType_Squeeze,

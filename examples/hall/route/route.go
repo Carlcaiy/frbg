@@ -14,21 +14,25 @@ import (
 	"time"
 )
 
+var route *Local
+
 type Local struct {
 	templetes map[uint32]*RoomTemplete
 	rooms     map[uint32]*RoomInstance
 	*local.BaseLocal
 }
 
-func NewLocal(st *network.ServerConfig) *Local {
-	return &Local{
+func New(st *network.ServerConfig) *Local {
+	route = &Local{
 		BaseLocal: local.NewBase(st),
 		templetes: make(map[uint32]*RoomTemplete),
 		rooms:     make(map[uint32]*RoomInstance),
 	}
+	route.init()
+	return route
 }
 
-func (l *Local) Init() {
+func (l *Local) init() {
 	l.load_room_templete()
 
 	l.BaseLocal.Init()
@@ -41,6 +45,7 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.SlotsEnter, l.slotsEnter)
 	l.AddRoute(cmd.SlotsSpin, l.slotsSpin)
 	l.AddRoute(cmd.SlotsLeave, l.slotsLeave)
+	l.AddRoute(cmd.Test, l.test)
 }
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
@@ -56,6 +61,21 @@ func (l *Local) load_room_templete() {
 			GameID:    1,
 		}
 	}
+}
+
+func (l *Local) test(conn *network.Conn, msg *parser.Message) error {
+	data := new(proto.Test)
+	if err := msg.Unpack(data); err != nil {
+		return err
+	}
+
+	b, _ := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.Test{
+		Uid:       data.Uid,
+		StartTime: data.StartTime,
+	})
+
+	_, err := conn.Write(b)
+	return err
 }
 
 func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {

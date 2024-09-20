@@ -31,8 +31,21 @@ func main() {
 		log.Println(err)
 		return
 	}
+	bs := parser.NewMessage(uint32(uid), def.ST_WsGate, cmd.Login, 1, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}).Pack()
+	if err = parser.WsWrite(conn, bs); err != nil {
+		log.Println("send msg:", err)
+		return
+	}
+	msg, err := parser.WsRead(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	rsp := new(proto.LoginRsp)
+	msg.Unpack(rsp)
+	log.Println(rsp)
 	for {
-		bs := parser.NewMessage(uint32(uid), def.ST_Hall, cmd.Test, 1, &proto.Test{Uid: 11111, StartTime: time.Now().Unix()}).Pack()
+		bs := parser.NewMessage(uint32(uid), def.ST_Hall, cmd.Test, 1, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}).Pack()
 		if err = parser.WsWrite(conn, bs); err != nil {
 			log.Println("send msg:", err)
 			break

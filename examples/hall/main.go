@@ -33,6 +33,6 @@ func main() {
 		Etcd:      true,
 	}
 
-	network.Serve(pollConfig, route.NewLocal(serverConfig), serverConfig)
+	network.Serve(pollConfig, route.New(serverConfig), serverConfig)
 	network.Wait()
 }

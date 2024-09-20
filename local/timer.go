@@ -19,7 +19,7 @@ type TimerEvent struct {
 
 func NewTimer(n int) *Timer {
 	return &Timer{
-		MinHeap: NewMinHeap(n),
+		MinHeap: NewMinHeap(),
 	}
 }
 

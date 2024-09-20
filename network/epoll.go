@@ -217,14 +217,14 @@ func (p *Poll) LoopRun() {
 
 				msg, err := parser.Read(conn, p.serverConf.ServerType)
 				if err != nil {
-					log.Println("parser.WsRead", err)
+					log.Printf("parser.Read type:%d err:%s", p.serverConf.ServerType, err.Error())
 					p.Del(fd)
 					continue
 				}
 				// log.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID, msg.Cmd, msg.Dest())
 				if p.handle != nil {
 					if err := p.handle.Route(conn, msg); err != nil {
-						log.Println(err)
+						log.Println("route err:", err)
 						p.Del(fd)
 						continue
 					}

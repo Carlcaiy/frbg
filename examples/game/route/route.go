@@ -56,27 +56,29 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
-	data := new(proto.StartGame)
-	msg.Unpack(data)
-	log.Println("startGame", data.String())
-	room, ok := l.rooms[data.RoomId]
+	req := new(proto.StartGame)
+	if err := msg.Unpack(req); err != nil {
+		return err
+	}
+	log.Println("startGame", req.String())
+	room, ok := l.rooms[req.RoomId]
 	if !ok {
 		room = &Room{
 			hall:   c,
-			hallId: uint8(data.HallId),
-			roomId: data.RoomId,
-			tempId: data.TempId,
+			hallId: uint8(req.HallId),
+			roomId: req.RoomId,
+			tempId: req.TempId,
 			l:      l,
 		}
-		l.rooms[data.RoomId] = room
+		l.rooms[req.RoomId] = room
 	}
-	room.Users = make([]*User, len(data.Uids))
+	room.Users = make([]*User, len(req.Uids))
 	for i, u := range room.Users {
 		room.Users[i] = &User{
-			uid: data.Uids[i],
+			uid: req.Uids[i],
 			tap: 0,
 		}
-		l.users[data.Uids[i]] = room
+		l.users[req.Uids[i]] = room
 		db.SetGame(u.uid, l.ServerId)
 	}
 	room.Start()
@@ -85,7 +87,9 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
 	data := new(proto.Tap)
-	msg.Unpack(data)
+	if err := msg.Unpack(data); err != nil {
+		return err
+	}
 	log.Println("tap game")
 	if room, ok := l.rooms[data.RoomId]; ok {
 		room.Tap(msg.UserID, data.Tap)

@@ -55,3 +55,15 @@ func GetGame(uid uint32) uint8 {
 	gameId, _ := redis.Int64(redis_cli.Do("HGET", keyUserOnline(uid), "gameId"))
 	return uint8(gameId)
 }
+
+func keyUser(uid uint32) string {
+	return fmt.Sprintf("user:%d", uid)
+}
+
+func GetUser(uid uint32, data interface{}) error {
+	all, err := redis.Values(redis_cli.Do("HGETALL", keyUser(uid)))
+	if err != nil {
+		return err
+	}
+	return redis.ScanStruct(all, data)
+}

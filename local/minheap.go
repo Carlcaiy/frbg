@@ -12,37 +12,30 @@ type IMinHeap interface {
 
 type MinHeap struct {
 	data []IMinHeap
-	len  int
 }
 
-func NewMinHeap(s int) *MinHeap {
+func NewMinHeap() *MinHeap {
 	return &MinHeap{
-		data: make([]IMinHeap, s),
-		len:  0,
+		data: make([]IMinHeap, 0, 8),
 	}
 }
 
 func (m *MinHeap) Len() int {
-	return m.len
+	return len(m.data)
 }
 
 func (m *MinHeap) Top() IMinHeap {
-	if m.len < 1 {
+	if len(m.data) == 0 {
 		return nil
 	}
 	return m.data[0]
 }
 
 func (m *MinHeap) Push(e IMinHeap) error {
-	if len(m.data) <= m.len {
-		return errors.New("heap full")
-	}
-	m.data[m.len] = e
-	idx := m.len
-	m.len++
-	m.shiftUp(idx)
+	m.data = append(m.data, e)
+	m.shiftUp(len(m.data) - 1)
 
-	for i := 0; i < m.len; i++ {
+	for i := 0; i < len(m.data); i++ {
 		m.data[i].SetIndex(i)
 	}
 
@@ -50,17 +43,17 @@ func (m *MinHeap) Push(e IMinHeap) error {
 }
 
 func (m *MinHeap) Pop() (d interface{}, err error) {
-	if m.len <= 0 {
+	if len(m.data) <= 0 {
 		return nil, errors.New("heap empty")
 	}
+	tail := len(m.data) - 1
 	d = m.data[0]
-	m.len--
-	m.data[0], m.data[m.len] = m.data[m.len], m.data[0]
-	m.data[m.len] = nil
+	m.data[0], m.data[tail] = m.data[tail], m.data[0]
+	m.data = m.data[:tail]
 
 	m.shiftDown(0)
 
-	for i := 0; i < m.len; i++ {
+	for i := 0; i < tail; i++ {
 		m.data[i].SetIndex(i)
 	}
 	return d, nil
@@ -68,34 +61,35 @@ func (m *MinHeap) Pop() (d interface{}, err error) {
 
 func (m *MinHeap) Drop(i IMinHeap) error {
 	idx := i.Index()
-	if m.len <= idx {
+	if len(m.data) <= idx {
 		return errors.New("Drop heap error")
 	}
-	m.len--
-	m.data[idx], m.data[m.len] = m.data[m.len], m.data[idx]
-	m.data[m.len] = nil
+	tail := len(m.data) - 1
+	m.data[idx], m.data[tail] = m.data[tail], m.data[idx]
+	m.data = m.data[:tail]
 
 	m.shiftDown(idx)
 
-	for i := idx; i < m.len; i++ {
+	for i := idx; i < tail; i++ {
 		m.data[i].SetIndex(i)
 	}
 	return nil
 }
 
 func (m *MinHeap) Build() {
-	for i := m.len / 2; i >= 0; i-- {
+	for i := len(m.data) / 2; i >= 0; i-- {
 		m.shiftDown(0)
 	}
-	for i := 0; i < m.len; i++ {
+	for i := range m.data {
 		m.data[i].SetIndex(i)
 	}
 }
 
 func (m *MinHeap) shiftDown(idx int) {
-	for idx*2+1 < m.len {
+	length := len(m.data)
+	for idx*2+1 < length {
 		temp := idx*2 + 1
-		if idx*2+2 < m.len {
+		if idx*2+2 < length {
 			if m.data[idx*2+1].Val() > m.data[idx*2+2].Val() {
 				temp = idx*2 + 2
 			} else {

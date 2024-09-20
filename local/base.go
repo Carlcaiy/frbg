@@ -109,15 +109,14 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 }
 
 func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
+	if l.ServerType != def.ST_WsGate {
+		return fmt.Errorf("this only can wsgate used")
+	}
+
 	data := new(proto.Test)
 	if err := msg.Unpack(data); err != nil {
 		return err
 	}
-
-	l.AddUser(&UserImplement{
-		userId: data.Uid,
-		Conn:   conn,
-	})
 
 	b, _ := msg.PackProto(&proto.Test{
 		Uid:       data.Uid,
@@ -140,29 +139,26 @@ func (l *BaseLocal) AddHook(cmd uint16, h Handle) {
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
-	if _, ok := l.m_route[cmd]; !ok {
-		l.m_route[cmd] = h
-	} else {
-		log.Fatalf("err: handler.Add cmd:%d\n", cmd)
+	if _, ok := l.m_route[cmd]; ok {
+		log.Printf("warning: handler.Add cmd:%d\n", cmd)
 	}
-}
-
-// 鉴权
-func (l *BaseLocal) Auth(conn *network.Conn, msg *parser.Message) error {
-	if msg.UserID == 0 && msg.Cmd != cmd.Login && msg.Cmd != cmd.HeartBeat {
-		return fmt.Errorf("msg wrong")
-	}
-	return nil
+	l.m_route[cmd] = h
 }
 
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 
 	log.Println(msg)
-	if err := l.Auth(conn, msg); err != nil {
-		return err
+	if msg.UserID == 0 && msg.Cmd != cmd.HeartBeat {
+		return fmt.Errorf("msg wrong")
 	}
 
-	u := l.GetUser(msg.UserID)
+	var u IUser
+	if msg.UserID > 0 && msg.Cmd != cmd.Login {
+		u = l.GetUser(msg.UserID)
+		if u == nil {
+			return fmt.Errorf("not find user:%d", msg.UserID)
+		}
+	}
 
 	// 优先调用钩子
 	if hook, ok := l.m_hook[msg.Cmd]; ok {
@@ -251,11 +247,13 @@ func (l *BaseLocal) GetUser(uid uint32) IUser {
 	if u, ok := l.m_users[uid]; ok {
 		return u
 	}
+	log.Printf("get user:%d failed", uid)
 	return nil
 }
 
 func (l *BaseLocal) AddUser(user IUser) {
 	l.m_users[user.UserID()] = user
+	log.Printf("add user:%d", user.UserID())
 }
 
 func (l *BaseLocal) DelUser(uid uint32) {
