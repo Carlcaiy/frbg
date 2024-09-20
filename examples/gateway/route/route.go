@@ -58,7 +58,8 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-
+	log.Println(req)
+	var info *User
 	if msg.UserID == 0 {
 		uid, err := db.GenUserId()
 		if err != nil {
@@ -68,14 +69,16 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 			parser.WsWrite(c, bs)
 			return err
 		}
-		info := &User{
+		info = &User{
 			Nick:   "Beautify",
 			Sex:    0,
 			IconId: 1,
+			Uid:    uid,
 		}
 		if err := db.SetUser(uid, info); err != nil {
 			return err
 		}
+		l.SetConn(uid, c)
 	} else {
 		if conn := l.GetConn(msg.UserID); conn != c {
 			if conn != nil {
@@ -85,22 +88,34 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 				})
 				parser.WsWrite(conn, buf)
 			}
-			l.SetConn(msg.UserID, conn)
-			db.SetGate(msg.UserID, l.ServerId)
+			l.SetConn(msg.UserID, c)
+			if err := db.SetGate(msg.UserID, l.ServerId); err != nil {
+				log.Printf("db.SetGate(%d, %d) error:%s", msg.UserID, l.ServerId, err.Error())
+				return nil
+			}
 		} else {
 			log.Println("连接相同不做处理")
 		}
+		info = new(User)
+		if err := db.GetUser(msg.UserID, info); err != nil {
+			log.Println(err)
+			return err
+		}
 	}
-	bs, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
-		Ret: 0,
+	bs, _ := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.LoginRsp{
+		Ret:      0,
+		Nick:     info.Nick,
+		Uid:      info.Uid,
+		IconId:   uint32(info.IconId),
+		IsRegist: msg.UserID == 0,
+		GameId:   uint32(db.GetGame(msg.UserID)),
 	})
-	parser.WsWrite(c, bs)
 
-	if gid := db.GetGame(msg.UserID); gid > 0 {
-		buf, _ := parser.Pack(msg.UserID, def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
-		l.SendToGame(gid, buf)
-	}
-	return nil
+	// if gid := db.GetGame(msg.UserID); gid > 0 {
+	// 	buf, _ := parser.Pack(msg.UserID, def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
+	// 	l.SendToGame(gid, buf)
+	// }
+	return parser.WsWrite(c, bs)
 }
 
 func (l *Local) multibc(c *network.Conn, msg *parser.Message) error {
@@ -132,6 +147,9 @@ func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
+	if conn == nil {
+		return
+	}
 	l.BaseLocal.Close(conn)
 	// 1、游戏服，踢出游戏内所有玩家
 	if conn.ServerConfig == nil {

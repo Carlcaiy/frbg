@@ -16,6 +16,10 @@ message LoginRsp {
     uint32 gameId = 2;
     uint32 roomId = 3;
     uint32 hallId = 4;
+    string nick = 5;
+    uint32 iconId = 6;
+    bool isRegist = 7;
+    uint32 uid = 8;
 }
 
 // 离开

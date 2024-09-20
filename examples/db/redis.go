@@ -60,7 +60,7 @@ func keyUser(uid uint32) string {
 	return fmt.Sprintf("user:%d", uid)
 }
 
-func GetConn(uid uint32, data interface{}) error {
+func GetUser(uid uint32, data interface{}) error {
 	all, err := redis.Values(redis_cli.Do("HGETALL", keyUser(uid)))
 	if err != nil {
 		return err

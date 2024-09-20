@@ -6,6 +6,7 @@ import (
 	"frbg/def"
 	"io"
 
+	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,7 +29,10 @@ func Read(r io.ReadWriter, st uint8) (p *Message, err error) {
 }
 
 func WsRead(r io.ReadWriter) (p *Message, err error) {
-	all, err := wsutil.ReadServerBinary(r)
+	all, opCode, err := wsutil.ReadData(r, ws.StateClientSide)
+	if opCode == ws.OpClose {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}

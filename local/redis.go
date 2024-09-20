@@ -37,7 +37,7 @@ func (r *Redis) Init() {
 		MaxActive:   30,
 		IdleTimeout: time.Duration(time.Second),
 		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", "192.168.1.44:6377",
+			conn, err := redis.Dial("tcp", r.Addr,
 				redis.DialConnectTimeout(r.ConnectTime),
 				redis.DialReadTimeout(r.ReadTime),
 				redis.DialWriteTimeout(r.WriteTime),

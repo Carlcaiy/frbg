@@ -14,7 +14,7 @@ import (
 	"github.com/gobwas/ws"
 )
 
-var uid int = 123
+var uid int = 100005
 var gateid int = 6667
 
 func init() {
@@ -22,7 +22,7 @@ func init() {
 }
 
 func main() {
-	flag.IntVar(&uid, "u", 123, "-u 123")
+	flag.IntVar(&uid, "u", uid, "-u 123")
 	flag.IntVar(&gateid, "p", 6667, "-p 8080")
 	flag.Parse()
 
@@ -42,8 +42,9 @@ func main() {
 		return
 	}
 	rsp := new(proto.LoginRsp)
-	msg.Unpack(rsp)
-	log.Println(rsp)
+	err = msg.Unpack(rsp)
+	log.Println(rsp, err)
+	uid = int(rsp.Uid)
 	for {
 		bs := parser.NewMessage(uint32(uid), def.ST_Hall, cmd.Test, 1, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}).Pack()
 		if err = parser.WsWrite(conn, bs); err != nil {
@@ -62,4 +63,5 @@ func main() {
 
 		time.Sleep(time.Second)
 	}
+	conn.Close()
 }
