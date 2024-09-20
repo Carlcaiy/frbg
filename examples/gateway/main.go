@@ -33,9 +33,8 @@ func main() {
 		ServerId:   uint8(sid),
 	}
 	pollConfig := &network.PollConfig{
-		HeartBeat: time.Second,
-		MaxConn:   50000,
-		Etcd:      true,
+		MaxConn: 50000,
+		Etcd:    true,
 	}
 	router := route.New(serverConfig)
 	network.Serve(pollConfig, router, serverConfig)

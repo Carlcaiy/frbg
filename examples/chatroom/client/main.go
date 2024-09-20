@@ -115,8 +115,7 @@ func main() {
 		Addr: ":8080",
 	}
 	pconf := &network.PollConfig{
-		HeartBeat: 1,
-		MaxConn:   1000,
+		MaxConn: 1000,
 	}
 	network.Client(sconf, pconf, client)
 }

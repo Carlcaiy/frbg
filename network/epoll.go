@@ -31,9 +31,8 @@ type Handler interface {
 }
 
 type PollConfig struct {
-	HeartBeat time.Duration // 心跳间隔时间
-	MaxConn   int           // 最大连接数
-	Etcd      bool
+	MaxConn int // 最大连接数
+	Etcd    bool
 }
 
 type Conn struct {

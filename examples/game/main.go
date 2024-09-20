@@ -4,7 +4,6 @@ import (
 	"frbg/def"
 	"frbg/examples/game/route"
 	"frbg/network"
-	"time"
 )
 
 func main() {
@@ -14,8 +13,7 @@ func main() {
 		ServerId:   1,
 	}
 	pollConfig := &network.PollConfig{
-		HeartBeat: time.Millisecond * 100,
-		MaxConn:   50000,
+		MaxConn: 50000,
 	}
 	network.Serve(pollConfig, route.NewLocal(serverConfig), serverConfig)
 }
