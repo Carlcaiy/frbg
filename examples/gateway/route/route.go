@@ -147,23 +147,13 @@ func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
-	if conn == nil {
+	if conn.Uid > 0 {
+		l.DelConn(conn.Uid)
+	}
+	if conn.ServerConfig == nil {
 		return
 	}
-	l.BaseLocal.Close(conn)
-	// 1、游戏服，踢出游戏内所有玩家
-	if conn.ServerConfig == nil {
-		u, ok := conn.Context().(*User)
-		if ok {
-			if u.GameId > 0 {
-				bs, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.GameId, bs, def.ST_Game)
-			} else if u.HallId > 0 {
-				bs, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.HallId, bs, def.ST_Hall)
-			}
-		}
-	} else if conn.ServerType == def.ST_Game {
+	if conn.ServerType == def.ST_Game {
 		// todo 给在此游戏服内的玩家推送消息
 	} else if conn.ServerType == def.ST_User {
 		u, ok := conn.Context().(*User)
@@ -189,6 +179,7 @@ func (l *Local) GetConn(uid uint32) *network.Conn {
 
 func (l *Local) SetConn(uid uint32, conn *network.Conn) {
 	l.m_client[uid] = conn
+	conn.Uid = uid
 	log.Printf("add conn:%d", uid)
 }
 

@@ -41,6 +41,7 @@ type Conn struct {
 	*net.TCPConn              // 连接
 	Fd            int         // 文件描述符
 	ActiveTime    time.Time   // 活跃时间
+	Uid           uint32      // 玩家
 	ctx           interface{} // 该链接附带信息
 }
 
@@ -294,7 +295,7 @@ func (p *Poll) Add(conn *net.TCPConn) {
 	}
 	p.fdconns[fd] = c
 	p.conn_num++
-	log.Printf("Add fd:%d addr:%v conn_num=%d conn=%v\n", fd, conn.RemoteAddr(), p.conn_num, conn)
+	log.Printf("Add fd:%d addr:%v conn_num=%d net=%v\n", fd, conn.RemoteAddr().String(), p.conn_num, conn.RemoteAddr().Network())
 	p.handle.OnAccept(c)
 }
 

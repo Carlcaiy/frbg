@@ -317,10 +317,9 @@ func (l *Local) slotsLeave(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
-	if conn == nil {
+	if conn.ServerConfig == nil {
 		return
 	}
-	l.BaseLocal.Close(conn)
 	// 大厅服，清理所有相关桌子
 	if conn.ServerType == def.ST_Game {
 		for _, room := range l.rooms {
