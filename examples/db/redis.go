@@ -45,8 +45,8 @@ func GetGate(uid uint32) uint8 {
 }
 
 // 设置玩家桌子
-func SetGame(uid uint32, gameId uint8) error {
-	_, err := redis_cli.Do("HSET", keyUserOnline(uid), "gameId", gameId)
+func SetGame(uid uint32, gameId uint8, roomId uint32) error {
+	_, err := redis_cli.Do("HSET", keyUserOnline(uid), "gameId", gameId, "roomId", roomId)
 	return err
 }
 
@@ -60,10 +60,23 @@ func keyUser(uid uint32) string {
 	return fmt.Sprintf("user:%d", uid)
 }
 
-func GetUser(uid uint32, data interface{}) error {
+func GetConn(uid uint32, data interface{}) error {
 	all, err := redis.Values(redis_cli.Do("HGETALL", keyUser(uid)))
 	if err != nil {
 		return err
 	}
 	return redis.ScanStruct(all, data)
+}
+
+func SetUser(uid uint32, data interface{}) error {
+	_, err := redis_cli.Do("HSET", redis.Args{}.Add(keyUser(uid)).AddFlat(data)...)
+	return err
+}
+
+func GenUserId() (uint32, error) {
+	uid, err := redis.Int64(redis_cli.Do("INCRBY", "uid", 1))
+	if uid < 100000 {
+		uid, err = redis.Int64(redis_cli.Do("INCRBY", "uid", 100000))
+	}
+	return uint32(uid), err
 }

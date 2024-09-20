@@ -31,7 +31,7 @@ func main() {
 		log.Println(err)
 		return
 	}
-	bs := parser.NewMessage(uint32(uid), def.ST_WsGate, cmd.Login, 1, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}).Pack()
+	bs := parser.NewMessage(uint32(uid), def.ST_Gate, cmd.Login, 1, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}).Pack()
 	if err = parser.WsWrite(conn, bs); err != nil {
 		log.Println("send msg:", err)
 		return

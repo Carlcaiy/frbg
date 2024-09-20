@@ -49,7 +49,6 @@ func (l *Local) init() {
 }
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
-	l.DelUser(msg.UserID)
 	return nil
 }
 
@@ -153,8 +152,8 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 	}
 	log.Printf("enterRoom uid:%d tempId:%d\n", msg.UserID, req.TempleteId)
 
-	user, ok := l.GetUser(msg.UserID).(*User)
-	if !ok {
+	user := l.GetUser(msg.UserID).(*User)
+	if user == nil {
 		return fmt.Errorf("not found user:%d", msg.UserID)
 	}
 

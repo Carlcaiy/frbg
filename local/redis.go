@@ -12,6 +12,7 @@ type Redis struct {
 	ReadTime    time.Duration
 	WriteTime   time.Duration
 	Password    string
+	Addr        string
 }
 
 func NewDefaultRedis() *Redis {
@@ -20,11 +21,14 @@ func NewDefaultRedis() *Redis {
 		ReadTime:    time.Second,
 		WriteTime:   time.Second,
 		Password:    "",
+		Addr:        ":6379",
 	}
 }
 
 func NewRedis(addr string) *Redis {
-	return &Redis{}
+	cli := &Redis{Addr: addr}
+	cli.Init()
+	return cli
 }
 
 func (r *Redis) Init() {

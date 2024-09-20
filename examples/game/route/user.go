@@ -41,7 +41,7 @@ func (r *Room) Reset() {
 	r.guess_num = rand.Int31n(100) + 1
 }
 
-func (r *Room) GetUser(uid uint32) *User {
+func (r *Room) GetConn(uid uint32) *User {
 	for _, u := range r.Users {
 		if u.uid == uid {
 			return u
@@ -51,7 +51,7 @@ func (r *Room) GetUser(uid uint32) *User {
 }
 
 func (r *Room) Offline(uid uint32) {
-	if u := r.GetUser(uid); u != nil {
+	if u := r.GetConn(uid); u != nil {
 		log.Printf("user :%d offline\n", uid)
 		u.offline = true
 	}
@@ -64,11 +64,6 @@ func (r *Room) Reconnect(uid uint32, gateId uint8) {
 			u.offline = false
 
 			log.Println(u.uid, u.gateId)
-			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
-				Data:   "Reconnect game success",
-				RoomId: r.roomId,
-			})
-			r.l.SendToGate(u.gateId, bs)
 
 			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
@@ -84,17 +79,6 @@ func (r *Room) Reconnect(uid uint32, gateId uint8) {
 func (r *Room) Start() {
 	r.Reset()
 	log.Println("Start", "turn:", r.turn)
-
-	// 同步所有数据
-	for i, u := range r.Users {
-		log.Printf("uid:%d seat:%d gateId:%d\n", u.uid, i, u.gateId)
-		bs, _ := parser.Pack(u.uid, def.ST_User, cmd.SyncData, &proto.SyncData{
-			Data:   "game start",
-			RoomId: r.roomId,
-			GameId: uint32(r.l.ServerId),
-		})
-		r.l.SendToGate(u.gateId, bs)
-	}
 
 	// 当前回合
 	u := r.Users[r.turn]
@@ -161,7 +145,7 @@ func (r *Room) SendOther(uid uint32, bs []byte) {
 			multi.Uids = append(multi.Uids, u.uid)
 		}
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBroadcast, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBC, multi)
 	r.hall.Write(buf)
 }
 
@@ -172,6 +156,6 @@ func (r *Room) SendAll(bs []byte) {
 	for _, u := range r.Users {
 		multi.Uids = append(multi.Uids, u.uid)
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBroadcast, multi)
+	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBC, multi)
 	r.hall.Write(buf)
 }

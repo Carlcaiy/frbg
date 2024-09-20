@@ -9,36 +9,25 @@ import (
 	"frbg/parser"
 	"frbg/register"
 	"log"
-	"net"
 	"time"
 )
 
 type Handle func(*network.Conn, *parser.Message) error
 
-type IUser interface {
-	UserID() uint32
-	GameID() uint8
-	GateID() uint8
-	net.Conn
-}
-
 type BaseLocal struct {
 	*network.ServerConfig
-	m_users   map[uint32]IUser
+	m_users   map[uint32]interface{}
 	m_servers map[uint16]*network.Conn
 	m_route   map[uint16]Handle // 路由
-	m_hook    map[uint16]Handle // 钩子路由
 	*Timer
 }
 
 func NewBase(sconf *network.ServerConfig) *BaseLocal {
 	return &BaseLocal{
 		ServerConfig: sconf,
-		m_users:      make(map[uint32]IUser),
 		m_servers:    make(map[uint16]*network.Conn),
 		m_route:      make(map[uint16]Handle),
 		Timer:        NewTimer(1024),
-		m_hook:       make(map[uint16]Handle),
 	}
 }
 
@@ -83,22 +72,15 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 func (l *BaseLocal) Close(conn *network.Conn) {
 	log.Printf("DelConn:%+v\n", conn)
 	// 如果是用户连接删除用户数据即可
-	if conn.ServerConfig == nil {
-		u, ok := conn.Context().(IUser)
-		if ok {
-			l.DelUser(u.UserID())
-		}
-		return
-	}
-	delete(l.m_servers, conn.Svid())
+	// if conn.ServerConfig == nil {
+	// 	u, ok := conn.Context().(IUser)
+	// 	if ok {
+	// 		l.DelConn(u.UserID())
+	// 	}
+	// 	return
+	// }
+	// delete(l.m_servers, conn.Svid())
 }
-
-func (l *BaseLocal) RangeUser(iter func(u IUser)) {
-	for _, u := range l.m_users {
-		iter(u)
-	}
-}
-
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	data := new(proto.HeartBeat)
 	if err := msg.Unpack(data); err != nil {
@@ -109,10 +91,6 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 }
 
 func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
-	if l.ServerType != def.ST_WsGate {
-		return fmt.Errorf("this only can wsgate used")
-	}
-
 	data := new(proto.Test)
 	if err := msg.Unpack(data); err != nil {
 		return err
@@ -122,67 +100,29 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
 	})
-
-	return l.SendToUser(data.Uid, b)
+	_, err := conn.Write(b)
+	return err
 }
 
 func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
-func (l *BaseLocal) AddHook(cmd uint16, h Handle) {
-	if _, ok := l.m_hook[cmd]; !ok {
-		l.m_hook[cmd] = h
-	} else {
-		log.Printf("err: hook.Add cmd:%d\n", cmd)
-	}
-}
-
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	if _, ok := l.m_route[cmd]; ok {
 		log.Printf("warning: handler.Add cmd:%d\n", cmd)
 	}
+	log.Printf("add route cmd:%d\n", cmd)
 	l.m_route[cmd] = h
 }
 
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
-
-	log.Println(msg)
-	if msg.UserID == 0 && msg.Cmd != cmd.HeartBeat {
-		return fmt.Errorf("msg wrong")
+	log.Println(msg, l.ServerType)
+	if handle, ok := l.m_route[msg.Cmd]; ok {
+		return handle(conn, msg)
+	} else {
+		return fmt.Errorf("call: not find cmd %d", msg.Cmd)
 	}
-
-	var u IUser
-	if msg.UserID > 0 && msg.Cmd != cmd.Login {
-		u = l.GetUser(msg.UserID)
-		if u == nil {
-			return fmt.Errorf("not find user:%d", msg.UserID)
-		}
-	}
-
-	// 优先调用钩子
-	if hook, ok := l.m_hook[msg.Cmd]; ok {
-		hook(conn, msg)
-	}
-
-	switch msg.DestST {
-	// 优先调用与本服务
-	case l.ServerType:
-		if handle, ok := l.m_route[msg.Cmd]; ok {
-			return handle(conn, msg)
-		} else {
-			return fmt.Errorf("call: not find cmd %d", msg.Cmd)
-		}
-	case def.ST_User:
-		return l.SendToUser(msg.UserID, msg.Bytes())
-	case def.ST_Hall:
-		return l.SendToHall(msg.UserID, msg.Bytes())
-	case def.ST_Game:
-		return l.SendToGame(u.GameID(), msg.Bytes())
-	case def.ST_Gate:
-		return l.SendToGate(u.GateID(), msg.Bytes())
-	}
-	return fmt.Errorf("call: not find cmd %d", msg.Cmd)
 }
 
 func (l *BaseLocal) SendModUid(uid uint32, buf []byte, serverType uint8) error {
@@ -192,19 +132,6 @@ func (l *BaseLocal) SendModUid(uid uint32, buf []byte, serverType uint8) error {
 	}
 	serverId := sids[int(uid)%len(sids)]
 	return l.SendToSid(serverId, buf, serverType)
-}
-
-// attention: gateway use this function, other server should be careful
-func (l *BaseLocal) SendToUser(uid uint32, buf []byte) error {
-	if l.ServerType != def.ST_Gate {
-		return fmt.Errorf("only gate can do this, st：%d", l.ServerType)
-	}
-
-	if u, ok := l.m_users[uid]; ok {
-		return parser.WsWrite(u, buf)
-	} else {
-		return fmt.Errorf("user:%d not find", uid)
-	}
 }
 
 func (l *BaseLocal) SendToGame(gameId uint8, buf []byte) error {
@@ -243,7 +170,7 @@ func (l *BaseLocal) SendToHall(uid uint32, buf []byte) error {
 	return l.SendModUid(uid, buf, def.ST_Hall)
 }
 
-func (l *BaseLocal) GetUser(uid uint32) IUser {
+func (l *BaseLocal) GetUser(uid uint32) interface{} {
 	if u, ok := l.m_users[uid]; ok {
 		return u
 	}
@@ -251,9 +178,9 @@ func (l *BaseLocal) GetUser(uid uint32) IUser {
 	return nil
 }
 
-func (l *BaseLocal) AddUser(user IUser) {
-	l.m_users[user.UserID()] = user
-	log.Printf("add user:%d", user.UserID())
+func (l *BaseLocal) SetUser(uid uint32, data interface{}) {
+	l.m_users[uid] = data
+	log.Printf("add user:%d", uid)
 }
 
 func (l *BaseLocal) DelUser(uid uint32) {

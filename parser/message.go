@@ -7,7 +7,8 @@ import (
 )
 
 type Message struct {
-	DestST uint8  // 目标服务器类型
+	DestST uint8  // 目标服务TYPE
+	DestID uint8  // 目标服务ID
 	GateID uint8  // 网关信息
 	UserID uint32 // 用户UID
 	Ver    uint16 // 版本
@@ -36,11 +37,12 @@ func (m *Message) Pack() []byte {
 	bs := make([]byte, HeaderLen+len(m.Body))
 	byteOrder.PutUint16(bs, HeaderLen+uint16(len(m.Body)))
 	bs[2] = m.DestST
-	bs[3] = m.GateID
-	byteOrder.PutUint32(bs[4:], m.UserID)
-	byteOrder.PutUint16(bs[8:], m.Ver)
-	byteOrder.PutUint32(bs[10:], m.Hold)
-	byteOrder.PutUint16(bs[14:], m.Cmd)
+	bs[3] = m.DestID
+	bs[4] = m.GateID
+	byteOrder.PutUint32(bs[5:], m.UserID)
+	byteOrder.PutUint16(bs[9:], m.Ver)
+	byteOrder.PutUint32(bs[11:], m.Hold)
+	byteOrder.PutUint16(bs[15:], m.Cmd)
 	copy(bs[HeaderLen:], m.Body)
 	return bs
 }

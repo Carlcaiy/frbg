@@ -140,11 +140,6 @@ func main() {
 				p := new(proto.StartGame)
 				msg.Unpack(p)
 				log.Println(p.String())
-			case cmd.SyncData:
-				p := new(proto.SyncData)
-				msg.Unpack(p)
-				log.Println(p.String())
-				roomId = p.RoomId
 			case cmd.GameOver:
 				p := new(proto.GameOver)
 				msg.Unpack(p)

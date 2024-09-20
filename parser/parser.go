@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	HeaderLen = 16
+	HeaderLen = 17
 )
 
 // 封包
-// len + dest + gate + ver + uid + hold + cmd + data
-// 2  +  1   +   1   +  2  +  4  +   4 +   2 +  data
+// len + dest + destid + gate + ver + uid + hold + cmd + data
+// 2  +  1   +   1   +   1   +  2  +  4  +   4 +   2 +  data
 
 var byteOrder binary.ByteOrder = binary.BigEndian
 
@@ -41,12 +41,13 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 	}
 	p = &Message{}
 	p.DestST = all[2]
-	p.GateID = all[3]
-	p.UserID = byteOrder.Uint32(all[4:])
-	p.Ver = byteOrder.Uint16(all[8:])
-	p.Hold = byteOrder.Uint32(all[10:])
-	p.Cmd = byteOrder.Uint16(all[14:])
-	p.Body = all[16:]
+	p.DestID = all[3]
+	p.GateID = all[4]
+	p.UserID = byteOrder.Uint32(all[5:])
+	p.Ver = byteOrder.Uint16(all[9:])
+	p.Hold = byteOrder.Uint32(all[11:])
+	p.Cmd = byteOrder.Uint16(all[15:])
+	p.Body = all[17:]
 	p.All = all
 	return p, nil
 }
@@ -78,12 +79,13 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 
 	p = &Message{}
 	p.DestST = all[2]
-	p.GateID = all[3]
-	p.UserID = byteOrder.Uint32(all[4:])
-	p.Ver = byteOrder.Uint16(all[8:])
-	p.Hold = byteOrder.Uint32(all[10:])
-	p.Cmd = byteOrder.Uint16(all[14:])
-	p.Body = all[16:]
+	p.DestID = all[3]
+	p.GateID = all[4]
+	p.UserID = byteOrder.Uint32(all[5:])
+	p.Ver = byteOrder.Uint16(all[9:])
+	p.Hold = byteOrder.Uint32(all[11:])
+	p.Cmd = byteOrder.Uint16(all[15:])
+	p.Body = all[17:]
 	p.All = all
 	return
 }

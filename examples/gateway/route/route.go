@@ -14,11 +14,13 @@ import (
 
 type Local struct {
 	*local.BaseLocal
+	m_client map[uint32]*network.Conn
 }
 
 func New(st *network.ServerConfig) *Local {
 	l := &Local{
 		BaseLocal: local.NewBase(st),
+		m_client:  make(map[uint32]*network.Conn),
 	}
 	l.Init()
 	return l
@@ -27,9 +29,28 @@ func New(st *network.ServerConfig) *Local {
 func (l *Local) Init() {
 	l.BaseLocal.Init()
 	l.AddRoute(cmd.Login, l.login)
-	l.AddRoute(cmd.MultiBroadcast, l.multiBroadcast)
+	l.AddRoute(cmd.MultiBC, l.multibc)
 	l.AddRoute(cmd.Logout, l.logout)
-	l.AddHook(cmd.SyncData, l.sync)
+}
+
+func (l *Local) Route(conn *network.Conn, msg *parser.Message) error {
+	log.Println(msg, l.ServerType)
+	if msg.UserID == 0 && msg.Cmd != cmd.HeartBeat && msg.Cmd != cmd.Login {
+		return fmt.Errorf("msg wrong")
+	}
+
+	switch msg.DestST {
+	// 优先调用与本服务
+	case def.ST_WsGate, def.ST_Gate:
+		return l.BaseLocal.Route(conn, msg)
+	case def.ST_User:
+		return l.SendToUser(msg.UserID, msg.Bytes())
+	case def.ST_Hall:
+		return l.SendToHall(msg.UserID, msg.Bytes())
+	case def.ST_Game:
+		return l.SendToGame(msg.DestID, msg.Bytes())
+	}
+	return fmt.Errorf("without cmd %d route", msg.Cmd)
 }
 
 func (l *Local) login(c *network.Conn, msg *parser.Message) error {
@@ -37,32 +58,43 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	user := new(User)
-	err := db.GetUser(msg.UserID, user)
-	if err == nil {
-		if c != user.Conn {
-			buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.GateKick, &proto.GateKick{
-				Type: proto.KickType_Squeeze,
-			})
-			user.Write(buf)
-			user.Conn = c
-			db.SetGate(msg.UserID, l.ServerId)
-		} else {
-			buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
+
+	if msg.UserID == 0 {
+		uid, err := db.GenUserId()
+		if err != nil {
+			bs, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
 				Ret: 1,
 			})
-			c.Write(buf)
-			db.SetGate(msg.UserID, l.ServerId)
+			parser.WsWrite(c, bs)
+			return err
+		}
+		info := &User{
+			Nick:   "Beautify",
+			Sex:    0,
+			IconId: 1,
+		}
+		if err := db.SetUser(uid, info); err != nil {
+			return err
 		}
 	} else {
-		u := &User{
-			uid:  msg.UserID,
-			Conn: c,
+		if conn := l.GetConn(msg.UserID); conn != c {
+			if conn != nil {
+				log.Println("给已经登录的连接推送挤号信息")
+				buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.GateKick, &proto.GateKick{
+					Type: proto.KickType_Squeeze,
+				})
+				parser.WsWrite(conn, buf)
+			}
+			l.SetConn(msg.UserID, conn)
+			db.SetGate(msg.UserID, l.ServerId)
+		} else {
+			log.Println("连接相同不做处理")
 		}
-		c.SetContext(u)
-		l.AddUser(u)
-		db.SetGate(msg.UserID, l.ServerId)
 	}
+	bs, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
+		Ret: 0,
+	})
+	parser.WsWrite(c, bs)
 
 	if gid := db.GetGame(msg.UserID); gid > 0 {
 		buf, _ := parser.Pack(msg.UserID, def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
@@ -71,28 +103,15 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) multiBroadcast(c *network.Conn, msg *parser.Message) error {
+func (l *Local) multibc(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.MultiBroadcast)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 	for _, uid := range req.Uids {
-		if user := l.GetUser(uid); user != nil {
+		if user := l.GetConn(uid); user != nil {
 			user.Write(req.Data)
 		}
-	}
-	return nil
-}
-
-// 记录游戏服务ID
-func (l *Local) sync(c *network.Conn, msg *parser.Message) error {
-	req := new(proto.SyncData)
-	if err := msg.Unpack(req); err != nil {
-		return err
-	}
-	log.Printf("sync userId:%d gameId:%d roomId:%d\n", msg.UserID, req.GameId, req.RoomId)
-	if user, ok := l.GetUser(msg.UserID).(*User); ok && user != nil {
-		user.gameId = uint8(req.GameId)
 	}
 	return nil
 }
@@ -105,7 +124,7 @@ func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
 			Code: proto.ErrorCode_Success,
 		})
 		l.SendToUser(u.UserID(), b)
-		l.DelUser(u.UserID())
+		l.DelConn(u.UserID())
 		db.SetGate(msg.UserID, 0)
 		return nil
 	}
@@ -118,33 +137,52 @@ func (l *Local) Close(conn *network.Conn) {
 	if conn.ServerConfig == nil {
 		u, ok := conn.Context().(*User)
 		if ok {
-			if u.gameId > 0 {
+			if u.GameId > 0 {
 				bs, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.gameId, bs, def.ST_Game)
-			} else if u.hallId > 0 {
+				l.SendToSid(u.GameId, bs, def.ST_Game)
+			} else if u.HallId > 0 {
 				bs, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.hallId, bs, def.ST_Hall)
+				l.SendToSid(u.HallId, bs, def.ST_Hall)
 			}
 		}
 	} else if conn.ServerType == def.ST_Game {
-		l.RangeUser(func(u local.IUser) {
-			if u.GameID() == conn.ServerId {
-				b, _ := parser.Pack(u.UserID(), def.ST_User, cmd.GateKick, &proto.GateKick{
-					Type: proto.KickType_GameNotFound,
-				})
-				l.SendToUser(u.UserID(), b)
-			}
-		})
+		// todo 给在此游戏服内的玩家推送消息
 	} else if conn.ServerType == def.ST_User {
 		u, ok := conn.Context().(*User)
 		if ok {
-			if u.gameId > 0 {
+			if u.GameId > 0 {
 				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.gameId, b, def.ST_Game)
-			} else if u.hallId > 0 {
+				l.SendToSid(u.GameId, b, def.ST_Game)
+			} else if u.HallId > 0 {
 				b, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.hallId, b, def.ST_Hall)
+				l.SendToSid(u.HallId, b, def.ST_Hall)
 			}
 		}
+	}
+}
+
+func (l *Local) GetConn(uid uint32) *network.Conn {
+	if u, ok := l.m_client[uid]; ok {
+		return u
+	}
+	log.Printf("get conn:%d failed", uid)
+	return nil
+}
+
+func (l *Local) SetConn(uid uint32, conn *network.Conn) {
+	l.m_client[uid] = conn
+	log.Printf("add conn:%d", uid)
+}
+
+func (l *Local) DelConn(uid uint32) {
+	delete(l.m_client, uid)
+}
+
+// attention: gateway use this function, other server should be careful
+func (l *Local) SendToUser(uid uint32, buf []byte) error {
+	if u, ok := l.m_client[uid]; ok {
+		return parser.WsWrite(u, buf)
+	} else {
+		return fmt.Errorf("user:%d not find", uid)
 	}
 }

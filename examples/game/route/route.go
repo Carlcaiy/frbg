@@ -79,7 +79,7 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 			tap: 0,
 		}
 		l.users[req.Uids[i]] = room
-		db.SetGame(u.uid, l.ServerId)
+		db.SetGame(u.uid, l.ServerId, room.roomId)
 	}
 	room.Start()
 	return nil
