@@ -10,6 +10,7 @@ import (
 	"frbg/register"
 	"frbg/timer"
 	"log"
+	"runtime"
 	"time"
 )
 
@@ -107,6 +108,7 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
 	log.Println(msg, l.ServerType)
 	if handle, ok := l.m_route[msg.Cmd]; ok {
+		defer l.CatchEx()
 		return handle(conn, msg)
 	} else {
 		return fmt.Errorf("call: not find cmd %d", msg.Cmd)
@@ -173,4 +175,13 @@ func (l *BaseLocal) SetUser(uid uint32, data interface{}) {
 
 func (l *BaseLocal) DelUser(uid uint32) {
 	delete(l.m_users, uid)
+}
+
+var buf = make([]byte, 1024)
+
+func (l *BaseLocal) CatchEx() {
+	if err := recover(); err != nil {
+		runtime.Stack(buf, false)
+		log.Println(string(buf))
+	}
 }

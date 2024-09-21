@@ -34,8 +34,6 @@ func New(st *network.ServerConfig) *Local {
 }
 
 func (l *Local) init() {
-	l.load_room_templete()
-
 	l.BaseLocal.Init()
 	l.AddRoute(cmd.GetGameList, l.getGameList)
 	l.AddRoute(cmd.GetRoomList, l.getRoomList)
@@ -51,16 +49,6 @@ func (l *Local) init() {
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
 	return nil
-}
-
-func (l *Local) load_room_templete() {
-	for i := uint32(0); i < 5; i++ {
-		l.templetes[i] = &RoomTemplete{
-			TempId:    i,
-			UserCount: 2,
-			GameID:    1,
-		}
-	}
 }
 
 func (l *Local) test(conn *network.Conn, msg *parser.Message) error {
@@ -259,7 +247,7 @@ func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
 	if conf == nil {
 		return nil
 	}
-	rsp := proto.EnterSlotsRsp{
+	rsp := &proto.EnterSlotsRsp{
 		GameId: req.GameId,
 		Bet:    conf.BetConf.Bet,
 		Level:  conf.BetConf.Level,
@@ -267,12 +255,10 @@ func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	bs, err := msg.PackProto(&rsp)
-	if err != nil {
-		log.Println(err.Error())
-		return err
+	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+		c.Write(buf)
 	}
-	return l.SendToGate(msg.GateID, bs)
+	return nil
 }
 
 // 老虎机请求摇奖
@@ -288,12 +274,10 @@ func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
 		return err
 	}
 
-	bs, err := msg.PackProto(rsp)
-	if err != nil {
-		return err
+	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+		c.Write(buf)
 	}
-
-	return l.SendToGate(msg.GateID, bs)
+	return nil
 }
 
 // 离开老虎机
