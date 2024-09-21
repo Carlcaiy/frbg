@@ -32,37 +32,48 @@ func main() {
 
 	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", gateid))
 	if err != nil {
-		log.Println(err)
+		must(err)
 		return
 	}
 	defer func() {
 		conn.Close()
 	}()
 
-	log.Fatalln(rpc(def.ST_Hall, cmd.SpinSlots, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}, &proto.SlotsSpinRsp{}))
-	log.Fatalln(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{}, &proto.GetGameListRsp{}))
-	log.Fatalln(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, &proto.EnterSlotsRsp{}))
+	must(rpc(def.ST_Gate, cmd.Login, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}, &proto.LoginRsp{}))
+	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{}, &proto.GetGameListRsp{}))
+	slots := &proto.EnterSlotsRsp{}
+	must(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, slots))
 
 	for {
-		// log.Fatalln(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
-		log.Fatalln(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{}, &proto.SlotsSpinRsp{}))
+		// must(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
+		must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0]}, &proto.SlotsSpinRsp{}))
 
 		time.Sleep(time.Second)
 	}
 }
 
-func rpc(svrt uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
-	bs := parser.NewMessage(uint32(uid), svrt, cmd, 1, req).Pack()
+func must(e error) {
+	if e != nil {
+		log.Fatalln(e)
+	}
+}
+
+func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+	bs := parser.NewMessage(uint32(uid), svrt, scmd, 1, req).Pack()
 	if err = parser.WsWrite(conn, bs); err != nil {
-		log.Println("send msg:", err)
 		return err
 	}
 	msg, err := parser.WsRead(conn)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 	err = msg.Unpack(rsp)
-	log.Println(rsp, err)
+	if err != nil {
+		return err
+	}
+	if cmd.Login == scmd {
+		uid = int(msg.UserID)
+	}
+	log.Println(rsp)
 	return nil
 }

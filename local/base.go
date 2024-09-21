@@ -42,7 +42,9 @@ func (l *BaseLocal) Init() {
 
 func (l *BaseLocal) TimerHeartBeat() {
 	for _, s := range l.m_servers {
-		log.Println(s.ServerConfig)
+		if s.Svid() == l.Svid() {
+			continue
+		}
 		bs := parser.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
 			ServerType: uint32(s.ServerType),
 			ServerId:   uint32(s.ServerId),
@@ -75,7 +77,7 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 		return err
 	}
 	conn.ActiveTime = time.Now().Unix()
-	log.Println("HeartBeat", data.String())
+	// log.Println("HeartBeat", data.String())
 	return nil
 }
 
@@ -106,7 +108,9 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 }
 
 func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
-	log.Println(msg, l.ServerType)
+	if msg.Cmd != cmd.HeartBeat {
+		log.Println(msg)
+	}
 	if handle, ok := l.m_route[msg.Cmd]; ok {
 		defer l.CatchEx()
 		return handle(conn, msg)
