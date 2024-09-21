@@ -8,6 +8,7 @@ import (
 	"frbg/network"
 	"frbg/parser"
 	"frbg/register"
+	"frbg/timer"
 	"log"
 	"time"
 )
@@ -19,7 +20,6 @@ type BaseLocal struct {
 	m_users   map[uint32]interface{}
 	m_servers map[uint16]*network.Conn
 	m_route   map[uint16]Handle // 路由
-	*Timer
 }
 
 func NewBase(sconf *network.ServerConfig) *BaseLocal {
@@ -27,7 +27,6 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 		ServerConfig: sconf,
 		m_servers:    make(map[uint16]*network.Conn),
 		m_route:      make(map[uint16]Handle),
-		Timer:        NewTimer(1024),
 	}
 }
 
@@ -35,17 +34,7 @@ func (l *BaseLocal) Init() {
 	log.Println("base.Init")
 	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
 	l.AddRoute(cmd.Test, l.TestRequest)
-	l.StartTimer(time.Minute, l.TimerHeartBeat, true)
-}
-
-func (l *BaseLocal) StartTimer(dur time.Duration, f func(), loop bool) {
-	e := &TimerEvent{
-		duration:    dur,
-		triggerTime: time.Now().Add(dur),
-		Loop:        loop,
-		event:       f,
-	}
-	l.Timer.Push(e)
+	timer.StartLoopFunc(time.Second*10, l.TimerHeartBeat)
 }
 
 func (l *BaseLocal) TimerHeartBeat() {
@@ -105,7 +94,7 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 }
 
 func (l *BaseLocal) Tick() {
-	l.FrameCheck()
+	timer.FrameCheck()
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {

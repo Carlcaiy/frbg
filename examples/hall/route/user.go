@@ -1,8 +1,8 @@
 package route
 
 import (
-	"frbg/local"
 	"frbg/network"
+	"frbg/timer"
 )
 
 type User struct {
@@ -33,10 +33,10 @@ type RoomTemplete struct {
 
 type RoomInstance struct {
 	*RoomTemplete
-	sitCount uint32 // 坐下数量
-	status   int32  // 房间状态 0等待中 1游戏中
-	users    []*User
-	conn     *network.Conn
-	roomID   uint32
-	tevent   *local.TimerEvent
+	sitCount        uint32 // 坐下数量
+	status          int32  // 房间状态 0等待中 1游戏中
+	users           []*User
+	conn            *network.Conn
+	roomID          uint32
+	delayStartEvent *timer.Task
 }

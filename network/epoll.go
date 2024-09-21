@@ -8,7 +8,7 @@ import (
 	"frbg/def"
 	"frbg/parser"
 	"frbg/register"
-	"frbg/ticker"
+	"frbg/timer"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -122,7 +122,7 @@ func (p *Poll) Init() {
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
 
 	// 添加定时事件
-	ticker.AddEvent(func() {
+	timer.AddTrigger(func() {
 		p.Trigger(def.ET_Timer)
 	})
 

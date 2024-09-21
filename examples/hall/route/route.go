@@ -10,6 +10,7 @@ import (
 	"frbg/local"
 	"frbg/network"
 	"frbg/parser"
+	"frbg/timer"
 	"log"
 	"time"
 )
@@ -93,7 +94,7 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
-			l.Start(room.tevent)
+			timer.Start(room.delayStartEvent)
 		}
 
 		for _, u := range room.users {
@@ -175,7 +176,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 			users:        make([]*User, temp.UserCount),
 			conn:         c,
 			roomID:       uint32(len(l.rooms)) + 1000,
-			tevent: local.NewDelayEvent(time.Second*3, func() {
+			delayStartEvent: timer.NewDelayTask(time.Second*3, func() {
 				if room.sitCount < room.UserCount {
 					return
 				}
@@ -230,7 +231,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 				l.SendToGate(user.gateID, bs)
 			}
 
-			l.Start(room.tevent)
+			timer.Start(room.delayStartEvent)
 		}
 	}
 
@@ -249,7 +250,7 @@ func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
 				if u.UserID() == msg.UserID {
 					room.users[i] = nil
 					room.sitCount -= 1
-					l.Stop(room.tevent)
+					timer.Stop(room.delayStartEvent)
 					db.SetRoom(u.UserID(), 0)
 					return nil
 				}

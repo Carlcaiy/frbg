@@ -1,8 +1,10 @@
-package local
+package timer
 
 import (
 	"errors"
 )
+
+// 最小堆结构体
 
 type IMinHeap interface {
 	Val() int64

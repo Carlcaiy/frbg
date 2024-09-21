@@ -6,12 +6,12 @@ import (
 	"frbg/def"
 	"frbg/examples/hall/route"
 	"frbg/network"
-	"frbg/ticker"
+	"frbg/timer"
 	"time"
 )
 
 func init() {
-	ticker.Init(time.Second)
+	timer.Init(time.Second)
 }
 
 func main() {
