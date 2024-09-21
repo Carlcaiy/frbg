@@ -94,7 +94,7 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
-			timer.Start(room.delayStartEvent)
+			l.Start(room.delayStartEvent)
 		}
 
 		for _, u := range room.users {
@@ -231,7 +231,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 				l.SendToGate(user.gateID, bs)
 			}
 
-			timer.Start(room.delayStartEvent)
+			l.Start(room.delayStartEvent)
 		}
 	}
 
@@ -250,7 +250,7 @@ func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
 				if u.UserID() == msg.UserID {
 					room.users[i] = nil
 					room.sitCount -= 1
-					timer.Stop(room.delayStartEvent)
+					l.Stop(room.delayStartEvent)
 					db.SetRoom(u.UserID(), 0)
 					return nil
 				}
@@ -318,6 +318,7 @@ func (l *Local) slotsLeave(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
+	l.BaseLocal.Close(conn)
 	if conn.ServerConfig == nil {
 		return
 	}

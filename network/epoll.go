@@ -122,9 +122,11 @@ func (p *Poll) Init() {
 	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
 
 	// 添加定时事件
-	timer.AddTrigger(func() {
-		p.Trigger(def.ET_Timer)
-	})
+	if conf.ServerType != def.ST_WsGate {
+		timer.AddTrigger(func() {
+			p.Trigger(def.ET_Timer)
+		})
+	}
 
 	// 开始轮询
 	go p.LoopRun()

@@ -147,6 +147,7 @@ func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
+	l.BaseLocal.Close(conn)
 	if conn.Uid > 0 {
 		l.DelConn(conn.Uid)
 	}

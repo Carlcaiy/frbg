@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	timer.Init(time.Second)
+	timer.Init(time.Millisecond * 10)
 }
 
 func main() {

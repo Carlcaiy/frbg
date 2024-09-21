@@ -11,7 +11,7 @@ type TaskCtl struct {
 	*MinHeap
 }
 
-func NewTaskCtl(n int) *TaskCtl {
+func NewTaskCtl() *TaskCtl {
 	return &TaskCtl{
 		MinHeap: NewMinHeap(),
 	}

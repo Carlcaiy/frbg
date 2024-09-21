@@ -25,3 +25,23 @@ func (t *Task) Index() int {
 func (t *Task) SetIndex(i int) {
 	t.index = i
 }
+
+// 添加定时任务
+func NewTask(dur time.Duration, f func(), loop bool) *Task {
+	return &Task{
+		duration: dur,
+		Loop:     loop,
+		event:    f,
+		index:    -1,
+	}
+}
+
+// 添加定时任务
+func NewLoopTask(dur time.Duration, f func()) *Task {
+	return NewTask(dur, f, true)
+}
+
+// 添加定时任务
+func NewDelayTask(dur time.Duration, f func()) *Task {
+	return NewTask(dur, f, false)
+}

@@ -20,6 +20,7 @@ type BaseLocal struct {
 	m_users   map[uint32]interface{}
 	m_servers map[uint16]*network.Conn
 	m_route   map[uint16]Handle // 路由
+	*timer.TaskCtl
 }
 
 func NewBase(sconf *network.ServerConfig) *BaseLocal {
@@ -27,6 +28,7 @@ func NewBase(sconf *network.ServerConfig) *BaseLocal {
 		ServerConfig: sconf,
 		m_servers:    make(map[uint16]*network.Conn),
 		m_route:      make(map[uint16]Handle),
+		TaskCtl:      timer.NewTaskCtl(),
 	}
 }
 
@@ -34,17 +36,20 @@ func (l *BaseLocal) Init() {
 	log.Println("base.Init")
 	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
 	l.AddRoute(cmd.Test, l.TestRequest)
-	timer.StartLoopFunc(time.Second*10, l.TimerHeartBeat)
+	l.Start(timer.NewLoopTask(time.Second, l.TimerHeartBeat))
 }
 
 func (l *BaseLocal) TimerHeartBeat() {
 	for _, s := range l.m_servers {
+		log.Println(s.ServerConfig)
 		bs := parser.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
 			ServerType: uint32(s.ServerType),
 			ServerId:   uint32(s.ServerId),
 		}).Pack()
 		// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
-		s.Write(bs)
+		if _, err := s.Write(bs); err != nil {
+			log.Println("send tick failed")
+		}
 	}
 }
 
@@ -59,16 +64,9 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
-	log.Printf("DelConn:%+v\n", conn)
-	// 如果是用户连接删除用户数据即可
-	// if conn.ServerConfig == nil {
-	// 	u, ok := conn.Context().(IUser)
-	// 	if ok {
-	// 		l.DelConn(u.UserID())
-	// 	}
-	// 	return
-	// }
-	// delete(l.m_servers, conn.Svid())
+	if conn.ServerConfig != nil {
+		delete(l.m_servers, conn.Svid())
+	}
 }
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	data := new(proto.HeartBeat)
@@ -94,7 +92,7 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
 }
 
 func (l *BaseLocal) Tick() {
-	timer.FrameCheck()
+	l.FrameCheck()
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
