@@ -96,7 +96,7 @@ message EnterRoomRsp {
 
 // 进入老虎机
 message EnterSlotsReq {
-    int32 slotsId = 1;
+    int32 gameId = 1;
 }
 
 message SlotsElem {

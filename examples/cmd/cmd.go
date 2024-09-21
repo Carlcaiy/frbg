@@ -23,9 +23,9 @@ const (
 	GetRoomList = 2002 // 获取房间列表
 	EnterRoom   = 2003 // 进房请求
 	LeaveRoom   = 2006 // 请求离开房间
-	SlotsEnter  = 2008 // 进入老虎机
-	SlotsSpin   = 2009 // 老虎机摇奖
-	SlotsLeave  = 2010 // 离开老虎机
+	EnterSlots  = 2008 // 进入老虎机
+	SpinSlots   = 2009 // 老虎机摇奖
+	LeaveSlots  = 2010 // 离开老虎机
 	HallEnd     = 2999 // Hall
 )
 

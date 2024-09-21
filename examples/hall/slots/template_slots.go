@@ -1,6 +1,7 @@
 package slots
 
 import (
+	"frbg/def"
 	"frbg/examples/db"
 	"frbg/examples/proto"
 	"log"
@@ -11,7 +12,7 @@ var data sync.Map
 
 func GetFuConf() *SlotsConf {
 	return &SlotsConf{
-		GameID: SlotsFu,
+		GameID: def.SlotsFu,
 		ElemConf: []*proto.SlotsElem{
 			{ElemId: 1, ElemName: "A", Multi3: 1},
 			{ElemId: 2, ElemName: "B", Multi3: 2},
@@ -55,7 +56,7 @@ func GetSlotsData(uid uint32, gameId int32) *SlotsData {
 		return value.(*SlotsData)
 	}
 	var conf *SlotsConf
-	if gameId == SlotsFu {
+	if gameId == def.SlotsFu {
 		conf = GetFuConf()
 	}
 	if conf == nil {

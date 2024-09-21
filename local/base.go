@@ -36,7 +36,7 @@ func (l *BaseLocal) Init() {
 	log.Println("base.Init")
 	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
 	l.AddRoute(cmd.Test, l.TestRequest)
-	l.Start(timer.NewLoopTask(time.Second, l.TimerHeartBeat))
+	l.Start(timer.NewLoopTask(time.Second*5, l.TimerHeartBeat))
 }
 
 func (l *BaseLocal) TimerHeartBeat() {
@@ -73,6 +73,7 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(data); err != nil {
 		return err
 	}
+	conn.ActiveTime = time.Now().Unix()
 	log.Println("HeartBeat", data.String())
 	return nil
 }

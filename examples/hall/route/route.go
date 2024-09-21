@@ -43,9 +43,9 @@ func (l *Local) init() {
 	l.AddRoute(cmd.LeaveRoom, l.leaveRoom)
 	l.AddRoute(cmd.GameOver, l.gameOver)
 	l.AddRoute(cmd.Offline, l.offline)
-	l.AddRoute(cmd.SlotsEnter, l.slotsEnter)
-	l.AddRoute(cmd.SlotsSpin, l.slotsSpin)
-	l.AddRoute(cmd.SlotsLeave, l.slotsLeave)
+	l.AddRoute(cmd.EnterSlots, l.enterSlots)
+	l.AddRoute(cmd.SpinSlots, l.spinSlots)
+	l.AddRoute(cmd.LeaveSlots, l.leaveSlots)
 	l.AddRoute(cmd.Test, l.test)
 }
 
@@ -91,14 +91,14 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 	if room != nil {
 		if room.sitCount == room.UserCount {
 			for _, user := range room.users {
-				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
+				bs, _ := parser.Pack(user.UserID(), def.ST_User, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 			l.Start(room.delayStartEvent)
 		}
 
 		for _, u := range room.users {
-			bs, _ := parser.Pack(u.userID, def.ST_Gate, cmd.GameOver, data)
+			bs, _ := parser.Pack(u.userID, def.ST_User, cmd.GameOver, data)
 			l.SendToGate(u.gateID, bs)
 		}
 	}
@@ -112,15 +112,8 @@ func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	rsp.Rooms = make([]*proto.RoomInfo, len(l.templetes))
-	for i, temp := range l.templetes {
-		rsp.Rooms[i] = &proto.RoomInfo{
-			ServerId: 0,
-			RoomId:   temp.TempId,
-			Tag:      1,
-		}
-	}
-	if buf, err := parser.Pack(msg.UserID, def.ST_Gate, msg.Cmd, rsp); err == nil {
+	rsp.Rooms = db.GetRoomList(req.GameId)
+	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		c.Write(buf)
 	}
 	return nil
@@ -128,19 +121,12 @@ func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 
 func (l *Local) getGameList(c *network.Conn, msg *parser.Message) error {
 	log.Println("getGameList")
-	req, rsp := new(proto.GetRoomListReq), new(proto.GetRoomListRsp)
+	req, rsp := new(proto.GetGameListReq), new(proto.GetGameListRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	rsp.Rooms = make([]*proto.RoomInfo, len(l.templetes))
-	for i, temp := range l.templetes {
-		rsp.Rooms[i] = &proto.RoomInfo{
-			ServerId: 0,
-			RoomId:   temp.TempId,
-			Tag:      1,
-		}
-	}
-	if buf, err := parser.Pack(msg.UserID, def.ST_Gate, msg.Cmd, rsp); err == nil {
+	rsp.Games = db.GetGameList()
+	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		c.Write(buf)
 	}
 	return nil
@@ -264,14 +250,17 @@ func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
 }
 
 // 请求进入老虎机
-func (l *Local) slotsEnter(c *network.Conn, msg *parser.Message) error {
+func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.EnterSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	conf := slots.GetSlotsData(msg.UserID, req.SlotsId)
+	conf := slots.GetSlotsData(msg.UserID, req.GameId)
+	if conf == nil {
+		return nil
+	}
 	rsp := proto.EnterSlotsRsp{
-		GameId: req.SlotsId,
+		GameId: req.GameId,
 		Bet:    conf.BetConf.Bet,
 		Level:  conf.BetConf.Level,
 		Line:   conf.BetConf.Lines,
@@ -287,7 +276,7 @@ func (l *Local) slotsEnter(c *network.Conn, msg *parser.Message) error {
 }
 
 // 老虎机请求摇奖
-func (l *Local) slotsSpin(c *network.Conn, msg *parser.Message) error {
+func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.SlotsSpinReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -308,7 +297,7 @@ func (l *Local) slotsSpin(c *network.Conn, msg *parser.Message) error {
 }
 
 // 离开老虎机
-func (l *Local) slotsLeave(c *network.Conn, msg *parser.Message) error {
+func (l *Local) leaveSlots(c *network.Conn, msg *parser.Message) error {
 	req := new(proto.LeaveSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err

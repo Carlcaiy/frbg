@@ -14,7 +14,6 @@ import (
 	_ "net/http/pprof"
 	"reflect"
 	"syscall"
-	"time"
 
 	"github.com/gobwas/ws"
 	reuseport "github.com/kavu/go_reuseport"
@@ -39,7 +38,7 @@ type Conn struct {
 	*ServerConfig             // 信息
 	*net.TCPConn              // 连接
 	Fd            int         // 文件描述符
-	ActiveTime    time.Time   // 活跃时间
+	ActiveTime    int64       // 活跃时间
 	Uid           uint32      // 玩家
 	ctx           interface{} // 该链接附带信息
 }
