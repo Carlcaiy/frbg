@@ -34,16 +34,16 @@ func TestHu(t *testing.T) {
 		hands2 := mj[14:28]
 		hands3 := mj[28:42]
 		hands4 := mj[42:56]
-		if st := New(hands1); st.hu233() {
+		if st := New(hands1, 0, nil); st.hu233() {
 			fmt.Println(st, hands1)
 		}
-		if st := New(hands2); st.hu233() {
+		if st := New(hands2, 0, nil); st.hu233() {
 			fmt.Println(st, hands2)
 		}
-		if st := New(hands3); st.hu233() {
+		if st := New(hands3, 0, nil); st.hu233() {
 			fmt.Println(st, hands3)
 		}
-		if st := New(hands4); st.hu233() {
+		if st := New(hands4, 0, nil); st.hu233() {
 			fmt.Println(st, hands4)
 		}
 	}
@@ -55,7 +55,7 @@ func TestMj(t *testing.T) {
 	// 	Val: []uint8{1, 12, 13, 14, 15, 16, 19, 21, 33, 35, 36},
 	// 	Num: []uint8{2, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1},
 	// }
-	fmt.Println(New(mj).hu233())
+	fmt.Println(New(mj, 0, nil).hu233())
 }
 
 func TestAppend(t *testing.T) {

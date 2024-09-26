@@ -124,21 +124,21 @@ func (u *User) AGangMj(val uint8) bool {
 }
 
 func (u *User) DianPao(val uint8) bool {
-	st := mj.New(append(u.mj_hands, val))
+	st := mj.New(u.mj_hands, val, u.mj_group)
 	return st.CanHu()
 }
 
 func (u *User) Zimo() bool {
-	st := mj.New(u.mj_hands)
+	st := mj.New(u.mj_hands, 0, u.mj_group)
 	return st.CanHu()
 }
 
 func (u *User) CanOpSelf() {
-	st := mj.New(u.mj_hands)
+	st := mj.New(u.mj_hands, 0, nil)
 	u.can_op = st.CanOpSelf()
 }
 
 func (u *User) CanOpOther(val uint8) {
-	st := mj.New(append(u.mj_hands, val))
+	st := mj.New(u.mj_hands, val, nil)
 	u.can_op = st.CanOpOther(val)
 }
