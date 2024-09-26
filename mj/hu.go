@@ -2,29 +2,6 @@ package mj
 
 import "sort"
 
-const (
-	PH  = 0x0001 // 屁胡
-	MQQ = 0x0002 // 门前清
-	PPH = 0x0004 // 碰碰胡
-	QD  = 0x0008 // 七对
-	QYS = 0x0010 // 清一色
-	JYS = 0x0020 // 将一色
-	FYS = 0x0040 // 风一色
-	HH  = 0x0080 // 豪华
-	HH2 = 0x0100 // 双豪华
-	HH3 = 0x0200 // 三豪华
-	QQR = 0x0400 // 全求人
-	ZM  = 0x0800 // 自摸
-)
-
-var multi = map[int32]int32{
-	HH3 | MQQ | PH: 10,
-	HH2 | MQQ | PH: 10,
-	HH | MQQ | PH:  10,
-	QD:             8,
-	HH | QD:        16,
-}
-
 type stat struct {
 	pai   uint8
 	val   []uint8
@@ -264,22 +241,26 @@ func (m *stat) CanOpOther(val uint8) []*Group {
 					Op:  LChi,
 					Val: val,
 				})
-			} else if i+1 < len(m.val) && i-1 >= 0 && m.val[i-1] == val-1 && m.val[i+1] == val+1 {
+			}
+			if i+1 < len(m.val) && i-1 >= 0 && m.val[i-1] == val-1 && m.val[i+1] == val+1 {
 				ret = append(ret, &Group{
 					Op:  MChi,
 					Val: val,
 				})
-			} else if i-2 >= 0 && m.val[i-2] == val-2 && m.val[i-1] == val-1 {
+			}
+			if i-2 >= 0 && m.val[i-2] == val-2 && m.val[i-1] == val-1 {
 				ret = append(ret, &Group{
 					Op:  RChi,
 					Val: val,
 				})
-			} else if m.num[i] >= 3 {
+			}
+			if m.num[i] >= 3 {
 				ret = append(ret, &Group{
 					Op:  Peng,
 					Val: val,
 				})
-			} else if m.num[i] >= 4 {
+			}
+			if m.num[i] >= 4 {
 				ret = append(ret, &Group{
 					Op:  MGang,
 					Val: val,
@@ -297,9 +278,8 @@ func (m *stat) CanOpOther(val uint8) []*Group {
 	return ret
 }
 
-func (m *stat) HuPai() (int32, int32) {
+func (m *stat) HuPai() int32 {
 	hus := int32(0)
-	mul := int32(0)
 	if m.hu233() {
 		hus |= PH
 	} else if m.huQd() {
@@ -309,7 +289,7 @@ func (m *stat) HuPai() (int32, int32) {
 		hus |= JYS
 	}
 	if hus == 0 {
-		return hus, mul
+		return hus
 	}
 	if m.huPph() {
 		hus |= PPH
@@ -328,5 +308,5 @@ func (m *stat) HuPai() (int32, int32) {
 	} else if n == 3 {
 		hus |= HH3
 	}
-	return hus, mul
+	return hus
 }
