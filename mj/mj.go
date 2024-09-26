@@ -21,7 +21,8 @@ const (
 	LChi, MChi, RChi    = 1, 2, 3
 	Peng                = 4
 	MGang, BGang, AGang = 5, 6, 7
-	Jiang, Shun, Ke     = 8, 9, 10
+	Hu                  = 8
+	Jiang, Shun, Ke     = 10, 11, 12
 )
 
 type Group struct {
@@ -56,7 +57,7 @@ func (p *Group) String() string {
 	return str
 }
 
-func Pai(v byte) string {
+func Pai(v uint8) string {
 	if v < 8 {
 		return feng[v-1]
 	} else if v < 20 {

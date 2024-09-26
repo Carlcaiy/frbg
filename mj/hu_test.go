@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"unsafe"
 )
 
 func TestHu(t *testing.T) {
-	mj := []byte{
+	mj := []uint8{
 		1, 2, 3, 4, 5, 6, 7,
 		1, 2, 3, 4, 5, 6, 7,
 		1, 2, 3, 4, 5, 6, 7,
@@ -33,26 +34,34 @@ func TestHu(t *testing.T) {
 		hands2 := mj[14:28]
 		hands3 := mj[28:42]
 		hands4 := mj[42:56]
-		if st := New(hands1); st.Pihu() {
+		if st := New(hands1); st.hu233() {
 			fmt.Println(st, hands1)
 		}
-		if st := New(hands2); st.Pihu() {
+		if st := New(hands2); st.hu233() {
 			fmt.Println(st, hands2)
 		}
-		if st := New(hands3); st.Pihu() {
+		if st := New(hands3); st.hu233() {
 			fmt.Println(st, hands3)
 		}
-		if st := New(hands4); st.Pihu() {
+		if st := New(hands4); st.hu233() {
 			fmt.Println(st, hands4)
 		}
 	}
 }
 
 func TestMj(t *testing.T) {
-	mj := []byte{3, 7, 12, 17, 19, 19, 22, 23, 24, 25, 29, 29, 37, 37}
+	mj := []uint8{3, 7, 12, 17, 19, 19, 22, 23, 24, 25, 29, 29, 37, 37}
 	// st := &Mj{
-	// 	Val: []byte{1, 12, 13, 14, 15, 16, 19, 21, 33, 35, 36},
-	// 	Num: []byte{2, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1},
+	// 	Val: []uint8{1, 12, 13, 14, 15, 16, 19, 21, 33, 35, 36},
+	// 	Num: []uint8{2, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1},
 	// }
-	fmt.Println(New(mj).Pihu())
+	fmt.Println(New(mj).hu233())
+}
+
+func TestAppend(t *testing.T) {
+	mj := make([]uint8, 0, 10)
+	ret := append(mj, 1, 2, 3, 4)
+	fmt.Println(unsafe.Pointer(&mj), unsafe.Pointer(&ret), cap(mj), cap(ret))
+	ret2 := ret[:2]
+	fmt.Println(unsafe.Pointer(&mj), unsafe.Pointer(&ret), unsafe.Pointer(&ret2), cap(mj), cap(ret), cap(ret2))
 }
