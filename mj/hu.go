@@ -3,10 +3,10 @@ package mj
 import "sort"
 
 type stat struct {
-	pai   uint8
-	val   []uint8
-	num   []uint8
-	Group []Group
+	pai   uint8   // 点炮的牌 >0表示点炮 =0表示自摸
+	val   []uint8 // 手牌牌值集合
+	num   []int8  // 手牌数量集合
+	Group []Group // 手牌将刻顺
 }
 
 func New(mj []uint8, p uint8, g []Group) *stat {
