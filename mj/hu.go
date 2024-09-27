@@ -140,9 +140,9 @@ func (m *stat) huQd() bool {
 func (m *stat) huJys() bool {
 	for i := range m.val {
 		val := m.val[i]
-		if val != 12 && val != 15 && val != 18 &&
-			val != 22 && val != 25 && val != 28 &&
-			val != 32 && val != 35 && val != 38 {
+		if val != Tiao2 && val != Tiao5 && val != Tiao8 &&
+			val != Wan2 && val != Wan5 && val != Wan8 &&
+			val != Tong2 && val != Tong5 && val != Tong8 {
 			return false
 		}
 	}

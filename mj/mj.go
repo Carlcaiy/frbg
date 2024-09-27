@@ -8,6 +8,7 @@ const (
 	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9 = 11, 12, 13, 14, 15, 16, 17, 18, 19
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9          = 21, 22, 23, 24, 25, 26, 27, 28, 29
 	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9 = 31, 32, 33, 34, 35, 36, 37, 38, 39
+	Chun, Xia, Qiu, Don, Mei, Lan, Zhu, Ju                        = 41, 42, 43, 44, 45, 46, 47, 48
 )
 
 // 名称枚举
@@ -96,7 +97,7 @@ func HuStr(hu int32) string {
 	if hu&HH2 > 0 {
 		str += "[双豪华]"
 	}
-	if hu&HH2 > 0 {
+	if hu&HH > 0 {
 		str += "[豪华]"
 	}
 	if hu&FYS > 0 {

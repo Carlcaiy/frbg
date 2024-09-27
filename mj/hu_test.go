@@ -65,3 +65,10 @@ func TestAppend(t *testing.T) {
 	ret2 := ret[:2]
 	fmt.Println(unsafe.Pointer(&mj), unsafe.Pointer(&ret), unsafe.Pointer(&ret2), cap(mj), cap(ret), cap(ret2))
 }
+
+func TestHulz(t *testing.T) {
+	mj := []uint8{13, 8, 8, 8, 13, 16, 16, 16, 14, 14, 15, 15, 13, 13}
+	st := Newlz(mj, 0, 0, nil)
+	fmt.Println(st)
+	fmt.Println(HuStr(st.HuPai()))
+}
