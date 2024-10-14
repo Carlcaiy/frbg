@@ -1,26 +1,52 @@
 package mj
 
 type statlz struct {
-	pai   uint8   // 点炮的牌 >0表示点炮 =0表示自摸
-	num   []int8  // 手牌数量集合
-	Group []Group // 手牌将刻顺
+	laizi  uint8   // 癞子牌
+	pai    uint8   // 点炮的牌 >0表示点炮 =0表示自摸
+	num    []int8  // 手牌数量集合
+	groups []Group // 手牌将刻顺
 }
 
-func Newlz(mj []uint8, p uint8, lz uint8, g []Group) *statlz {
+// 格式化结构体
+func (s *statlz) String() string {
+	str := ""
+	for p := range s.num {
+		if s.num[p] == 0 {
+			continue
+		}
+		str += "["
+		for i := int8(0); i < s.num[p]; i++ {
+			if i != 0 {
+				str += " "
+			}
+			str += Pai(uint8(p))
+		}
+		str += "]"
+	}
+
+	for i := range s.groups {
+		str += s.groups[i].String()
+	}
+
+	return str
+}
+
+func Newlz(mj []uint8, pai uint8, laizi uint8, group []Group) *statlz {
 	st := &statlz{
-		pai:   p,
-		num:   make([]int8, Chun),
-		Group: g,
+		pai:    pai,
+		num:    make([]int8, Chun),
+		groups: group,
 	}
 	for _, v := range mj {
 		st.num[v]++
 	}
-	if p > 0 {
-		st.num[p]++
+	if pai > 0 {
+		st.num[pai]++
 	}
-	if lz > 0 {
-		st.num[Laizi] = st.num[lz]
-		st.num[lz] = 0
+	if laizi > 0 {
+		st.laizi = laizi
+		st.num[Laizi] = st.num[laizi]
+		st.num[laizi] = 0
 	}
 	return st
 }
@@ -41,20 +67,19 @@ func (m *statlz) deal_kezi(pai uint8) bool {
 		if m.num[pai] < 0 {
 			m.num[Laizi] += m.num[pai]
 		}
-		m.Group = append(m.Group, Group{
+		m.groups = append(m.groups, Group{
 			Val: pai,
 			Op:  Ke,
 		})
 		j := m.next(pai)
 		if m.deal_kezi(j) || m.deal_shunzi(j) {
-			// m.Group = m.Group[:len(m.Group)-1]
 			if m.num[pai] < 0 {
 				m.num[Laizi] -= m.num[pai]
 			}
 			m.num[pai] += 3
 			return true
 		}
-		m.Group = m.Group[:len(m.Group)-1]
+		m.groups = m.groups[:len(m.groups)-1]
 		if m.num[pai] < 0 {
 			m.num[Laizi] -= m.num[pai]
 		}
@@ -83,13 +108,12 @@ func (m *statlz) deal_shunzi(pai uint8) bool {
 		if m.num[pai+2] < 0 {
 			m.num[Laizi] -= 1
 		}
-		m.Group = append(m.Group, Group{
+		m.groups = append(m.groups, Group{
 			Val: pai,
 			Op:  Shun,
 		})
 		j := m.next(pai)
 		if m.deal_kezi(j) || m.deal_shunzi(j) {
-			// m.Group = m.Group[:len(m.Group)-1]
 			m.num[pai] += 1
 			m.num[pai+1] += 1
 			m.num[pai+2] += 1
@@ -101,7 +125,7 @@ func (m *statlz) deal_shunzi(pai uint8) bool {
 			}
 			return true
 		}
-		m.Group = m.Group[:len(m.Group)-1]
+		m.groups = m.groups[:len(m.groups)-1]
 		m.num[pai] += 1
 		m.num[pai+1] += 1
 		m.num[pai+2] += 1
@@ -123,7 +147,7 @@ func (m *statlz) hu233() bool {
 			if m.num[i] < 0 {
 				m.num[Laizi] -= 1
 			}
-			m.Group = append(m.Group, Group{
+			m.groups = append(m.groups, Group{
 				Val: uint8(i),
 				Op:  Jiang,
 			})
@@ -133,14 +157,13 @@ func (m *statlz) hu233() bool {
 				if m.num[i] == 1 {
 					m.num[Laizi] += 1
 				}
-				// m.Group = m.Group[:len(m.Group)-1]
 				return true
 			}
 			m.num[i] += 2
 			if m.num[i] == 1 {
 				m.num[Laizi] += 1
 			}
-			m.Group = m.Group[:len(m.Group)-1]
+			m.groups = m.groups[:len(m.groups)-1]
 		}
 	}
 	return false
@@ -174,8 +197,8 @@ func (m *statlz) huJys() bool {
 // 豪华
 func (m *statlz) huHh() int {
 	cnt := 0
-	for i := range m.Group {
-		if m.Group[i].Op == AGang {
+	for i := range m.groups {
+		if m.groups[i].Op == AGang {
 			cnt++
 		}
 	}
@@ -189,9 +212,9 @@ func (m *statlz) huHh() int {
 
 // 清一色
 func (m *statlz) huQys() bool {
-	c := m.Group[0].Val / 10
-	for i := range m.Group {
-		if m.Group[i].Val/10 != c {
+	c := m.groups[0].Val / 10
+	for i := range m.groups {
+		if m.groups[i].Val/10 != c {
 			return false
 		}
 	}
@@ -200,8 +223,8 @@ func (m *statlz) huQys() bool {
 
 // 碰碰胡
 func (m *statlz) huPph() bool {
-	for i := range m.Group {
-		if m.Group[i].Op == LChi || m.Group[i].Op == MChi || m.Group[i].Op == RChi || m.Group[i].Op == Shun {
+	for i := range m.groups {
+		if m.groups[i].Op == LChi || m.groups[i].Op == MChi || m.groups[i].Op == RChi || m.groups[i].Op == Shun {
 			return false
 		}
 	}
@@ -213,12 +236,28 @@ func (m *statlz) huQqr() bool {
 	if m.pai == 0 {
 		return false
 	}
-	for i := range m.Group {
-		if m.Group[i].Op == Ke || m.Group[i].Op == Shun {
+	for i := range m.groups {
+		if m.groups[i].Op == Ke || m.groups[i].Op == Shun {
 			return false
 		}
 	}
 	return m.num[m.pai] == 2
+}
+
+func (m *statlz) huMqq() bool {
+	if m.pai > 0 {
+		return false
+	}
+	for i := range m.groups {
+		if m.groups[i].Op == LChi || m.groups[i].Op == MChi || m.groups[i].Op == RChi || m.groups[i].Op == Peng || m.groups[i].Op == MGang || m.groups[i].Op == BGang {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *statlz) huYh() bool {
+	return m.num[Laizi] == 0
 }
 
 func (m *statlz) CanHu() bool {
@@ -285,7 +324,23 @@ func (m *statlz) CanOpOther(val uint8) []*Group {
 }
 
 func (m *statlz) HuPai() int32 {
+	lzHx := m.huType()
+	lzScore := m.huScore(lzHx)
+	if m.laizi > 0 && m.num[m.laizi] > 0 {
+		m.num[m.laizi] = m.num[Laizi]
+		m.num[Laizi] = 0
+		hx := m.huType()
+		score := m.huScore(hx)
+		if score >= lzScore {
+			return hx
+		}
+	}
+	return lzHx
+}
+
+func (m *statlz) huType() int32 {
 	hus := int32(0)
+	// 基础胡型 平胡,七对,将一色
 	if m.hu233() {
 		hus |= PH
 	} else if m.huQd() {
@@ -297,15 +352,23 @@ func (m *statlz) HuPai() int32 {
 	if hus == 0 {
 		return hus
 	}
+	// 碰碰胡
 	if m.huPph() {
 		hus |= PPH
 	}
+	// 清一色
 	if m.huQys() {
 		hus |= QYS
 	}
+	// 全求人
 	if m.huQqr() {
 		hus |= QQR
 	}
+	// 门前清
+	if m.huMqq() && hus == PH {
+		hus |= MQQ
+	}
+	// 豪华
 	n := m.huHh()
 	if n == 1 {
 		hus |= HH
@@ -314,5 +377,40 @@ func (m *statlz) HuPai() int32 {
 	} else if n == 3 {
 		hus |= HH3
 	}
+	// 自摸
+	if m.pai == 0 && hus&MQQ == 0 {
+		hus |= ZM
+	}
+	// 硬胡
+	if m.huYh() {
+		hus |= YH
+	}
 	return hus
+}
+
+func (m *statlz) huScore(hx int32) int32 {
+	base := int32(0)
+	// 七对|清一色|将一色|全球人|碰碰胡 8分
+	// 门前清 6分
+	// 平胡 2分
+	if hx&(QD|JYS|QYS|QQR|PPH) > 0 {
+		base = 8
+	} else if hx&MQQ > 0 {
+		base = 6
+	} else {
+		base = 2
+	}
+	if hx&HH > 0 {
+		base *= 2
+	}
+	if hx&HH2 > 0 {
+		base *= 4
+	}
+	if hx&HH3 > 0 {
+		base *= 8
+	}
+	if hx&YH > 0 {
+		base *= 2
+	}
+	return base
 }

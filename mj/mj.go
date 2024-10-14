@@ -84,10 +84,14 @@ const (
 	HH2 = 0x0200 // 双豪华
 	HH3 = 0x0400 // 三豪华
 	ZM  = 0x0800 // 自摸
+	YH  = 0x1000 // 硬胡
 )
 
 func HuStr(hu int32) string {
 	str := ""
+	if hu&YH > 0 {
+		str += "[黑]"
+	}
 	if hu&ZM > 0 {
 		str += "[自摸]"
 	}

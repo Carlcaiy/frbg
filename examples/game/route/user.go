@@ -36,14 +36,17 @@ func (u *User) remove_mj(val uint8, num int) {
 	u.mj_hands = u.mj_hands[:tail-num]
 }
 
+// 打麻将
 func (u *User) DaMj(val uint8) {
 	u.remove_mj(val, 1)
 }
 
+// 摸麻将
 func (u *User) MoMj(val uint8) {
 	u.mj_hands = append(u.mj_hands, val)
 }
 
+// 左吃麻将
 func (u *User) LChiMj(val uint8) {
 	val1, val2 := val+1, val+2
 	u.remove_mj(val1, 1)
@@ -51,6 +54,7 @@ func (u *User) LChiMj(val uint8) {
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.LChi, Val: val})
 }
 
+// 中吃麻将
 func (u *User) MChiMj(val uint8) {
 	val1, val2 := val-1, val+2
 	u.remove_mj(val1, 1)
@@ -58,6 +62,7 @@ func (u *User) MChiMj(val uint8) {
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MChi, Val: val})
 }
 
+// 右吃麻将
 func (u *User) RChiMj(val uint8) {
 	val1, val2 := val-1, val-2
 	u.remove_mj(val1, 1)
@@ -65,6 +70,7 @@ func (u *User) RChiMj(val uint8) {
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.RChi, Val: val})
 }
 
+// 碰牌
 func (u *User) PengMj(val uint8) bool {
 	cnt := 0
 	for _, v := range u.mj_hands {
@@ -81,6 +87,7 @@ func (u *User) PengMj(val uint8) bool {
 	return true
 }
 
+// 明杠
 func (u *User) MGangMj(val uint8) bool {
 	cnt := 0
 	for _, v := range u.mj_hands {
@@ -97,6 +104,7 @@ func (u *User) MGangMj(val uint8) bool {
 	return true
 }
 
+// 补杠
 func (u *User) BGangMj(val uint8) bool {
 	for _, v := range u.mj_group {
 		if v.Op == mj.Peng && v.Val == val {
@@ -107,6 +115,7 @@ func (u *User) BGangMj(val uint8) bool {
 	return true
 }
 
+// 暗杠
 func (u *User) AGangMj(val uint8) bool {
 	cnt := 0
 	for _, v := range u.mj_hands {
@@ -123,21 +132,25 @@ func (u *User) AGangMj(val uint8) bool {
 	return true
 }
 
+// 点炮
 func (u *User) DianPao(val uint8) bool {
 	st := mj.New(u.mj_hands, val, u.mj_group)
 	return st.CanHu()
 }
 
+// 自摸
 func (u *User) Zimo() bool {
 	st := mj.New(u.mj_hands, 0, u.mj_group)
 	return st.CanHu()
 }
 
+// 手牌操作
 func (u *User) CanOpSelf() {
 	st := mj.New(u.mj_hands, 0, nil)
 	u.can_op = st.CanOpSelf()
 }
 
+// 可操作其他玩家的牌
 func (u *User) CanOpOther(val uint8) {
 	st := mj.New(u.mj_hands, val, nil)
 	u.can_op = st.CanOpOther(val)

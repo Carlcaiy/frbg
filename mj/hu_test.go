@@ -67,8 +67,16 @@ func TestAppend(t *testing.T) {
 }
 
 func TestHulz(t *testing.T) {
-	mj := []uint8{13, 8, 8, 8, 13, 16, 16, 16, 14, 14, 15, 15, 13, 13}
-	st := Newlz(mj, 0, 0, nil)
-	fmt.Println(st)
-	fmt.Println(HuStr(st.HuPai()))
+	if str := HuStr(Newlz([]uint8{13, 8, 8, 8, 13, 16, 16, 16, 14, 14, 15, 15, 13, 13}, 0, 0, nil).HuPai()); str != "[自摸][豪华][清一色][碰碰胡]" {
+		t.Fatal(str, "not equal", "[自摸][豪华][清一色][碰碰胡]")
+	}
+	if str := HuStr(Newlz([]uint8{8, 8, 8, 13, 14, 16, 16, 16, 14, 14, 15, 15, 13, 13}, 0, 0, nil).HuPai()); str != "[自摸][清一色][碰碰胡]" {
+		t.Fatal(str, "not equal", "[自摸][清一色][碰碰胡]")
+	}
+	if str := HuStr(Newlz([]uint8{8, 8, 8, 13, 14, 15, 16, 16, 24, 25, 26, 35, 34, 33}, 0, 0, nil).HuPai()); str != "[门前清]" {
+		t.Fatal(str, "not equal", "[门前清]")
+	}
+	if str := HuStr(Newlz([]uint8{11, 12, 13, 13, 14, 15, 16, 16, 14, 15, 16, 17, 18, 19}, 0, 0, nil).HuPai()); str != "[黑][自摸][清一色]" {
+		t.Fatal(str, "not equal", "[黑][自摸][清一色]")
+	}
 }
