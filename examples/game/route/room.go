@@ -99,22 +99,27 @@ func (r *Room) Start() {
 			u := r.Users[(r.turn+i)%4]
 			// 每个玩家发4个马建
 			for j := 0; j < 4; j++ {
+				mjVal := r.mj[r.mjIndex]
 				faPai = append(faPai, &proto.DeskMj{
 					Index: int32(r.mjIndex),
 					Uid:   u.uid,
-					MjVal: int32(r.mj[r.mjIndex]),
+					MjVal: int32(mjVal),
 				})
 				r.mjIndex++
+				u.MoMj(mjVal)
 			}
 		}
 	}
 	for i := 0; i < 5; i++ {
 		u := r.Users[(r.turn+i)%4]
+		mjVal := r.mj[r.mjIndex]
 		faPai = append(faPai, &proto.DeskMj{
 			Index: int32(r.mjIndex),
 			Uid:   u.uid,
 			MjVal: int32(r.mj[r.mjIndex]),
 		})
+		r.mjIndex++
+		u.MoMj(mjVal)
 	}
 
 	// 确定赖子
@@ -127,19 +132,39 @@ func (r *Room) Start() {
 	r.pizi = r.mj[piziIndex]
 	r.laizi = mj.GetLaizi(r.pizi)
 
-	// 当前回合
+	// 组装信息
 	zhuang := r.Users[r.turn]
-	bs, _ := parser.Pack(zhuang.uid, def.ST_User, cmd.GameFaPai, &proto.FaMj{
-		Fapai:  faPai,
-		Zhuang: zhuang.uid,
-		Touzi:  r.touzi,
-		Pizi: &proto.DeskMj{
-			Index: piziIndex,
-			MjVal: int32(r.pizi),
-		},
-		Laizi: int32(r.laizi),
-	})
-	r.l.SendToGate(zhuang.gateId, bs)
+	can_op := zhuang.CanOpSelf()
+
+	piziMj := &proto.DeskMj{
+		Index: piziIndex,
+		MjVal: int32(r.pizi),
+	}
+	for _, u := range r.Users {
+		handsMj := make([]*proto.DeskMj, len(faPai))
+		for i := range faPai {
+			handsMj[i] = &proto.DeskMj{
+				Index: faPai[i].Index,
+				Uid:   faPai[i].Uid,
+			}
+			if faPai[i].Uid == u.uid {
+				handsMj[i].MjVal = faPai[i].MjVal
+			}
+		}
+		canOp := int32(0)
+		if u.uid == zhuang.uid {
+			canOp = can_op
+		}
+		bs, _ := parser.Pack(zhuang.uid, def.ST_User, cmd.GameFaPai, &proto.FaMj{
+			Fapai:  handsMj,
+			Zhuang: zhuang.uid,
+			Touzi:  r.touzi,
+			Pizi:   piziMj,
+			Laizi:  int32(r.laizi),
+			CanOp:  canOp,
+		})
+		r.l.SendToGate(zhuang.gateId, bs)
+	}
 }
 
 func (r *Room) MoPai() uint8 {

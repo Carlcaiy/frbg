@@ -175,7 +175,7 @@ func (u *User) CanOpSelf() int32 {
 	st := mj.New(u.mj_hands, 0, nil)
 	u.can_ops = st.CanOpSelf()
 
-	op := int32(0)
+	op := int32(mj.DaPai)
 	for i := range u.can_ops {
 		op |= 1 << (u.can_ops[i].Op - 1)
 	}

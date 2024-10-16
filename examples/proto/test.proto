@@ -205,6 +205,7 @@ message FaMj {
     repeated int32 touzi = 3;       // 骰子
     uint32 zhuang = 4;              // 庄家
     int32 laizi = 5;                // 赖子
+    int32 can_op = 7;               // 庄家可执行操作
 }
 
 // 完成数据
