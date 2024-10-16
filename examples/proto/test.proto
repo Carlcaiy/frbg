@@ -191,12 +191,38 @@ message SyncData {
     uint32 gameId = 3;
 }
 
+// 麻将
+message DeskMj {
+    int32 index = 1;            // 下标
+    uint32 uid = 2;             // 玩家uid
+    int32 mj_val = 3;           // 麻将值
+}
+
+// 手牌
+message FaMj {
+    repeated DeskMj fapai = 1;      // 发牌
+    DeskMj pizi = 2;                // 皮子
+    repeated int32 touzi = 3;       // 骰子
+    uint32 zhuang = 4;              // 庄家
+    int32 laizi = 5;                // 赖子
+}
+
 // 完成数据
 message Tap {
-    uint32 uid = 1;    // uid
-    uint32 roomId = 2;   // roomId
-    int32 tap = 3;    // x坐标
-    string tips = 4;    // 提示
+    uint32 uid = 1;         // uid
+    uint32 roomId = 2;      // roomId
+    int32 tap = 3;          // x坐标
+    int32 can_op = 4;       // 可操作
+}
+
+// 执行操作
+message MjOpt {
+    uint32 uid = 1;         // uid
+    uint32 roomId = 2;      // roomId
+    int32 op = 3;           // 操作
+    int32 mj = 4;           // 麻将
+    int32 can_op = 5;       // 可操作
+    
 }
 
 // 空数据

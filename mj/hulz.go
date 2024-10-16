@@ -276,47 +276,49 @@ func (m *statlz) CanOpSelf() []*Group {
 	}
 	if m.CanHu() {
 		ret = append(ret, &Group{
-			Op: Hu,
+			Op: HuPai,
 		})
 	}
 	return ret
 }
 
-func (m *statlz) CanOpOther(val uint8) []*Group {
+func (m *statlz) CanOpOther(val, op uint8) []*Group {
 	ret := make([]*Group, 0)
-	if m.num[val+1] > 0 && m.num[val+2] > 0 {
-		ret = append(ret, &Group{
-			Op:  LChi,
-			Val: val,
-		})
-	}
-	if m.num[val-1] > 0 && m.num[val+1] > 0 {
-		ret = append(ret, &Group{
-			Op:  MChi,
-			Val: val,
-		})
-	}
-	if m.num[val-2] > 0 && m.num[val-1] > 0 {
-		ret = append(ret, &Group{
-			Op:  RChi,
-			Val: val,
-		})
-	}
-	if m.num[val] >= 3 {
-		ret = append(ret, &Group{
-			Op:  Peng,
-			Val: val,
-		})
-	}
-	if m.num[val] >= 4 {
-		ret = append(ret, &Group{
-			Op:  MGang,
-			Val: val,
-		})
+	if op == DaPai {
+		if m.num[val+1] > 0 && m.num[val+2] > 0 {
+			ret = append(ret, &Group{
+				Op:  LChi,
+				Val: val,
+			})
+		}
+		if m.num[val-1] > 0 && m.num[val+1] > 0 {
+			ret = append(ret, &Group{
+				Op:  MChi,
+				Val: val,
+			})
+		}
+		if m.num[val-2] > 0 && m.num[val-1] > 0 {
+			ret = append(ret, &Group{
+				Op:  RChi,
+				Val: val,
+			})
+		}
+		if m.num[val] >= 3 {
+			ret = append(ret, &Group{
+				Op:  Peng,
+				Val: val,
+			})
+		}
+		if m.num[val] >= 4 {
+			ret = append(ret, &Group{
+				Op:  MGang,
+				Val: val,
+			})
+		}
 	}
 	if m.CanHu() {
 		ret = append(ret, &Group{
-			Op:  Hu,
+			Op:  HuPai,
 			Val: val,
 		})
 	}

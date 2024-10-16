@@ -7,9 +7,11 @@ import (
 type User struct {
 	uid        uint32
 	gateId     uint8 // 网关ID
-	tap        int32
+	pai        int32
 	offline    bool
-	can_op     []*mj.Group
+	can_ops    []*mj.Group
+	waiting    bool       // 是否等待操作
+	wait_op    uint8      // 等待期间收集到的操作
 	mj_hands   []uint8    // 麻将
 	mj_history []uint8    // 出牌
 	mj_group   []mj.Group // 麻将组
@@ -21,7 +23,7 @@ func (u *User) Reset() {
 	u.mj_group = u.mj_group[:0]
 }
 
-func (u *User) remove_mj(val uint8, num int) {
+func (u *User) remove_mj(val uint8, num int) bool {
 	tail := len(u.mj_hands)
 	for i, v := range u.mj_hands {
 		if v == val {
@@ -29,16 +31,17 @@ func (u *User) remove_mj(val uint8, num int) {
 			tail--
 			num--
 			if num == 0 {
-				break
+				u.mj_hands = u.mj_hands[:tail-num]
+				return true
 			}
 		}
 	}
-	u.mj_hands = u.mj_hands[:tail-num]
+	return false
 }
 
 // 打麻将
-func (u *User) DaMj(val uint8) {
-	u.remove_mj(val, 1)
+func (u *User) DaMj(val uint8) bool {
+	return u.remove_mj(val, 1)
 }
 
 // 摸麻将
@@ -47,27 +50,42 @@ func (u *User) MoMj(val uint8) {
 }
 
 // 左吃麻将
-func (u *User) LChiMj(val uint8) {
+func (u *User) LChiMj(val uint8) bool {
 	val1, val2 := val+1, val+2
-	u.remove_mj(val1, 1)
-	u.remove_mj(val2, 1)
+	if !u.remove_mj(val1, 1) {
+		return false
+	}
+	if !u.remove_mj(val2, 1) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.LChi, Val: val})
+	return true
 }
 
 // 中吃麻将
-func (u *User) MChiMj(val uint8) {
+func (u *User) MChiMj(val uint8) bool {
 	val1, val2 := val-1, val+2
-	u.remove_mj(val1, 1)
-	u.remove_mj(val2, 1)
+	if !u.remove_mj(val1, 1) {
+		return false
+	}
+	if !u.remove_mj(val2, 1) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MChi, Val: val})
+	return true
 }
 
 // 右吃麻将
-func (u *User) RChiMj(val uint8) {
+func (u *User) RChiMj(val uint8) bool {
 	val1, val2 := val-1, val-2
-	u.remove_mj(val1, 1)
-	u.remove_mj(val2, 1)
+	if !u.remove_mj(val1, 1) {
+		return false
+	}
+	if !u.remove_mj(val2, 1) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.RChi, Val: val})
+	return true
 }
 
 // 碰牌
@@ -82,7 +100,9 @@ func (u *User) PengMj(val uint8) bool {
 		return false
 	}
 
-	u.remove_mj(val, 2)
+	if !u.remove_mj(val, 2) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.Peng, Val: val})
 	return true
 }
@@ -99,7 +119,9 @@ func (u *User) MGangMj(val uint8) bool {
 		return false
 	}
 
-	u.remove_mj(val, 3)
+	if !u.remove_mj(val, 3) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MGang, Val: val})
 	return true
 }
@@ -111,7 +133,9 @@ func (u *User) BGangMj(val uint8) bool {
 			v.Op = mj.BGang
 		}
 	}
-	u.remove_mj(val, 1)
+	if !u.remove_mj(val, 1) {
+		return false
+	}
 	return true
 }
 
@@ -127,7 +151,9 @@ func (u *User) AGangMj(val uint8) bool {
 		return false
 	}
 
-	u.remove_mj(val, 4)
+	if !u.remove_mj(val, 4) {
+		return false
+	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.AGang, Val: val})
 	return true
 }
@@ -145,13 +171,28 @@ func (u *User) Zimo() bool {
 }
 
 // 手牌操作
-func (u *User) CanOpSelf() {
+func (u *User) CanOpSelf() int32 {
 	st := mj.New(u.mj_hands, 0, nil)
-	u.can_op = st.CanOpSelf()
+	u.can_ops = st.CanOpSelf()
+
+	op := int32(0)
+	for i := range u.can_ops {
+		op |= 1 << (u.can_ops[i].Op - 1)
+	}
+
+	return op
 }
 
 // 可操作其他玩家的牌
-func (u *User) CanOpOther(val uint8) {
-	st := mj.New(u.mj_hands, val, nil)
-	u.can_op = st.CanOpOther(val)
+func (u *User) CanOpOther(val uint8, op uint8, lz uint8) int32 {
+	st := mj.Newlz(u.mj_hands, val, lz, nil)
+	u.can_ops = st.CanOpOther(val, op)
+	u.waiting = len(u.can_ops) > 0
+
+	can_op := int32(0)
+	for i := range u.can_ops {
+		can_op |= 1 << (u.can_ops[i].Op - 1)
+	}
+
+	return can_op
 }

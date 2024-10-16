@@ -33,10 +33,12 @@ const (
 const (
 	GameBegin = 3000 // Game
 	GameStart = 3001 // 进入游戏
-	Tap       = 3003 // 点击游戏
+	GameOpt   = 3002 // 广播操作
+	Opt       = 3003 // 点击游戏
 	Round     = 3004 // 回合
 	GameOver  = 3005 // 游戏结束
 	Reconnect = 3006 // 重连
 	CountDown = 3007 // 倒计时
+	GameFaPai = 3008 // 发牌
 	GameEnd   = 3999 // Game
 )

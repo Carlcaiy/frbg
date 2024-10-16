@@ -27,7 +27,7 @@ func NewLocal(st *network.ServerConfig) *Local {
 func (l *Local) Init() {
 	l.BaseLocal.Init()
 	l.AddRoute(cmd.GameStart, l.startGame)
-	l.AddRoute(cmd.Tap, l.tapGame)
+	l.AddRoute(cmd.Opt, l.optGame)
 	l.AddRoute(cmd.Reconnect, l.reconnect)
 	l.AddRoute(cmd.Offline, l.offline)
 }
@@ -76,7 +76,7 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	for i, u := range room.Users {
 		room.Users[i] = &User{
 			uid: req.Uids[i],
-			tap: 0,
+			pai: 0,
 		}
 		l.users[req.Uids[i]] = room
 		db.SetGame(u.uid, l.ServerId, room.roomId)
@@ -85,14 +85,15 @@ func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) tapGame(c *network.Conn, msg *parser.Message) error {
-	data := new(proto.Tap)
+func (l *Local) optGame(c *network.Conn, msg *parser.Message) error {
+	data := new(proto.MjOpt)
 	if err := msg.Unpack(data); err != nil {
 		return err
 	}
+
 	log.Println("tap game")
 	if room, ok := l.rooms[data.RoomId]; ok {
-		room.Tap(msg.UserID, data.Tap)
+		room.MjOp(msg.UserID, data)
 	}
 
 	return nil

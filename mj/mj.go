@@ -4,7 +4,7 @@ import "fmt"
 
 // 麻将枚举
 const (
-	Dong, Nan, Xi, Bei, Zhong, Fa, Bai, Laizi                     = 1, 2, 3, 4, 5, 6, 7, 8
+	东风, Nan, Xi, 北风, 红中, Fa, 白板, Laizi                            = 1, 2, 3, 4, 5, 6, 7, 8
 	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9 = 11, 12, 13, 14, 15, 16, 17, 18, 19
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9          = 21, 22, 23, 24, 25, 26, 27, 28, 29
 	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9 = 31, 32, 33, 34, 35, 36, 37, 38, 39
@@ -19,11 +19,12 @@ var tong = [9]string{"一筒", "二筒", "三筒", "四筒", "五筒", "六筒",
 
 // 操作枚举
 const (
-	LChi, MChi, RChi    = 1, 2, 3
-	Peng                = 4
-	MGang, BGang, AGang = 5, 6, 7
-	Hu                  = 8
-	Jiang, Shun, Ke     = 10, 11, 12
+	MoPai, DaPai, GuoPai = 1, 2, 3
+	LChi, MChi, RChi     = 4, 5, 6
+	Peng                 = 7
+	MGang, BGang, AGang  = 8, 9, 10
+	HuPai                = 11
+	Jiang, Shun, Ke      = 12, 13, 14
 )
 
 type Group struct {
@@ -129,4 +130,32 @@ func HuStr(hu int32) string {
 		str += "[屁胡]"
 	}
 	return str
+}
+
+func GetLaizi(pizi uint8) uint8 {
+	switch pizi {
+	case 北风:
+		return 东风
+	case 白板:
+		return 红中
+	case Tiao9:
+		return Tiao1
+	case Wan9:
+		return Wan1
+	case Tong9:
+		return Tong1
+	default:
+		return pizi + 1
+	}
+}
+
+type MjOp struct {
+	Uid int32
+	Op  int32
+	Mj  []int32
+}
+
+type Mj struct {
+	Id  int32
+	Val int32
 }
