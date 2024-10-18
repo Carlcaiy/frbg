@@ -27,6 +27,10 @@ const (
 	Jiang, Shun, Ke      = 12, 13, 14
 )
 
+func OpBit(op uint8) int32 {
+	return 1 << (MoPai)
+}
+
 type Group struct {
 	Op  uint8
 	Val uint8

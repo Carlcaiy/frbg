@@ -35,6 +35,10 @@ func NewRoom(l *Local) *Room {
 	}
 }
 
+func (r *Room) GetUser(seat int) *User {
+	return r.Users[seat%len(r.Users)]
+}
+
 func (r *Room) SetPlayers(uids []uint32) {
 	for i := range r.Users {
 		r.Users[i].uid = uids[i]
@@ -173,6 +177,19 @@ func (r *Room) MoPai() uint8 {
 	return pai
 }
 
+// 从当前的位置往前找，存在没有操作的玩家，并且玩家可执行的操作大于当前操作，则继续等待
+func (r *Room) SkipWaiting(u *User) bool {
+	for op := u.wait_op + 1; op <= mj.HuPai; op++ {
+		for seat := r.turn + 1; seat != u.seat; seat = (seat + 1) % 4 {
+			user := r.GetUser(seat)
+			if user.can_ops_flag&mj.OpBit(op) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (r *Room) Waiting() bool {
 	for _, u := range r.Users {
 		if u.waiting {
@@ -217,52 +234,53 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 		return
 	}
 
-	op := opt.Op
+	currOp := opt.Op
 	if u.waiting {
-		u.wait_op = uint8(op)
+		u.wait_op = uint8(currOp)
 		u.waiting = false
+
 	}
 	if r.Waiting() {
 		return
 	}
 	user := r.getOpUser()
-	op = int32(user.wait_op)
+	finalOp := int32(user.wait_op)
 
 	pai := opt.Mj
 	// 验证麻将
-	if op == mj.DaPai && !u.DaMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	if finalOp == mj.DaPai && !u.DaMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.LChi && !u.LChiMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.LChi && !u.LChiMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.MChi && !u.MChiMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.MChi && !u.MChiMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.RChi && !u.RChiMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.RChi && !u.RChiMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.Peng && !u.PengMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.Peng && !u.PengMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.MGang && !u.MGangMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.MGang && !u.MGangMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.BGang && !u.BGangMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.BGang && !u.BGangMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
-	} else if op == mj.AGang && !u.AGangMj(uint8(pai)) {
-		log.Printf("Op:%d err, uid:%d pai:%d not found\n", op, uid, pai)
+	} else if finalOp == mj.AGang && !u.AGangMj(uint8(pai)) {
+		log.Printf("Op:%d err, uid:%d pai:%d not found\n", finalOp, uid, pai)
 		return
 	}
 
 	// 广播操作
 	noCanOp := true
-	if op != mj.GuoPai {
+	if finalOp != mj.GuoPai {
 		for _, u := range r.Users {
 			// 如果是出牌操作，告知其他玩家可执行的操作
-			if op == mj.DaPai || op == mj.BGang {
-				canOp := u.CanOpOther(uint8(pai), uint8(op), r.laizi)
+			if finalOp == mj.DaPai || finalOp == mj.BGang {
+				canOp := u.CanOpOther(uint8(pai), uint8(finalOp), r.laizi)
 				if canOp > 0 {
 					noCanOp = false
 					opt.CanOp = canOp
@@ -274,8 +292,8 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 	}
 
 	// 出牌操作，没有人有操作，给下一家发牌，并告知可执行操作
-	if (op == mj.DaPai && noCanOp) ||
-		op == mj.GuoPai || op == mj.AGang || op == mj.MGang {
+	if (finalOp == mj.DaPai && noCanOp) ||
+		finalOp == mj.GuoPai || finalOp == mj.AGang || finalOp == mj.MGang {
 		r.turn = (r.turn + 1) % len(r.Users)
 		turnUser := r.Users[r.turn]
 		moPai := r.MoPai()

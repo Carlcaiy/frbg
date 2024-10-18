@@ -5,16 +5,18 @@ import (
 )
 
 type User struct {
-	uid        uint32
-	gateId     uint8 // 网关ID
-	pai        int32
-	offline    bool
-	can_ops    []*mj.Group
-	waiting    bool       // 是否等待操作
-	wait_op    uint8      // 等待期间收集到的操作
-	mj_hands   []uint8    // 麻将
-	mj_history []uint8    // 出牌
-	mj_group   []mj.Group // 麻将组
+	uid           uint32
+	gateId        uint8 // 网关ID
+	pai           int32
+	offline       bool
+	can_ops_group []*mj.Group
+	waiting       bool       // 是否等待操作
+	wait_op       uint8      // 等待期间收集到的操作
+	mj_hands      []uint8    // 麻将
+	mj_history    []uint8    // 出牌
+	mj_group      []mj.Group // 麻将组
+	seat          int
+	can_ops_flag  int32
 }
 
 func (u *User) Reset() {
@@ -133,10 +135,7 @@ func (u *User) BGangMj(val uint8) bool {
 			v.Op = mj.BGang
 		}
 	}
-	if !u.remove_mj(val, 1) {
-		return false
-	}
-	return true
+	return u.remove_mj(val, 1)
 }
 
 // 暗杠
@@ -173,26 +172,30 @@ func (u *User) Zimo() bool {
 // 手牌操作
 func (u *User) CanOpSelf() int32 {
 	st := mj.New(u.mj_hands, 0, nil)
-	u.can_ops = st.CanOpSelf()
+	u.can_ops_group = st.CanOpSelf()
+	u.waiting = len(u.can_ops_group) > 0
 
-	op := int32(mj.DaPai)
-	for i := range u.can_ops {
-		op |= 1 << (u.can_ops[i].Op - 1)
+	u.can_ops_flag = int32(mj.DaPai)
+	for i := range u.can_ops_group {
+		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)
 	}
 
-	return op
+	return u.can_ops_flag
 }
 
 // 可操作其他玩家的牌
 func (u *User) CanOpOther(val uint8, op uint8, lz uint8) int32 {
 	st := mj.Newlz(u.mj_hands, val, lz, nil)
-	u.can_ops = st.CanOpOther(val, op)
-	u.waiting = len(u.can_ops) > 0
+	u.can_ops_group = st.CanOpOther(val, op)
+	u.waiting = len(u.can_ops_group) > 0
 
-	can_op := int32(0)
-	for i := range u.can_ops {
-		can_op |= 1 << (u.can_ops[i].Op - 1)
+	u.can_ops_flag = int32(0)
+	if u.waiting {
+		u.can_ops_flag |= mj.OpBit(mj.GuoPai)
+	}
+	for i := range u.can_ops_group {
+		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)
 	}
 
-	return can_op
+	return u.can_ops_flag
 }
