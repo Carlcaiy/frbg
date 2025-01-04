@@ -231,11 +231,20 @@ message Empty {
     
 }
 
+message GameOverUser{
+    uint32 uid = 1;           // 玩家id
+    int64 win = 2;            // 赢钱
+    repeated int32 hands = 3; // 手牌
+    int32 huType = 4;         // 胡类型
+    
+}
+
 // 游戏结束
 message GameOver {
     string data = 1;    // 游戏结束
     uint32 tempId = 2;   // 房间模板ID
     uint32 roomId = 3;   // 房间ID
+    repeated GameOverUser users = 4; // 玩家
 }
 
 // 多播消息

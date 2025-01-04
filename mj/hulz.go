@@ -325,7 +325,7 @@ func (m *statlz) CanOpOther(val, op uint8) []*Group {
 	return ret
 }
 
-func (m *statlz) HuPai() int32 {
+func (m *statlz) HuPai() (int32, int32) {
 	lzHx := m.huType()
 	lzScore := m.huScore(lzHx)
 	if m.laizi > 0 && m.num[m.laizi] > 0 {
@@ -334,10 +334,10 @@ func (m *statlz) HuPai() int32 {
 		hx := m.huType()
 		score := m.huScore(hx)
 		if score >= lzScore {
-			return hx
+			return hx, score
 		}
 	}
-	return lzHx
+	return lzHx, lzScore
 }
 
 func (m *statlz) huType() int32 {

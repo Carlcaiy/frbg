@@ -92,7 +92,7 @@ const (
 	YH  = 0x1000 // 硬胡
 )
 
-func HuStr(hu int32) string {
+func HuStr(hu int32, score int32) string {
 	str := ""
 	if hu&YH > 0 {
 		str += "[黑]"
@@ -154,9 +154,10 @@ func GetLaizi(pizi uint8) uint8 {
 }
 
 type MjOp struct {
-	Uid int32
-	Op  int32
-	Mj  []int32
+	Uid    uint32
+	Op     int32
+	Mj     int32
+	CanOpt int32
 }
 
 type Mj struct {

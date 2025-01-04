@@ -17,6 +17,7 @@ type User struct {
 	mj_group      []mj.Group // 麻将组
 	seat          int
 	can_ops_flag  int32
+	hu_type       int32
 }
 
 func (u *User) Reset() {
@@ -175,12 +176,18 @@ func (u *User) CanOpSelf() int32 {
 	u.can_ops_group = st.CanOpSelf()
 	u.waiting = len(u.can_ops_group) > 0
 
+	// 可以出牌
 	u.can_ops_flag = int32(mj.DaPai)
+	// 其他操作
 	for i := range u.can_ops_group {
 		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)
 	}
 
 	return u.can_ops_flag
+}
+
+func (u *User) CanOp(op int32) bool {
+	return u.can_ops_flag&op > 0
 }
 
 // 可操作其他玩家的牌
@@ -198,4 +205,27 @@ func (u *User) CanOpOther(val uint8, op uint8, lz uint8) int32 {
 	}
 
 	return u.can_ops_flag
+}
+
+func (u *User) HuPai(pai, laizi uint8) (int32, int32) {
+	stlz := mj.Newlz(u.mj_hands, pai, laizi, u.mj_group)
+	return stlz.HuPai()
+}
+
+func (u *User) FanShu() int32 {
+	f := int32(1)
+	for i := range u.mj_group {
+		if u.mj_group[i].Op&(mj.MGang|mj.AGang|mj.BGang) > 0 {
+			f <<= 1
+		}
+	}
+	return f
+}
+
+func (u *User) Mj() []int32 {
+	mj := make([]int32, len(u.mj_hands))
+	for i := range u.mj_hands {
+		mj[i] = int32(u.mj_hands[i])
+	}
+	return mj
 }
