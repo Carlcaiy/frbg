@@ -163,6 +163,7 @@ message SlotsSpinRsp {
     bool bonus = 9;
     SlotsBonus bonus_data = 10; // bonus数据
     int32 leftSpin = 11;        // 剩余免费摇奖次数
+    int64 bet = 12;             // 下注
 }
 
 // 玩家离开房间

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"frbg/def"
@@ -46,8 +47,10 @@ func main() {
 
 	for {
 		// must(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
-		must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0]}, &proto.SlotsSpinRsp{}))
-
+		rsp := &proto.SlotsSpinRsp{}
+		must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0], Level: slots.Level[0]}, rsp))
+		bs, _ := json.MarshalIndent(rsp, "", "  ")
+		log.Println(string(bs))
 		time.Sleep(time.Second)
 	}
 }
@@ -59,14 +62,17 @@ func must(e error) {
 }
 
 func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+	log.Printf("svrt:%d scmd:%d req:%s", svrt, scmd, req)
 	bs := parser.NewMessage(uint32(uid), svrt, scmd, 1, req).Pack()
 	if err = parser.WsWrite(conn, bs); err != nil {
 		return err
 	}
+	log.Printf("start read scmd:%d", scmd)
 	msg, err := parser.WsRead(conn)
 	if err != nil {
 		return err
 	}
+	log.Printf("read success:%d", scmd)
 	err = msg.Unpack(rsp)
 	if err != nil {
 		return err

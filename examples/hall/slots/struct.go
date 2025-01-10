@@ -11,6 +11,19 @@ type BetConf struct {
 	Lines []int32 // 线数选项
 }
 
+func (b *BetConf) Valid(bet int32, level int32) bool {
+	betOk, levelOk := false, false
+	for i := range b.Bet {
+		if b.Bet[i] == bet {
+			betOk = true
+		}
+		if b.Level[i] == level {
+			levelOk = true
+		}
+	}
+	return betOk && levelOk
+}
+
 type ReelConf struct {
 	Weight []int32
 	Length int32
@@ -69,7 +82,7 @@ func (b *BonusConf) Sum() int32 {
 	return sum
 }
 
-func (b *BonusConf) Get(sum int32) (int32, int32) {
+func (b *BonusConf) Rand(sum int32) (int32, int32) {
 	random := rand.Int31n(sum)
 	for i, weight := range b.Weight {
 		if random < weight {

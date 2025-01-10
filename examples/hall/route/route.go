@@ -70,12 +70,14 @@ func (l *Local) getGameList(c *network.Conn, msg *parser.Message) error {
 	log.Println("getGameList")
 	req, rsp := new(proto.GetGameListReq), new(proto.GetGameListRsp)
 	if err := msg.Unpack(req); err != nil {
+		log.Printf("getGameList msg.Unpack() err:%s", err.Error())
 		return err
 	}
 	rsp.Games = db.GetGameList()
 	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
-		// c.Write(buf)
-		l.SendToGate(msg.GateID, buf)
+		if errSend := l.SendToGate(msg.GateID, buf); errSend != nil {
+			log.Printf("SendToGate(%d) err:%s", msg.GateID, errSend.Error())
+		}
 	}
 	return nil
 }
@@ -277,6 +279,10 @@ func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
 	if slotsData == nil {
 		return fmt.Errorf("sltos %d not find", req.GameId)
 	}
+	if !slotsData.BetConf.Valid(req.Bet, req.Level) {
+		return fmt.Errorf("sltos %d: bet:%d level:%d invalid", req.GameId, req.Bet, req.Level)
+	}
+
 	rsp, err := slotsData.Spin(int64(req.Bet) * int64(req.Level))
 	if err != nil {
 		return err

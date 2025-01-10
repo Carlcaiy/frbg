@@ -9,7 +9,7 @@ import (
 
 var gormcli *gorm.DB
 
-func init() {
+func initSQL() {
 	dsn := fmt.Sprintf("%s:%s@(%s)/%s?charset=%s&parseTime=True&loc=Local", "domino", "yAUpZwWnjfrPBsWD", "192.168.1.129:3306", "xx_joyfun", "utf8")
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {

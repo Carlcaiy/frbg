@@ -100,7 +100,7 @@ func (s *SlotsData) shuffle() {
 // 摇奖
 func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 	free := false
-	win := int64(0)
+	sumWin := int64(0)
 	lines := make([]int32, 0)
 	board := make([]int32, len(s.Board))
 
@@ -146,25 +146,21 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 					multi = elem.Multi3
 				}
 			}
+			log.Printf("dest:%d lines:%v multi:%d bet:%d", dest, lines, multi, bet)
 			if multi > 0 {
-				win += int64(multi) * bet
+				sumWin += int64(multi) * bet
 			} else {
 				log.Printf("elem:%d not found multi", dest)
 			}
 		}
 	}
 	rsp := &proto.SlotsSpinRsp{
-		Money:    0,
-		Win:      win,
+		Bet:      bet,
+		Win:      sumWin,
 		Board:    board,
 		Lines:    lines,
 		Free:     free,
 		LeftSpin: s.FreeSpin,
-	}
-	if money, err := db.UpdateMoney(s.Uid, win, "spin"); err != nil {
-		return nil, err
-	} else {
-		rsp.Money = money
 	}
 
 	// free
@@ -179,9 +175,9 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 	// bonus
 	if count, pos := s.Elem(ElemBonus); count >= 3 {
 		sum := s.BonusConf.Sum()
-		b1, m1 := s.BonusConf.Get(sum)
-		b2, _ := s.BonusConf.Get(sum)
-		b3, _ := s.BonusConf.Get(sum)
+		b1, m1 := s.BonusConf.Rand(sum)
+		b2, _ := s.BonusConf.Rand(sum)
+		b3, _ := s.BonusConf.Rand(sum)
 		win := bet * int64(m1)
 
 		rsp.Bonus = true
@@ -190,12 +186,13 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 			Board: []int32{b1, b2, b3},
 			Win:   win,
 		}
+		sumWin += win
+	}
 
-		if money, err := db.UpdateMoney(s.Uid, win, "bonus"); err != nil {
-			return nil, err
-		} else {
-			rsp.BonusData.Money = money
-		}
+	if money, err := db.UpdateMoney(s.Uid, sumWin-bet, "slots"); err != nil {
+		return nil, err
+	} else {
+		rsp.Money = money
 	}
 
 	return rsp, nil

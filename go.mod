@@ -1,16 +1,16 @@
 module frbg
 
-go 1.19
+go 1.22
 
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gomodule/redigo v1.8.9
 	github.com/kavu/go_reuseport v1.5.0
 	go.etcd.io/etcd/client/v3 v3.5.9
-	golang.org/x/sys v0.18.0
-	google.golang.org/appengine v1.6.7
-	google.golang.org/grpc v1.58.0
-	google.golang.org/protobuf v1.33.0
+	golang.org/x/sys v0.29.0
+	google.golang.org/grpc v1.69.2
+	google.golang.org/protobuf v1.36.2
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -28,8 +28,7 @@ require (
 	github.com/xdg-go/stringprep v1.0.3 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	go.mongodb.org/mongo-driver v1.11.6 // indirect
-	golang.org/x/sync v0.3.0 // indirect
-	gorm.io/gorm v1.25.12 // indirect
+	golang.org/x/sync v0.10.0 // indirect
 )
 
 require (
@@ -47,8 +46,6 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -65,12 +62,12 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20230711160842-782d3b101e98 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20241015192408-796eee8c2d53 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250106144421-5f5ef82da422 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.7
 )

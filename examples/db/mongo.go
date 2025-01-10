@@ -9,7 +9,7 @@ import (
 
 var mongcli *qmgo.QmgoClient
 
-func init() {
+func initMG() {
 	ctx := context.Background()
 	c, err := qmgo.Open(ctx, &qmgo.Config{Uri: "mongodb://172.20.11.80:28000", Database: "frbgdb", Coll: "users"})
 	if err != nil {
