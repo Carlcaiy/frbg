@@ -2,18 +2,26 @@ package db
 
 import (
 	"encoding/json"
+	"frbg/def"
 	"frbg/examples/proto"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
 
-var gameList []*proto.GameInfo = []*proto.GameInfo{{
-	GameId:    1,
-	Status:    1,
-	StartTime: uint32(time.Now().Unix()),
-	EndTime:   0,
-}}
+var gameList = []*proto.GameInfo{
+	{
+		GameId:    def.SlotsFu,
+		Status:    1,
+		StartTime: uint32(time.Now().Unix()),
+		EndTime:   0,
+	}, {
+		GameId:    def.MahjongBanbisan,
+		Status:    1,
+		StartTime: uint32(time.Now().Unix()),
+		EndTime:   0,
+	},
+}
 
 func GetGameList() []*proto.GameInfo {
 	if gameList == nil {
@@ -29,11 +37,13 @@ func GetGameList() []*proto.GameInfo {
 	return gameList
 }
 
-var roomList []*proto.RoomInfo = []*proto.RoomInfo{
+var roomList = []*proto.RoomInfo{
 	{
+		GameId:   def.MahjongBanbisan,
 		ServerId: 1,
 		RoomId:   1,
-		Tag:      1,
+		Tag:      def.TagNormal,
+		Info:     "半壁山麻将",
 	},
 }
 
@@ -48,5 +58,11 @@ func GetRoomList(gid int32) []*proto.RoomInfo {
 			return nil
 		}
 	}
-	return roomList
+	copy := make([]*proto.RoomInfo, 0)
+	for _, ptr := range roomList {
+		if ptr.GameId == gid {
+			copy = append(copy, ptr)
+		}
+	}
+	return copy
 }

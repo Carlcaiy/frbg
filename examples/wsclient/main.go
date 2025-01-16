@@ -11,7 +11,6 @@ import (
 	"frbg/parser"
 	"log"
 	"net"
-	"time"
 
 	"github.com/gobwas/ws"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -42,17 +41,20 @@ func main() {
 
 	must(rpc(def.ST_Gate, cmd.Login, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}, &proto.LoginRsp{}))
 	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{}, &proto.GetGameListRsp{}))
-	slots := &proto.EnterSlotsRsp{}
-	must(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, slots))
+	getRoomListRsp := &proto.GetRoomListRsp{}
+	must(rpc(def.ST_Hall, cmd.GetRoomList, &proto.GetRoomListReq{GameId: def.MahjongBanbisan}, getRoomListRsp))
+	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{RoomId: 1}, &proto.GetRoomListRsp{}))
+	// slots := &proto.EnterSlotsRsp{}
+	// must(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, slots))
 
-	for {
-		// must(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
-		rsp := &proto.SlotsSpinRsp{}
-		must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0], Level: slots.Level[0]}, rsp))
-		bs, _ := json.MarshalIndent(rsp, "", "  ")
-		log.Println(string(bs))
-		time.Sleep(time.Second)
-	}
+	// for {
+	// 	// must(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
+	// 	rsp := &proto.SlotsSpinRsp{}
+	// 	must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0], Level: slots.Level[0]}, rsp))
+	// 	bs, _ := json.MarshalIndent(rsp, "", "  ")
+	// 	log.Println(string(bs))
+	// 	time.Sleep(time.Second)
+	// }
 }
 
 func must(e error) {
@@ -80,6 +82,7 @@ func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflec
 	if cmd.Login == scmd {
 		uid = int(msg.UserID)
 	}
-	log.Println(rsp)
+	bsi, _ := json.MarshalIndent(rsp, "", "  ")
+	log.Println(string(bsi))
 	return nil
 }

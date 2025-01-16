@@ -16,4 +16,5 @@ func main() {
 		MaxConn: 50000,
 	}
 	network.Serve(pollConfig, route.NewLocal(serverConfig), serverConfig)
+	network.Wait()
 }

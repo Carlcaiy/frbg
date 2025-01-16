@@ -18,16 +18,16 @@ import (
 var route *Local
 
 type Local struct {
-	templetes map[uint32]*RoomTemplete
-	rooms     map[uint32]*RoomInstance
+	templetes map[uint32]*DeskTemplete
+	desks     map[uint32]*DeskInstance
 	*local.BaseLocal
 }
 
 func New(st *network.ServerConfig) *Local {
 	route = &Local{
 		BaseLocal: local.NewBase(st),
-		templetes: make(map[uint32]*RoomTemplete),
-		rooms:     make(map[uint32]*RoomInstance),
+		templetes: make(map[uint32]*DeskTemplete),
+		desks:     make(map[uint32]*DeskInstance),
 	}
 	route.init()
 	return route
@@ -101,87 +101,87 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	log.Printf("enterRoom uid:%d tempId:%d\n", msg.UserID, req.TempleteId)
+	log.Printf("enterRoom uid:%d tempId:%d\n", msg.UserID, req.RoomId)
 
 	user := l.GetUser(msg.UserID).(*User)
 	if user == nil {
 		return fmt.Errorf("not found user:%d", msg.UserID)
 	}
 
-	var room *RoomInstance
+	var desk *DeskInstance
 
 	// 寻找一个空的房间
-	for _, r := range l.rooms {
-		if r.TempId == req.TempleteId && r.status == 0 && r.sitCount < r.UserCount {
-			room = r
+	for _, r := range l.desks {
+		if r.RoomId == req.RoomId && uint32(r.GameID) == req.GameId && r.status == 0 && r.sitCount < r.UserCount {
+			desk = r
 		}
 	}
 
 	// 没找到房间，新建一个房间
-	if room == nil {
-		temp := l.templetes[req.TempleteId]
-		room = &RoomInstance{
-			RoomTemplete: temp,
+	if desk == nil {
+		temp := l.templetes[req.RoomId]
+		desk = &DeskInstance{
+			DeskTemplete: temp,
 			status:       0,
 			users:        make([]*User, temp.UserCount),
 			conn:         c,
-			roomID:       uint32(len(l.rooms)) + 1000,
+			deskID:       uint32(len(l.desks)) + 1000,
 			delayStartEvent: timer.NewDelayTask(time.Second*3, func() {
-				if room.sitCount < room.UserCount {
+				if desk.sitCount < desk.UserCount {
 					return
 				}
-				room.status = 1
+				desk.status = 1
 				greq := &proto.StartGame{
-					TempId: room.TempId,
-					RoomId: room.roomID,
+					TempId: desk.RoomId,
+					RoomId: desk.deskID,
 					HallId: uint32(l.ServerId),
-					Uids:   make([]uint32, room.sitCount),
+					Uids:   make([]uint32, desk.sitCount),
 				}
 				for i := range greq.Uids {
-					greq.Uids[i] = room.users[i].userID
-					log.Printf("i:%d uid:%d gateid:%d\n", i, room.users[i].userID, room.users[i].gateID)
+					greq.Uids[i] = desk.users[i].userID
+					log.Printf("i:%d uid:%d gateid:%d\n", i, desk.users[i].userID, desk.users[i].gateID)
 				}
 				bs, _ := parser.Pack(msg.UserID, def.ST_Game, cmd.GameStart, greq)
-				if err := l.SendModUid(room.roomID, bs, def.ST_Game); err == nil {
+				if err := l.SendModUid(desk.deskID, bs, def.ST_Game); err == nil {
 					log.Printf("配桌成功")
 				} else {
 					log.Printf("配桌失败")
 				}
 			}),
 		}
-		l.rooms[room.roomID] = room
+		l.desks[desk.deskID] = desk
 	}
 
-	if room != nil {
-		user.roomID = room.roomID
+	if desk != nil {
+		user.deskID = desk.deskID
 
-		for i := range room.users {
-			if room.users[i] == nil {
-				room.users[i] = user
-				room.sitCount++
+		for i := range desk.users {
+			if desk.users[i] == nil {
+				desk.users[i] = user
+				desk.sitCount++
 				break
 			}
 		}
 
-		db.SetRoom(user.userID, room.roomID)
+		db.SetDesk(user.userID, desk.deskID)
 
-		rsp.Uids = make([]uint32, 0, room.sitCount)
-		for i := range room.users {
-			if room.users[i] != nil {
-				rsp.Uids = append(rsp.Uids, room.users[i].userID)
+		rsp.Uids = make([]uint32, 0, desk.sitCount)
+		for i := range desk.users {
+			if desk.users[i] != nil {
+				rsp.Uids = append(rsp.Uids, desk.users[i].userID)
 			}
 		}
 
 		bs, _ := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp)
 		c.Write(bs)
 
-		if room.sitCount == room.UserCount {
-			for _, user := range room.users {
+		if desk.sitCount == desk.UserCount {
+			for _, user := range desk.users {
 				bs, _ := parser.Pack(user.UserID(), def.ST_Gate, cmd.CountDown, &proto.Empty{})
 				l.SendToGate(user.gateID, bs)
 			}
 
-			l.Start(room.delayStartEvent)
+			l.Start(desk.delayStartEvent)
 		}
 	}
 
@@ -194,8 +194,8 @@ func (l *Local) gameOver(c *network.Conn, msg *parser.Message) error {
 		return err
 	}
 
-	var room *RoomInstance
-	if r, ok := l.rooms[data.RoomId]; ok {
+	var room *DeskInstance
+	if r, ok := l.desks[data.RoomId]; ok {
 		room = r
 	}
 
@@ -224,14 +224,14 @@ func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
 		return err
 	}
 
-	if room, ok := l.rooms[req.RoomId]; ok {
+	if room, ok := l.desks[req.RoomId]; ok {
 		if room.status == 0 {
 			for i, u := range room.users {
 				if u.UserID() == msg.UserID {
 					room.users[i] = nil
 					room.sitCount -= 1
 					l.Stop(room.delayStartEvent)
-					db.SetRoom(u.UserID(), 0)
+					db.SetDesk(u.UserID(), 0)
 					return nil
 				}
 			}
@@ -311,7 +311,7 @@ func (l *Local) Close(conn *network.Conn) {
 	}
 	// 大厅服，清理所有相关桌子
 	if conn.ServerType == def.ST_Game {
-		for _, room := range l.rooms {
+		for _, room := range l.desks {
 			if room.GameID == conn.ServerId {
 				room.status = 0
 				room.sitCount = 0

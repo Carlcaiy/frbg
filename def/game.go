@@ -12,3 +12,10 @@ const (
 	SlotsShanshui   = 51 // 山水
 	SlotsSemame     = 52 // 芝麻
 )
+
+const (
+	TagNormal    = 0 //普通房间
+	TagHot       = 1 //热门房间
+	TagRecommend = 2 //推荐房间
+	TagNew       = 3 //新房间
+)

@@ -74,9 +74,11 @@ message GetRoomListReq {
 
 // 房间信息
 message RoomInfo {
-    uint32 serverId = 1;
-    uint32 roomId = 2;
-    int32 tag = 3;
+    int32 serverId = 1;
+    int32 roomId = 2;
+    int32 tag = 3;          // 0正常房间 1热门房间 2推荐房间 3新的房间
+    int32 gameId = 4;       // 游戏id
+    string info = 5;        // 房间描述
 }
 
 // 答复房间列表
@@ -86,7 +88,8 @@ message GetRoomListRsp {
 
 // 请求进入房间
 message EnterRoomReq {
-    uint32 templeteId = 1;
+    uint32 gameId = 1;
+    uint32 roomId = 2;
 }
 
 // 进房答复
