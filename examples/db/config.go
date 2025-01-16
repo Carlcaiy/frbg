@@ -47,7 +47,7 @@ var roomList = []*proto.RoomInfo{
 	},
 }
 
-func GetRoomList(gid int32) []*proto.RoomInfo {
+func GetRoomList(gid uint32) []*proto.RoomInfo {
 	if roomList == nil {
 		bs, err := redis.Bytes(redis_cli.Do("GET", "room_list"))
 		if err != nil {

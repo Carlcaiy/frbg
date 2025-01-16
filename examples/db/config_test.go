@@ -29,7 +29,7 @@ func TestGetGameList(t *testing.T) {
 }
 
 func TestGetRoomList(t *testing.T) {
-	gameId := int32(1)
+	gameId := uint32(1)
 	var roomList = []*proto.RoomInfo{
 		{RoomId: 1},
 		{RoomId: 2},

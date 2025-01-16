@@ -43,7 +43,7 @@ func main() {
 	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{}, &proto.GetGameListRsp{}))
 	getRoomListRsp := &proto.GetRoomListRsp{}
 	must(rpc(def.ST_Hall, cmd.GetRoomList, &proto.GetRoomListReq{GameId: def.MahjongBanbisan}, getRoomListRsp))
-	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{RoomId: 1}, &proto.GetRoomListRsp{}))
+	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &proto.GetRoomListRsp{}))
 	// slots := &proto.EnterSlotsRsp{}
 	// must(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, slots))
 
