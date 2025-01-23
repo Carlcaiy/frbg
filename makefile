@@ -12,7 +12,7 @@ client:
 	go run ./examples/client/main.go &
 
 gate:
-	cd examples/gateway && make run
+	cd examples/gate && make run
 
 hall:
 	cd examples/hall && make run

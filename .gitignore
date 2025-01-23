@@ -1,6 +1,6 @@
 default.etcd/
 log/
 dump.rdb
-hall
-gateway
-game
+hall_server
+gate_server
+game_server

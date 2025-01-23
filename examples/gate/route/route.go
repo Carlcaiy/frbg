@@ -162,9 +162,6 @@ func (l *Local) Close(conn *network.Conn) {
 			if u.GameId > 0 {
 				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
 				l.SendToSid(u.GameId, b, def.ST_Game)
-			} else if u.HallId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Hall, cmd.Offline, &proto.Offline{})
-				l.SendToSid(u.HallId, b, def.ST_Hall)
 			}
 		}
 	}

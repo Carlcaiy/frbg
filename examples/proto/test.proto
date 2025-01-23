@@ -175,6 +175,11 @@ message LeaveRoomReq {
     uint32 roomId = 2;
 }
 
+// 玩家离开房间
+message LeaveRoomRsp {
+    uint32 code = 1;
+}
+
 // 玩家离线
 message Offline {
     
@@ -184,8 +189,8 @@ message Offline {
 message StartGame {
     uint32 roomId = 1;          // 房间ID
     uint32 hallId = 2;          // 大厅ID
-    repeated uint32 uids = 3;   // 所有玩家的uid
-    uint32 tempId = 4;          // 模板ID
+    uint32 deskId = 3;          // 模板ID
+    map<uint32,uint32> users = 4;// 所有玩家的uid
 }
 
 // 同步数据

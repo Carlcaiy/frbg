@@ -5,7 +5,6 @@ import (
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
 	"frbg/mj"
-	"frbg/network"
 	"frbg/parser"
 	"log"
 	"math/rand"
@@ -13,10 +12,7 @@ import (
 
 type Room struct {
 	l         *Local
-	hall      *network.Conn
-	hallId    uint8
 	roomId    uint32
-	tempId    uint32
 	Users     []*User // 用户
 	turn      int     // 庄家
 	mj        []uint8 // 麻将
@@ -26,13 +22,17 @@ type Room struct {
 	laizi     uint8   // 赖子
 	waitOther bool    // 等待其他玩家操作
 	history   []*mj.MjOp
+	playing   bool
 }
 
 func NewRoom(l *Local) *Room {
-	return &Room{
+	room := &Room{
 		l:     l,
+		mj:    make([]uint8, len(mj.BanBiShanMJ)),
 		touzi: make([]int32, 2),
 	}
+	copy(room.mj, mj.BanBiShanMJ)
+	return room
 }
 
 func (r *Room) GetUserByUID(uid uint32) *User {
@@ -42,6 +42,27 @@ func (r *Room) GetUserByUID(uid uint32) *User {
 		}
 	}
 	return nil
+}
+
+func (r *Room) AddUser(uid uint32, gateId uint8) {
+	r.Users = append(r.Users, &User{
+		uid:    uid,
+		gateId: uint8(gateId),
+	})
+}
+
+func (r *Room) DelUser(uid uint32) {
+	for i, u := range r.Users {
+		if u.uid == uid {
+			count := len(r.Users) - 1
+			r.Users[i], r.Users[count] = r.Users[count], r.Users[i]
+			return
+		}
+	}
+}
+
+func (r *Room) Full() bool {
+	return len(r.Users) == 4
 }
 
 func (r *Room) GetUser(seat int) *User {
@@ -62,7 +83,14 @@ func (r *Room) Reset() {
 	rand.Shuffle(len(r.mj), func(i, j int) {
 		r.mj[i], r.mj[j] = r.mj[j], r.mj[i]
 	})
+
+	r.touzi[0] = rand.Int31n(6) + 1
+	r.touzi[1] = rand.Int31n(6) + 1
 	r.mjIndex = 0
+	r.history = r.history[:0]
+	r.playing = false
+	r.waitOther = false
+
 }
 
 func (r *Room) GetConn(uid uint32) *User {
@@ -136,7 +164,6 @@ func (r *Room) Start() {
 	}
 
 	// 确定赖子
-	r.touzi = []int32{rand.Int31n(6) + 1, rand.Int31n(6) + 1}
 	col := r.touzi[1]
 	if r.touzi[0] < r.touzi[1] {
 		col = r.touzi[0]
@@ -287,7 +314,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 					opt.CanOp = canOp
 				}
 			}
-			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.Opt, opt)
+			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.OptGame, opt)
 			r.l.SendToGate(u.gateId, bs)
 		}
 	}
@@ -311,7 +338,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 				opt.Mj = int32(moPai)
 				opt.CanOp = u.CanOpSelf()
 			}
-			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.GameOpt, opt)
+			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.BcOpt, opt)
 			r.l.SendToGate(u.gateId, bs)
 		}
 	}
@@ -366,30 +393,16 @@ func (r *Room) gameOver(huUser *User) {
 	r.SendAll(buf)
 }
 
-func (r *Room) SendOne(bs []byte) {
-	r.hall.Write(bs)
-}
-
 func (r *Room) SendOther(uid uint32, bs []byte) {
-	multi := &proto.MultiBroadcast{
-		Data: bs,
-	}
 	for _, u := range r.Users {
 		if u.uid != uid {
-			multi.Uids = append(multi.Uids, u.uid)
+			r.l.SendToGate(u.gateId, bs)
 		}
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBC, multi)
-	r.hall.Write(buf)
 }
 
 func (r *Room) SendAll(bs []byte) {
-	multi := &proto.MultiBroadcast{
-		Data: bs,
-	}
 	for _, u := range r.Users {
-		multi.Uids = append(multi.Uids, u.uid)
+		r.l.SendToGate(u.gateId, bs)
 	}
-	buf, _ := parser.Pack(0, def.ST_User, cmd.MultiBC, multi)
-	r.hall.Write(buf)
 }

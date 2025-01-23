@@ -14,10 +14,38 @@ func keyUserOnline(uid uint32) string {
 	return fmt.Sprintf("online:%d", uid)
 }
 
+func keyRoomMatch(roomId uint32, gameId uint32) string {
+	return fmt.Sprintf("match:%d:%d", roomId, gameId)
+}
+
 // 更新金币
 func UpdateMoney(uid uint32, change int64, from string) (int64, error) {
 	log.Printf("uid:%d change:%d from:%s", uid, change, from)
 	return redis.Int64(redis_cli.Do("HINCRBY", keyUserOnline(uid), "money", change))
+}
+
+// 添加匹配队列
+func AddQueen(uid uint32, weight int64, roomId uint32, gameId uint32) error {
+	_, err := redis_cli.Do("ZADD", keyRoomMatch(roomId, gameId), weight, uid)
+	return err
+}
+
+// 获取队列成员数量
+func GetQueenCnt(roomId uint32, gameId uint32) (int, error) {
+	return redis.Int(redis_cli.Do("ZCARD", keyRoomMatch(roomId, gameId)))
+}
+
+// 获取队列成员
+func GetQueenUsers(roomId uint32, gameId uint32, count uint32) ([]uint32, error) {
+	if slice, err := redis.Ints(redis_cli.Do("ZPOPMIN", keyRoomMatch(roomId, gameId), count)); err != nil {
+		return nil, err
+	} else {
+		ret := make([]uint32, count)
+		for i := range slice {
+			ret[i] = uint32(slice[i])
+		}
+		return ret, nil
+	}
 }
 
 // 设置玩家桌子

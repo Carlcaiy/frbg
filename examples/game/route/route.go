@@ -2,7 +2,6 @@ package route
 
 import (
 	"frbg/examples/cmd"
-	"frbg/examples/db"
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
@@ -26,8 +25,9 @@ func NewLocal(st *network.ServerConfig) *Local {
 
 func (l *Local) Init() {
 	l.BaseLocal.Init()
-	l.AddRoute(cmd.GameStart, l.startGame)
-	l.AddRoute(cmd.Opt, l.optGame)
+	l.AddRoute(cmd.EnterRoom, l.enterRoom)
+	l.AddRoute(cmd.LeaveRoom, l.leaveRoom)
+	l.AddRoute(cmd.OptGame, l.optGame)
 	l.AddRoute(cmd.Reconnect, l.reconnect)
 	l.AddRoute(cmd.Offline, l.offline)
 }
@@ -55,33 +55,61 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) startGame(c *network.Conn, msg *parser.Message) error {
-	req := new(proto.StartGame)
+func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
+	req, rsp := new(proto.EnterRoomReq), new(proto.EnterRoomRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	log.Println("startGame", req.String())
+	log.Println("enterRoom", req.String())
+	var room *Room
+	for _, v := range l.rooms {
+		if v.playing {
+			continue
+		}
+		if len(v.Users) == 4 {
+			continue
+		}
+		if room == nil {
+			room = v
+		}
+		if len(room.Users) < len(v.Users) {
+			room = v
+		}
+		if len(room.Users) == 3 {
+			break
+		}
+	}
+	if room == nil {
+		room = NewRoom(l)
+		l.rooms[room.roomId] = room
+	}
+	l.users[msg.UserID] = room
+	room.AddUser(msg.UserID, msg.GateID)
+	bs, _ := msg.PackCmd(msg.Cmd, rsp)
+	c.Write(bs)
+	if room.Full() {
+		room.Start()
+	}
+
+	return nil
+}
+
+func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
+	req, rsp := new(proto.LeaveRoomReq), new(proto.LeaveRoomRsp)
+	if err := msg.Unpack(req); err != nil {
+		return err
+	}
+	log.Println("leaveRoom", req.String())
 	room, ok := l.rooms[req.RoomId]
 	if !ok {
-		room = &Room{
-			hall:   c,
-			hallId: uint8(req.HallId),
-			roomId: req.RoomId,
-			tempId: req.TempId,
-			l:      l,
-		}
-		l.rooms[req.RoomId] = room
+		return nil
 	}
-	room.Users = make([]*User, len(req.Uids))
-	for i, u := range room.Users {
-		room.Users[i] = &User{
-			uid: req.Uids[i],
-			pai: 0,
-		}
-		l.users[req.Uids[i]] = room
-		db.SetGame(u.uid, l.ServerId, room.roomId)
+	if room.playing {
+		return nil
 	}
-	room.Start()
+	room.DelUser(msg.UserID)
+	bs, _ := msg.PackProto(rsp)
+	c.Write(bs)
 	return nil
 }
 

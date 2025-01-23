@@ -4,7 +4,7 @@ import "fmt"
 
 // 麻将枚举
 const (
-	东风, Nan, Xi, 北风, 红中, Fa, 白板, Laizi                            = 1, 2, 3, 4, 5, 6, 7, 8
+	Dong, Nan, Xi, Bei, Zhong, Fa, Bai, Laizi                     = 1, 2, 3, 4, 5, 6, 7, 8
 	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9 = 11, 12, 13, 14, 15, 16, 17, 18, 19
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9          = 21, 22, 23, 24, 25, 26, 27, 28, 29
 	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9 = 31, 32, 33, 34, 35, 36, 37, 38, 39
@@ -16,6 +16,25 @@ var feng = [8]string{"东风", "南风", "西风", "北风", "红中", "发財",
 var tiao = [9]string{"一条", "二条", "三条", "四条", "五条", "六条", "七条", "八条", "九条"}
 var wan = [9]string{"一万", "二万", "三万", "四万", "五万", "六万", "七万", "八万", "九万"}
 var tong = [9]string{"一筒", "二筒", "三筒", "四筒", "五筒", "六筒", "七筒", "八筒", "九筒"}
+
+var BanBiShanMJ = []uint8{
+	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
+	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
+	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
+	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
+	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
+	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
+	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
+	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
+	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9,
+	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9,
+	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9,
+	Tong1, Tong2, Tong3, Tong4, Tong5, Tong6, Tong7, Tong8, Tong9,
+}
 
 // 操作枚举
 const (
@@ -138,10 +157,10 @@ func HuStr(hu int32, score int32) string {
 
 func GetLaizi(pizi uint8) uint8 {
 	switch pizi {
-	case 北风:
-		return 东风
-	case 白板:
-		return 红中
+	case Bei:
+		return Dong
+	case Bai:
+		return Zhong
 	case Tiao9:
 		return Tiao1
 	case Wan9:

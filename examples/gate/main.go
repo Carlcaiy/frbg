@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"frbg/def"
-	"frbg/examples/gateway/route"
+	"frbg/examples/gate/route"
 	"frbg/network"
 	"frbg/timer"
 	"time"
