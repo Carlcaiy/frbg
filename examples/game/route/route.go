@@ -6,7 +6,9 @@ import (
 	"frbg/local"
 	"frbg/network"
 	"frbg/parser"
+	"frbg/timer"
 	"log"
+	"time"
 )
 
 type Local struct {
@@ -30,6 +32,7 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.OptGame, l.optGame)
 	l.AddRoute(cmd.Reconnect, l.reconnect)
 	l.AddRoute(cmd.Offline, l.offline)
+	l.Start(timer.NewLoopTask(time.Minute, l.clearRoom))
 }
 
 func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
@@ -80,7 +83,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 		}
 	}
 	if room == nil {
-		room = NewRoom(l)
+		room = NewRoom(l, 0)
 		l.rooms[room.roomId] = room
 	}
 	l.users[msg.UserID] = room

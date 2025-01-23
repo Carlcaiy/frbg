@@ -8,11 +8,13 @@ import (
 	"frbg/parser"
 	"log"
 	"math/rand"
+	"time"
 )
 
 type Room struct {
 	l         *Local
-	roomId    uint32
+	master    uint32  // 房主ID
+	roomId    uint32  // 房间ID
 	Users     []*User // 用户
 	turn      int     // 庄家
 	mj        []uint8 // 麻将
@@ -23,13 +25,15 @@ type Room struct {
 	waitOther bool    // 等待其他玩家操作
 	history   []*mj.MjOp
 	playing   bool
+	endTime   time.Time
 }
 
-func NewRoom(l *Local) *Room {
+func NewRoom(l *Local, master uint32) *Room {
 	room := &Room{
-		l:     l,
-		mj:    make([]uint8, len(mj.BanBiShanMJ)),
-		touzi: make([]int32, 2),
+		l:      l,
+		mj:     make([]uint8, len(mj.BanBiShanMJ)),
+		touzi:  make([]int32, 2),
+		master: master,
 	}
 	copy(room.mj, mj.BanBiShanMJ)
 	return room
@@ -78,7 +82,7 @@ func (r *Room) SetPlayers(uids []uint32) {
 
 func (r *Room) Reset() {
 	for _, u := range r.Users {
-		u.pai = 0
+		u.Reset()
 	}
 	rand.Shuffle(len(r.mj), func(i, j int) {
 		r.mj[i], r.mj[j] = r.mj[j], r.mj[i]
@@ -88,7 +92,7 @@ func (r *Room) Reset() {
 	r.touzi[1] = rand.Int31n(6) + 1
 	r.mjIndex = 0
 	r.history = r.history[:0]
-	r.playing = false
+	r.playing = true
 	r.waitOther = false
 
 }
@@ -391,6 +395,7 @@ func (r *Room) gameOver(huUser *User) {
 	})
 	buf, _ := parser.Pack(0, def.ST_User, cmd.GameOver, settle)
 	r.SendAll(buf)
+	r.playing = false
 }
 
 func (r *Room) SendOther(uid uint32, bs []byte) {

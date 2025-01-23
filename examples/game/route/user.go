@@ -18,12 +18,16 @@ type User struct {
 	seat          int
 	can_ops_flag  int32
 	hu_type       int32
+	prepare       bool // 准备状态
 }
 
 func (u *User) Reset() {
+	u.pai = 0
+	u.prepare = true
 	u.mj_hands = u.mj_hands[:0]
 	u.mj_history = u.mj_history[:0]
 	u.mj_group = u.mj_group[:0]
+	u.can_ops_group = u.can_ops_group[:0]
 }
 
 func (u *User) remove_mj(val uint8, num int) bool {
