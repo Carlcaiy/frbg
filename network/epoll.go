@@ -34,8 +34,17 @@ type Handler interface {
 }
 
 type PollConfig struct {
-	MaxConn int // 最大连接数
-	Etcd    bool
+	MaxConn   int   // 最大连接数
+	HeartBeat int64 // 心跳时间
+	Etcd      bool
+}
+
+func NewPollConfig() *PollConfig {
+	return &PollConfig{
+		MaxConn:   10000,
+		HeartBeat: 60,
+		Etcd:      false,
+	}
 }
 
 type Conn struct {
@@ -69,6 +78,7 @@ type Poll struct {
 	serverConf *ServerConfig
 	events     []unix.EpollEvent // 重用事件数组
 	mu         sync.RWMutex      // 保护 fdconns 和 connNum
+	ticker     *time.Ticker
 }
 
 func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
@@ -107,6 +117,8 @@ func (p *Poll) decrConnNum() {
 func (p *Poll) Close() error {
 	log.Println("poll close")
 	var errs []error
+
+	p.ticker.Stop()
 
 	if p.pollConfig.Etcd {
 		if err := register.Del(p.serverConf.Svid()); err != nil {
@@ -275,7 +287,13 @@ func (p *Poll) processClientData(fd int) error {
 		return nil
 	}
 
-	// 4. 路由消息到业务处理器
+	// 4. 处理心跳包
+	if msg.Type == codec.HeartBeat {
+		conn.ActiveTime = time.Now().Unix()
+		return nil
+	}
+
+	// 5. 路由消息到业务处理器
 	if p.handle != nil {
 		if err := p.handle.Route(conn, msg); err != nil {
 			log.Printf("route error: fd:%d err:%v", fd, err)
@@ -363,6 +381,32 @@ func (p *Poll) Del(fd int) error {
 	return conn.Close()
 }
 
+// 快速修复版本 - 减少锁持有时间
+func (p *Poll) ConnCheck() {
+	p.ticker = time.NewTicker(time.Second)
+	for range p.ticker.C {
+		// 获取当前时间避免重复计算
+		now := time.Now().Unix()
+		timeoutDuration := p.pollConfig.HeartBeat
+
+		// 只收集需要删除的FD，不立即删除
+		p.mu.RLock()
+		timeoutFds := make([]int, 0, 64)
+		for fd, conn := range p.fdconns {
+			if now-conn.ActiveTime > timeoutDuration {
+				timeoutFds = append(timeoutFds, fd)
+			}
+		}
+		p.mu.RUnlock()
+
+		// 在锁外删除，避免阻塞
+		for _, fd := range timeoutFds {
+			log.Printf("ConnCheck timeout fd:%d", fd)
+			p.Del(fd)
+		}
+	}
+}
+
 func (p *Poll) Start() {
 	conf := p.serverConf
 	if conf == nil || conf.Addr == "" {
@@ -410,6 +454,7 @@ func (p *Poll) Start() {
 	// 开始轮询
 	wg.Add(1)
 	go p.LoopRun()
+	go p.ConnCheck()
 }
 
 func (p *Poll) AddConnector(conf *ServerConfig) (*Conn, error) {

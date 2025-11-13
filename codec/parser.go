@@ -45,11 +45,11 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 	}
 	p = &Message{}
 	p.DestST = all[2]
-	p.DestID = all[3]
+	p.GameID = all[3]
 	p.GateID = all[4]
 	p.UserID = byteOrder.Uint32(all[5:])
 	p.Ver = byteOrder.Uint16(all[9:])
-	p.Hold = byteOrder.Uint32(all[11:])
+	p.Type = byteOrder.Uint32(all[11:])
 	p.Cmd = byteOrder.Uint16(all[15:])
 	p.Body = all[17:]
 	p.All = all
@@ -83,11 +83,11 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 
 	p = &Message{}
 	p.DestST = all[2]
-	p.DestID = all[3]
+	p.GameID = all[3]
 	p.GateID = all[4]
 	p.UserID = byteOrder.Uint32(all[5:])
 	p.Ver = byteOrder.Uint16(all[9:])
-	p.Hold = byteOrder.Uint32(all[11:])
+	p.Type = byteOrder.Uint32(all[11:])
 	p.Cmd = byteOrder.Uint16(all[15:])
 	p.Body = all[17:]
 	p.All = all

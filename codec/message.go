@@ -6,13 +6,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const HeartBeat uint32 = 0x1 // 心跳包
+
 type Message struct {
 	DestST uint8  // 目标服务TYPE
-	DestID uint8  // 目标服务ID
-	GateID uint8  // 网关信息
+	GameID uint8  // 游戏ID
+	GateID uint8  // 网关ID
 	UserID uint32 // 用户UID
 	Ver    uint16 // 版本
-	Hold   uint32 // 保留字段
+	Type   uint32 // 保留字段
 	Cmd    uint16 // cmd
 	Body   []byte // cmd + []byte
 	All    []byte
@@ -30,18 +32,18 @@ func NewMessage(uid uint32, dest uint8, cmd uint16, gateId uint8, pro proto.Mess
 }
 
 func (m *Message) String() string {
-	return fmt.Sprintf("DestST:%d GateID:%d UserID:%d Ver:%d Hold:%d Cmd:%d Len:%d", m.DestST, m.GateID, m.UserID, m.Ver, m.Hold, m.Cmd, len(m.All))
+	return fmt.Sprintf("DestST:%d GateID:%d UserID:%d Ver:%d Hold:%d Cmd:%d Len:%d", m.DestST, m.GateID, m.UserID, m.Ver, m.Type, m.Cmd, len(m.All))
 }
 
 func (m *Message) Pack() []byte {
 	bs := make([]byte, HeaderLen+len(m.Body))
 	byteOrder.PutUint16(bs, HeaderLen+uint16(len(m.Body)))
 	bs[2] = m.DestST
-	bs[3] = m.DestID
+	bs[3] = m.GameID
 	bs[4] = m.GateID
 	byteOrder.PutUint32(bs[5:], m.UserID)
 	byteOrder.PutUint16(bs[9:], m.Ver)
-	byteOrder.PutUint32(bs[11:], m.Hold)
+	byteOrder.PutUint32(bs[11:], m.Type)
 	byteOrder.PutUint16(bs[15:], m.Cmd)
 	copy(bs[HeaderLen:], m.Body)
 	return bs

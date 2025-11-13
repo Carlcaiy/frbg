@@ -24,7 +24,7 @@ func (s *ServerMgr) GetServe(conf *ServerConfig) *Conn {
 			return conn
 		}
 	}
-	return NewClient(conf)
+	return nil
 }
 
 func (s *ServerMgr) AddServe(conf *ServerConfig, conn *Conn) {

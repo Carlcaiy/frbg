@@ -48,7 +48,7 @@ func (l *Local) Route(conn *network.Conn, msg *codec.Message) error {
 	case def.ST_Hall:
 		return l.SendToHall(msg.UserID, msg.Bytes())
 	case def.ST_Game:
-		return l.SendToGame(msg.DestID, msg.Bytes())
+		return l.SendToGame(msg.GameID, msg.Bytes())
 	}
 	return fmt.Errorf("without cmd %d route", msg.Cmd)
 }
