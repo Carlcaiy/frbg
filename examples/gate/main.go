@@ -7,6 +7,10 @@ import (
 	"frbg/examples/gate/route"
 	"frbg/network"
 	"frbg/timer"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -36,8 +40,20 @@ func main() {
 		MaxConn: 10000,
 		Etcd:    true,
 	}
-	router := route.New(serverConfig)
-	network.Serve(pollConfig, router, serverConfig)
-	network.WsServe(pollConfig, router, wsserverConfig)
-	network.Wait()
+	poll := network.NewPoll(serverConfig, pollConfig, route.New(serverConfig))
+	poll.Start()
+
+	wsPoll := network.NewPoll(wsserverConfig, pollConfig, route.New(wsserverConfig))
+	wsPoll.Start()
+
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-ch
+	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
+		log.Println("signal kill")
+		network.Signal(wsPoll, poll)
+	}
+
+	network.Wait(wsPoll, poll)
+	log.Println("free")
 }

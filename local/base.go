@@ -19,7 +19,7 @@ type Handle func(*network.Conn, *codec.Message) error
 type BaseLocal struct {
 	*network.ServerConfig
 	m_users   map[uint32]interface{}
-	m_servers map[uint16]*network.Conn
+	serverMgr *network.ServerMgr
 	m_route   map[uint16]Handle // 路由
 	*timer.TaskCtl
 }
@@ -27,7 +27,7 @@ type BaseLocal struct {
 func NewBase(sconf *network.ServerConfig) *BaseLocal {
 	return &BaseLocal{
 		ServerConfig: sconf,
-		m_servers:    make(map[uint16]*network.Conn),
+		serverMgr:    network.NewServerMgr(),
 		m_route:      make(map[uint16]Handle),
 		TaskCtl:      timer.NewTaskCtl(),
 	}
@@ -41,25 +41,13 @@ func (l *BaseLocal) Init() {
 }
 
 func (l *BaseLocal) TimerHeartBeat() {
-	for _, s := range l.m_servers {
-		if s.Equal(l.ServerConfig) {
-			continue
-		}
-		bs := codec.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
-			ServerType: uint32(s.ServerType),
-			ServerId:   uint32(s.ServerId),
-		}).Pack()
-		// log.Printf("send heart beat addr:%s type:%s id:%d\n", s.Addr, s.ServerType, s.ServerId)
-		if _, err := s.Write(bs); err != nil {
-			log.Println("send tick failed")
-		}
-	}
+	log.Println("send tick failed")
 }
 
 // 连接成功的回调
 func (l *BaseLocal) OnConnect(conn *network.Conn) {
 	log.Printf("AddConn new:%+v\n", conn.ServerConfig)
-	l.m_servers[conn.Svid()] = conn
+	l.serverMgr.AddServe(conn.ServerConfig, conn)
 }
 
 func (l *BaseLocal) OnAccept(conn *network.Conn) {
@@ -67,10 +55,9 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
-	if conn.ServerConfig != nil {
-		delete(l.m_servers, conn.Svid())
-	}
+	l.serverMgr.DelServe(conn.ServerConfig)
 }
+
 func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *codec.Message) error {
 	data := new(proto.HeartBeat)
 	if err := msg.Unpack(data); err != nil {
@@ -87,7 +74,7 @@ func (l *BaseLocal) TestRequest(conn *network.Conn, msg *codec.Message) error {
 		return err
 	}
 
-	b, _ := msg.PackProto(&proto.Test{
+	b, _ := msg.PackWith(msg.Cmd, &proto.Test{
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
 	})
@@ -145,18 +132,10 @@ func (l *BaseLocal) SendToSid(serverId uint8, buf []byte, serverType uint8) erro
 }
 
 func (l *BaseLocal) GetServer(serverType uint8, serverId uint8) *network.Conn {
-	key := uint16(serverType)*100 + uint16(serverId)
-	if conns, ok := l.m_servers[key]; ok {
-		return conns
-	}
-	addr := register.Get(key)
-	if addr == "" {
-		return nil
-	}
-	return network.NewClient(&network.ServerConfig{
+	return l.serverMgr.GetServe(&network.ServerConfig{
+		Addr:       register.Get(uint16(serverType)*100 + uint16(serverId)),
 		ServerType: serverType,
 		ServerId:   serverId,
-		Addr:       addr,
 	})
 }
 

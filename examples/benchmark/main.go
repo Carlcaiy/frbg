@@ -42,7 +42,7 @@ func main() {
 					DestST: uint8(servetType),
 					Cmd:    cmd.Test,
 				}
-				bs, _ := msg.PackProto(&proto.Test{
+				bs, _ := msg.PackWith(cmd.Test, &proto.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				})

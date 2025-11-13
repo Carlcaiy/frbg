@@ -88,7 +88,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *codec.Message) error {
 	}
 	l.users[msg.UserID] = room
 	room.AddUser(msg.UserID, msg.GateID)
-	bs, _ := msg.PackCmd(msg.Cmd, rsp)
+	bs, _ := msg.PackWith(msg.Cmd, rsp)
 	c.Write(bs)
 	if room.Full() {
 		room.Start()
@@ -111,7 +111,7 @@ func (l *Local) leaveRoom(c *network.Conn, msg *codec.Message) error {
 		return nil
 	}
 	room.DelUser(msg.UserID)
-	bs, _ := msg.PackProto(rsp)
+	bs, _ := msg.PackWith(msg.Cmd, rsp)
 	c.Write(bs)
 	return nil
 }

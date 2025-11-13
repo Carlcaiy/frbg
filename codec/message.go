@@ -47,21 +47,12 @@ func (m *Message) Pack() []byte {
 	return bs
 }
 
-func (m *Message) PackCmd(cmd uint16, pro proto.Message) ([]byte, error) {
+func (m *Message) PackWith(cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return nil, err
 	}
 	m.Cmd = cmd
-	m.Body = body
-	return m.Pack(), nil
-}
-
-func (m *Message) PackProto(pro proto.Message) ([]byte, error) {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return nil, err
-	}
 	m.Body = body
 	return m.Pack(), nil
 }

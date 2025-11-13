@@ -22,6 +22,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var wg sync.WaitGroup
+
 type Handler interface {
 	Init()                                      // Handler的初始化
 	Route(conn *Conn, msg *codec.Message) error // 消息路由
@@ -148,7 +150,6 @@ func (p *Poll) Close() error {
 
 // 优化事件循环
 func (p *Poll) LoopRun() {
-	wg.Add(1)
 	defer wg.Done()
 
 	log.Printf("start looprun coroutine,st:%d sid:%d addr:%s",
@@ -362,7 +363,7 @@ func (p *Poll) Del(fd int) error {
 	return conn.Close()
 }
 
-func (p *Poll) Init() {
+func (p *Poll) Start() {
 	conf := p.serverConf
 	if conf == nil || conf.Addr == "" {
 		log.Println("error addr", conf.Addr)
@@ -407,6 +408,7 @@ func (p *Poll) Init() {
 	}
 
 	// 开始轮询
+	wg.Add(1)
 	go p.LoopRun()
 }
 

@@ -94,6 +94,22 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 	return
 }
 
+func TcpWrite(r io.Writer, uid uint32, dest uint8, cmd uint16, pro proto.Message) error {
+	body, err := proto.Marshal(pro)
+	if err != nil {
+		return err
+	}
+	msg := Message{
+		UserID: uid,
+		DestST: dest,
+		Cmd:    cmd,
+		Body:   body,
+	}
+	bs := msg.Pack()
+	_, err = r.Write(bs)
+	return err
+}
+
 func Pack(uid uint32, dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
