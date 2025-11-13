@@ -25,3 +25,7 @@ func (s *ServerConfig) Port() int {
 func (s *ServerConfig) Svid() uint16 {
 	return uint16(s.ServerType)*100 + uint16(s.ServerId)
 }
+
+func (s *ServerConfig) Equal(other *ServerConfig) bool {
+	return s.ServerType == other.ServerType && s.ServerId == other.ServerId
+}

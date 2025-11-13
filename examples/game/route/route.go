@@ -1,11 +1,11 @@
 package route
 
 import (
+	"frbg/codec"
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
-	"frbg/parser"
 	"frbg/timer"
 	"log"
 	"time"
@@ -35,14 +35,14 @@ func (l *Local) Init() {
 	l.Start(timer.NewLoopTask(time.Minute, l.clearRoom))
 }
 
-func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
+func (l *Local) offline(c *network.Conn, msg *codec.Message) error {
 	if room, ok := l.users[msg.UserID]; ok {
 		room.Offline(msg.UserID)
 	}
 	return nil
 }
 
-func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
+func (l *Local) reconnect(c *network.Conn, msg *codec.Message) error {
 	pack := new(proto.Reconnect)
 	if err := msg.Unpack(pack); err != nil {
 		return err
@@ -58,7 +58,7 @@ func (l *Local) reconnect(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
+func (l *Local) enterRoom(c *network.Conn, msg *codec.Message) error {
 	req, rsp := new(proto.EnterRoomReq), new(proto.EnterRoomRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -97,7 +97,7 @@ func (l *Local) enterRoom(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
+func (l *Local) leaveRoom(c *network.Conn, msg *codec.Message) error {
 	req, rsp := new(proto.LeaveRoomReq), new(proto.LeaveRoomRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -116,7 +116,7 @@ func (l *Local) leaveRoom(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) optGame(c *network.Conn, msg *parser.Message) error {
+func (l *Local) optGame(c *network.Conn, msg *codec.Message) error {
 	data := new(proto.MjOpt)
 	if err := msg.Unpack(data); err != nil {
 		return err

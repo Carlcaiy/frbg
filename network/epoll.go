@@ -5,15 +5,17 @@ package network
 import (
 	"errors"
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
-	"frbg/parser"
 	"frbg/register"
 	"frbg/timer"
 	"log"
 	"net"
 	_ "net/http/pprof"
-	"reflect"
+	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/gobwas/ws"
 	reuseport "github.com/kavu/go_reuseport"
@@ -21,12 +23,12 @@ import (
 )
 
 type Handler interface {
-	Init()                                       // Handler的初始化
-	Route(conn *Conn, msg *parser.Message) error // 消息路由
-	Close(conn *Conn)                            // 连接关闭的回调
-	OnConnect(conn *Conn)                        // 连接成功的回调
-	OnAccept(conn *Conn)                         // 新连接的回调
-	Tick()                                       // 心跳
+	Init()                                      // Handler的初始化
+	Route(conn *Conn, msg *codec.Message) error // 消息路由
+	Close(conn *Conn)                           // 连接关闭的回调
+	OnConnect(conn *Conn)                       // 连接成功的回调
+	OnAccept(conn *Conn)                        // 新连接的回调
+	Tick()                                      // 心跳
 }
 
 type PollConfig struct {
@@ -57,18 +59,20 @@ type Poll struct {
 	listenFd   int
 	listener   *net.TCPListener
 	fdconns    map[int]*Conn
-	conn_num   int
+	connNum    int64 // 改为 int64 便于原子操作
 	pollConfig *PollConfig
 	queue      *esqueue
 	handle     Handler
 	upgrader   *ws.Upgrader
 	serverConf *ServerConfig
+	events     []unix.EpollEvent // 重用事件数组
+	mu         sync.RWMutex      // 保护 fdconns 和 connNum
 }
 
 func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	epollFd, err := unix.EpollCreate1(0)
 	must(err)
-	eventFd, err := unix.Eventfd(0, unix.EFD_CLOEXEC) // unix.EFD_NONBLOCK|unix.EFD_CLOEXEC
+	eventFd, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
 	must(err)
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
@@ -80,7 +84,282 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 		handle:     handle,
 		serverConf: sconf,
 		queue:      new(esqueue),
+		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
 	}
+}
+
+// 添加连接数原子操作
+func (p *Poll) getConnNum() int {
+	return int(atomic.LoadInt64(&p.connNum))
+}
+
+func (p *Poll) incrConnNum() {
+	atomic.AddInt64(&p.connNum, 1)
+}
+
+func (p *Poll) decrConnNum() {
+	atomic.AddInt64(&p.connNum, -1)
+}
+
+// 优化关闭函数
+func (p *Poll) Close() error {
+	log.Println("poll close")
+	var errs []error
+
+	if p.pollConfig.Etcd {
+		if err := register.Del(p.serverConf.Svid()); err != nil {
+			errs = append(errs, fmt.Errorf("etcd del error: %w", err))
+		}
+	}
+
+	// 关闭连接connfd
+	p.mu.Lock()
+	for _, c := range p.fdconns {
+		if err := c.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close conn %d error: %w", c.Fd, err))
+		}
+	}
+	p.mu.Unlock()
+
+	// 关闭epoll监听fd
+	if p.epollFd > 0 {
+		if err := unix.Close(p.epollFd); err != nil {
+			errs = append(errs, fmt.Errorf("close epoll fd error: %w", err))
+		}
+	}
+	// 关闭eventFd
+	if p.eventFd > 0 {
+		if err := unix.Close(p.eventFd); err != nil {
+			errs = append(errs, fmt.Errorf("close event fd error: %w", err))
+		}
+	}
+	// 关闭listenFd
+	if p.listenFd > 0 {
+		if err := unix.Close(p.listenFd); err != nil {
+			errs = append(errs, fmt.Errorf("close listen fd error: %w", err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("close errors: %v", errs)
+	}
+	return nil
+}
+
+// 优化事件循环
+func (p *Poll) LoopRun() {
+	wg.Add(1)
+	defer wg.Done()
+
+	log.Printf("start looprun coroutine,st:%d sid:%d addr:%s",
+		p.serverConf.ServerType, p.serverConf.ServerId, p.serverConf.Addr)
+
+	for {
+		n, err := unix.EpollWait(p.epollFd, p.events, 100)
+		if err != nil && err != unix.EINTR {
+			log.Printf("epoll wait error: %v", err)
+			return
+		}
+
+		// 处理队列事件
+		if err := p.processQueueEvents(); err != nil {
+			log.Printf("process queue events error: %v", err)
+			return
+		}
+
+		// 处理网络事件
+		for i := 0; i < n; i++ {
+			if err := p.processNetworkEvent(&p.events[i]); err != nil {
+				log.Printf("process network event error: %v", err)
+			}
+		}
+	}
+}
+
+// 拆分队列事件处理
+func (p *Poll) processQueueEvents() error {
+	return p.queue.ForEach(func(note interface{}) error {
+		switch t := note.(type) {
+		case def.EventType:
+			switch t {
+			case def.ET_Timer:
+				p.handle.Tick()
+			case def.ET_Close:
+				return errors.New("signal close")
+			case def.ET_Error:
+				return errors.New("error")
+			default:
+				return fmt.Errorf("unknown event type %v", t)
+			}
+		default:
+			return fmt.Errorf("unknown queue event type %v", t)
+		}
+		return nil
+	})
+}
+
+// 拆分网络事件处理
+func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
+	fd := int(event.Fd)
+
+	switch fd {
+	case p.eventFd:
+		return p.processEventFd()
+	case p.listenFd:
+		return p.processAccept()
+	default:
+		return p.processClientData(fd)
+	}
+}
+
+// 处理eventfd事件
+func (p *Poll) processEventFd() error {
+	// 创建 8 字节缓冲区
+	data := make([]byte, 8)
+
+	// 读取 eventfd 中的数据，清除事件状态
+	if _, err := unix.Read(p.eventFd, data); err != nil {
+		return fmt.Errorf("read event fd error: %w", err)
+	}
+
+	return nil
+}
+
+// 处理新连接
+func (p *Poll) processAccept() error {
+	conn, err := p.listener.AcceptTCP()
+	if err != nil {
+		if !isTemporaryError(err) {
+			log.Printf("AcceptTCP error: %v", err)
+		}
+		return nil // 临时错误不返回错误，继续循环
+	}
+
+	if p.upgrader != nil {
+		if _, err = p.upgrader.Upgrade(conn); err != nil {
+			log.Printf("websocket upgrade error: %s", err)
+			conn.Close()
+			return nil
+		}
+	}
+
+	p.Add(conn)
+	return nil
+}
+
+// 处理客户端数据
+func (p *Poll) processClientData(fd int) error {
+	// 1. 线程安全地查找连接对象
+	p.mu.RLock()
+	conn, ok := p.fdconns[fd]
+	p.mu.RUnlock()
+
+	if !ok {
+		log.Printf("connection not found for fd: %d", fd)
+		return nil
+	}
+
+	// 2. 设置读取超时（防止阻塞）
+	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		log.Printf("set read deadline error: fd:%d err:%s", fd, err.Error())
+		return p.Del(fd) // 设置失败则关闭连接
+	}
+
+	// 3. 读取并解析网络消息
+	msg, err := codec.Read(conn, p.serverConf.ServerType)
+	if err != nil {
+		log.Printf("codec.Read error: type:%d fd:%d err:%s",
+			p.serverConf.ServerType, fd, err.Error())
+		p.Del(fd) // 读取失败则关闭连接
+		return nil
+	}
+
+	// 4. 路由消息到业务处理器
+	if p.handle != nil {
+		if err := p.handle.Route(conn, msg); err != nil {
+			log.Printf("route error: fd:%d err:%v", fd, err)
+			p.Del(fd) // 路由失败则关闭连接
+			return nil
+		}
+	} else {
+		log.Printf("handler is nil, cannot process message from fd:%d", fd)
+	}
+	return nil
+}
+
+// 添加辅助函数判断临时错误
+func isTemporaryError(err error) bool {
+	if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+		return true
+	}
+	return false
+}
+
+// 优化Add函数
+func (p *Poll) Add(conn *net.TCPConn) error {
+	// 1. 检查连接数限制
+	if p.getConnNum() >= p.pollConfig.MaxConn {
+		return fmt.Errorf("connection limit exceeded: %d", p.pollConfig.MaxConn)
+	}
+
+	// 2. 获取socket文件描述符
+	fd := socketFD(conn)
+	if fd == -1 {
+		return errors.New("failed to get socket fd")
+	}
+
+	// 3. 设置非阻塞模式（关键优化点）
+	if err := syscall.SetNonblock(fd, true); err != nil {
+		return err
+	}
+
+	// 4. 添加到epoll监听
+	event := &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}
+	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, event); err != nil {
+		return fmt.Errorf("epoll ctl add error: %w", err)
+	}
+
+	// 5. 创建连接对象并存储
+	c := &Conn{
+		TCPConn: conn,
+		Fd:      fd,
+	}
+
+	// 6. 线程安全地更新连接映射
+	p.mu.Lock()
+	p.fdconns[fd] = c
+	p.incrConnNum()
+	p.mu.Unlock()
+
+	// 7. 记录日志并触发回调
+	log.Printf("Add fd:%d addr:%s conn_num=%d",
+		fd, conn.RemoteAddr().String(), p.getConnNum())
+
+	p.handle.OnAccept(c)
+	return nil
+}
+
+// 优化Del函数
+func (p *Poll) Del(fd int) error {
+	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_DEL, fd, nil); err != nil {
+		return fmt.Errorf("epoll ctl del error: %w", err)
+	}
+
+	p.mu.Lock()
+	conn, ok := p.fdconns[fd]
+	if !ok {
+		p.mu.Unlock()
+		return fmt.Errorf("connection not found for fd: %d", fd)
+	}
+	delete(p.fdconns, fd)
+	p.decrConnNum()
+	p.mu.Unlock()
+
+	log.Printf("Del fd:%d addr:%s conn_num=%d",
+		fd, conn.RemoteAddr(), p.getConnNum())
+
+	p.handle.Close(conn)
+	return conn.Close()
 }
 
 func (p *Poll) Init() {
@@ -131,112 +410,6 @@ func (p *Poll) Init() {
 	go p.LoopRun()
 }
 
-func (p *Poll) Close() {
-	log.Println("poll close")
-
-	if p.pollConfig.Etcd {
-		register.Del(p.serverConf.Svid())
-	}
-
-	// 关闭连接connfd
-	for _, c := range p.fdconns {
-		c.Close()
-	}
-	// 关闭epoll监听fd
-	if p.epollFd > 0 {
-		unix.Close(p.epollFd)
-	}
-	// 关闭eventFd
-	if p.eventFd > 0 {
-		unix.Close(p.eventFd)
-	}
-	// 关闭listenFd
-	if p.listenFd > 0 {
-		unix.Close(p.listenFd)
-	}
-}
-
-func (p *Poll) LoopRun() {
-	wg.Add(1)
-	defer func() {
-		wg.Done()
-	}()
-
-	log.Printf("start looprun coroutine,st:%d sid:%d addr:%s", p.serverConf.ServerType, p.serverConf.ServerId, p.serverConf.Addr)
-	events := make([]unix.EpollEvent, 64)
-	for {
-		n, err := unix.EpollWait(p.epollFd, events, 100)
-		if err != nil && err != unix.EINTR {
-			return
-		}
-
-		if err := p.queue.ForEach(func(note interface{}) error {
-			switch t := note.(type) {
-			case def.EventType:
-				if t == def.ET_Timer {
-					p.handle.Tick()
-				} else if t == def.ET_Close {
-					return errors.New("signal close")
-				} else if t == def.ET_Error {
-					return errors.New("error")
-				}
-			default:
-				return fmt.Errorf("unknow type %v", t)
-			}
-			return nil
-		}); err != nil {
-			return
-		}
-
-		for i := 0; i < n; i++ {
-			// log.Println("i:", i, "Fd:", events[i].Fd, "Events", events[i].Events, "pad", events[i].Pad, "listenFd", p.epollFd)
-			fd := int(events[i].Fd)
-			if p.eventFd == fd {
-				data := make([]byte, 8)
-				unix.Read(fd, data)
-			} else if p.listenFd == fd {
-				conn, err := p.listener.AcceptTCP()
-				if err != nil {
-					log.Println("AcceptTCP", err)
-					continue
-				}
-
-				if p.upgrader != nil {
-					_, err = p.upgrader.Upgrade(conn)
-					if err != nil {
-						log.Printf("upgrade error: %s", err)
-						return
-					}
-				}
-				p.Add(conn)
-			} else {
-				conn, ok := p.fdconns[fd]
-				if !ok {
-					log.Println("Get conn", err)
-					continue
-				}
-
-				msg, err := parser.Read(conn, p.serverConf.ServerType)
-				if err != nil {
-					log.Printf("parser.Read type:%d err:%s", p.serverConf.ServerType, err.Error())
-					p.Del(fd)
-					continue
-				}
-				// log.Printf("Route uid:%d cmd:%d dst:%s\n", msg.UserID, msg.Cmd, msg.Dest())
-				if p.handle != nil {
-					if err := p.handle.Route(conn, msg); err != nil {
-						log.Println("route err:", err)
-						p.Del(fd)
-						continue
-					}
-				} else {
-					log.Println("handle nil, can't deal message")
-				}
-			}
-		}
-	}
-}
-
 func (p *Poll) AddConnector(conf *ServerConfig) (*Conn, error) {
 	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
@@ -264,52 +437,45 @@ func (p *Poll) Trigger(tri interface{}) {
 	unix.Write(p.eventFd, []byte{1, 1, 1, 1, 1, 1, 1, 1})
 }
 
-func (p *Poll) Del(fd int) {
-	err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_DEL, fd, nil)
-	if err != nil {
-		log.Println("Del", err)
-		return
-	}
-	conn := p.fdconns[fd]
-	log.Printf("Del fd:%d addr:%v conn_num=%d\n", fd, conn.RemoteAddr(), p.conn_num)
-	p.handle.Close(conn)
-	delete(p.fdconns, fd)
-	p.conn_num--
-	conn.Close()
-}
-
-func (p *Poll) Add(conn *net.TCPConn) {
-	if p.conn_num >= p.pollConfig.MaxConn {
-		log.Println("conn num too much.", p.pollConfig.MaxConn)
-		return
-	}
-	fd := socketFD(conn)
-	err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)})
-	if err != nil {
-		log.Println("Add", err)
-		return
-	}
-	c := &Conn{
-		TCPConn: conn,
-		Fd:      fd,
-	}
-	p.fdconns[fd] = c
-	p.conn_num++
-	log.Printf("Add fd:%d addr:%v conn_num=%d net=%v\n", fd, conn.RemoteAddr().String(), p.conn_num, conn.RemoteAddr().Network())
-	p.handle.OnAccept(c)
-}
-
+// 使用SyscallConn替代反射获取文件描述符
 func socketFD(conn *net.TCPConn) int {
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-	return int(pfdVal.FieldByName("Sysfd").Int())
+	syscallConn, err := conn.SyscallConn()
+	if err != nil {
+		log.Printf("Failed to get syscall conn: %v", err)
+		return -1
+	}
+
+	var fd int
+	err = syscallConn.Control(func(c uintptr) {
+		fd = int(c)
+	})
+	if err != nil {
+		log.Printf("Failed to get file descriptor: %v", err)
+		return -1
+	}
+
+	return fd
 }
 
-func listenFD(conn net.Listener) int {
-	fdVal := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-	return int(pfdVal.FieldByName("Sysfd").Int())
+// 使用SyscallConn替代反射获取监听器文件描述符
+func listenFD(conn *net.TCPListener) int {
+
+	syscallConn, err := conn.SyscallConn()
+	if err != nil {
+		log.Printf("Failed to get syscall conn: %v", err)
+		return -1
+	}
+
+	var fd int
+	err = syscallConn.Control(func(c uintptr) {
+		fd = int(c)
+	})
+	if err != nil {
+		log.Printf("Failed to get file descriptor: %v", err)
+		return -1
+	}
+
+	return fd
 }
 
 func must(err error) {

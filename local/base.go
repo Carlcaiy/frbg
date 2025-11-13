@@ -2,11 +2,11 @@ package local
 
 import (
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
 	"frbg/network"
-	"frbg/parser"
 	"frbg/register"
 	"frbg/timer"
 	"log"
@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-type Handle func(*network.Conn, *parser.Message) error
+type Handle func(*network.Conn, *codec.Message) error
 
 type BaseLocal struct {
 	*network.ServerConfig
@@ -42,10 +42,10 @@ func (l *BaseLocal) Init() {
 
 func (l *BaseLocal) TimerHeartBeat() {
 	for _, s := range l.m_servers {
-		if s.Svid() == l.Svid() {
+		if s.Equal(l.ServerConfig) {
 			continue
 		}
-		bs := parser.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
+		bs := codec.NewMessage(0, s.ServerType, cmd.HeartBeat, uint8(s.ServerId), &proto.HeartBeat{
 			ServerType: uint32(s.ServerType),
 			ServerId:   uint32(s.ServerId),
 		}).Pack()
@@ -71,7 +71,7 @@ func (l *BaseLocal) Close(conn *network.Conn) {
 		delete(l.m_servers, conn.Svid())
 	}
 }
-func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
+func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *codec.Message) error {
 	data := new(proto.HeartBeat)
 	if err := msg.Unpack(data); err != nil {
 		return err
@@ -81,7 +81,7 @@ func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *BaseLocal) TestRequest(conn *network.Conn, msg *parser.Message) error {
+func (l *BaseLocal) TestRequest(conn *network.Conn, msg *codec.Message) error {
 	data := new(proto.Test)
 	if err := msg.Unpack(data); err != nil {
 		return err
@@ -107,7 +107,7 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	l.m_route[cmd] = h
 }
 
-func (l *BaseLocal) Route(conn *network.Conn, msg *parser.Message) error {
+func (l *BaseLocal) Route(conn *network.Conn, msg *codec.Message) error {
 	if msg.Cmd != cmd.HeartBeat {
 		log.Println(msg)
 	}

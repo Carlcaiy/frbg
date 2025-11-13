@@ -112,11 +112,14 @@ func get_configs() {
 	}
 }
 
-func Del(svid uint16) {
+func Del(svid uint16) error {
 	if client != nil {
 		key := fmt.Sprintf("server/%d", svid)
-		client.Delete(context.TODO(), key)
+		if _, err := client.Delete(context.TODO(), key); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func watch() {

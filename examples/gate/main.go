@@ -33,7 +33,7 @@ func main() {
 		ServerId:   uint8(sid),
 	}
 	pollConfig := &network.PollConfig{
-		MaxConn: 50000,
+		MaxConn: 10000,
 		Etcd:    true,
 	}
 	router := route.New(serverConfig)

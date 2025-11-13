@@ -13,7 +13,7 @@ func main() {
 		ServerId:   1,
 	}
 	pollConfig := &network.PollConfig{
-		MaxConn: 50000,
+		MaxConn: 10000,
 	}
 	network.Serve(pollConfig, route.NewLocal(serverConfig), serverConfig)
 	network.Wait()

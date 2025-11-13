@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
-	"frbg/parser"
 	"log"
 	"net"
 	"os"
@@ -37,7 +37,7 @@ func main() {
 			var t time.Duration = 0
 			var c int = 0
 			req := func(servetType def.ServerType) {
-				msg := &parser.Message{
+				msg := &codec.Message{
 					UserID: uid,
 					DestST: uint8(servetType),
 					Cmd:    cmd.Test,
@@ -50,7 +50,7 @@ func main() {
 			}
 			req(def.ST_Gate)
 			for !close {
-				msg, err := parser.TcpRead(conn)
+				msg, err := codec.TcpRead(conn)
 				if err != nil {
 					break
 				}

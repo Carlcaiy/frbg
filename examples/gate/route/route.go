@@ -2,13 +2,13 @@ package route
 
 import (
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/db"
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
-	"frbg/parser"
 	"log"
 )
 
@@ -33,7 +33,7 @@ func (l *Local) Init() {
 	l.AddRoute(cmd.Logout, l.logout)
 }
 
-func (l *Local) Route(conn *network.Conn, msg *parser.Message) error {
+func (l *Local) Route(conn *network.Conn, msg *codec.Message) error {
 	log.Println(msg, l.ServerType)
 	if msg.UserID == 0 && msg.Cmd != cmd.HeartBeat && msg.Cmd != cmd.Login {
 		return fmt.Errorf("msg wrong")
@@ -53,7 +53,7 @@ func (l *Local) Route(conn *network.Conn, msg *parser.Message) error {
 	return fmt.Errorf("without cmd %d route", msg.Cmd)
 }
 
-func (l *Local) login(c *network.Conn, msg *parser.Message) error {
+func (l *Local) login(c *network.Conn, msg *codec.Message) error {
 	req := new(proto.LoginReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -63,10 +63,10 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	if msg.UserID == 0 {
 		uid, err := db.GenUserId()
 		if err != nil {
-			bs, _ := parser.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
+			bs, _ := codec.Pack(msg.UserID, def.ST_User, cmd.Login, &proto.LoginRsp{
 				Ret: 1,
 			})
-			parser.WsWrite(c, bs)
+			codec.WsWrite(c, bs)
 			return err
 		}
 		info = &User{
@@ -83,10 +83,10 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 		if conn := l.GetConn(msg.UserID); conn != c {
 			if conn != nil {
 				log.Println("给已经登录的连接推送挤号信息")
-				buf, _ := parser.Pack(msg.UserID, def.ST_User, cmd.GateKick, &proto.GateKick{
+				buf, _ := codec.Pack(msg.UserID, def.ST_User, cmd.GateKick, &proto.GateKick{
 					Type: proto.KickType_Squeeze,
 				})
-				parser.WsWrite(conn, buf)
+				codec.WsWrite(conn, buf)
 			}
 			l.SetConn(msg.UserID, c)
 			if err := db.SetGate(msg.UserID, l.ServerId); err != nil {
@@ -102,7 +102,7 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 			return err
 		}
 	}
-	bs, _ := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.LoginRsp{
+	bs, _ := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.LoginRsp{
 		Ret:      0,
 		Nick:     info.Nick,
 		Uid:      info.Uid,
@@ -112,13 +112,13 @@ func (l *Local) login(c *network.Conn, msg *parser.Message) error {
 	})
 
 	// if gid := db.GetGame(msg.UserID); gid > 0 {
-	// 	buf, _ := parser.Pack(msg.UserID, def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
+	// 	buf, _ := codec.Pack(msg.UserID, def.ST_Game, cmd.Reconnect, &proto.Reconnect{})
 	// 	l.SendToGame(gid, buf)
 	// }
-	return parser.WsWrite(c, bs)
+	return codec.WsWrite(c, bs)
 }
 
-func (l *Local) multibc(c *network.Conn, msg *parser.Message) error {
+func (l *Local) multibc(c *network.Conn, msg *codec.Message) error {
 	req := new(proto.MultiBroadcast)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -132,10 +132,10 @@ func (l *Local) multibc(c *network.Conn, msg *parser.Message) error {
 }
 
 // 离开网关
-func (l *Local) logout(c *network.Conn, msg *parser.Message) error {
+func (l *Local) logout(c *network.Conn, msg *codec.Message) error {
 	u, ok := c.Context().(*User)
 	if ok {
-		b, _ := parser.Pack(u.UserID(), def.ST_User, msg.Cmd, &proto.CommonRsp{
+		b, _ := codec.Pack(u.UserID(), def.ST_User, msg.Cmd, &proto.CommonRsp{
 			Code: proto.ErrorCode_Success,
 		})
 		l.SendToUser(u.UserID(), b)
@@ -160,7 +160,7 @@ func (l *Local) Close(conn *network.Conn) {
 		u, ok := conn.Context().(*User)
 		if ok {
 			if u.GameId > 0 {
-				b, _ := parser.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
+				b, _ := codec.Pack(u.UserID(), def.ST_Game, cmd.Offline, &proto.Offline{})
 				l.SendToSid(u.GameId, b, def.ST_Game)
 			}
 		}
@@ -188,7 +188,7 @@ func (l *Local) DelConn(uid uint32) {
 // attention: gateway use this function, other server should be careful
 func (l *Local) SendToUser(uid uint32, buf []byte) error {
 	if u, ok := l.m_client[uid]; ok {
-		return parser.WsWrite(u, buf)
+		return codec.WsWrite(u, buf)
 	} else {
 		return fmt.Errorf("user:%d not find", uid)
 	}

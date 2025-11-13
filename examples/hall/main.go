@@ -28,7 +28,7 @@ func main() {
 	}
 
 	pollConfig := &network.PollConfig{
-		MaxConn: 50000,
+		MaxConn: 10000,
 		Etcd:    true,
 	}
 

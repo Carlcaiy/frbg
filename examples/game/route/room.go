@@ -1,11 +1,11 @@
 package route
 
 import (
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
 	"frbg/mj"
-	"frbg/parser"
 	"log"
 	"math/rand"
 	"time"
@@ -123,7 +123,7 @@ func (r *Room) Reconnect(uid uint32, gateId uint8) {
 
 			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
-				bs, _ := parser.Pack(uid, def.ST_User, cmd.Round, &proto.Empty{})
+				bs, _ := codec.Pack(uid, def.ST_User, cmd.Round, &proto.Empty{})
 				r.l.SendToGate(u.gateId, bs)
 			}
 			return
@@ -201,7 +201,7 @@ func (r *Room) Start() {
 		if u.uid == zhuang.uid {
 			canOp = can_op
 		}
-		bs, _ := parser.Pack(zhuang.uid, def.ST_User, cmd.GameFaPai, &proto.FaMj{
+		bs, _ := codec.Pack(zhuang.uid, def.ST_User, cmd.GameFaPai, &proto.FaMj{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
 			Touzi:  r.touzi,
@@ -318,7 +318,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 					opt.CanOp = canOp
 				}
 			}
-			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.OptGame, opt)
+			bs, _ := codec.Pack(u.uid, def.ST_User, cmd.OptGame, opt)
 			r.l.SendToGate(u.gateId, bs)
 		}
 	}
@@ -342,7 +342,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 				opt.Mj = int32(moPai)
 				opt.CanOp = u.CanOpSelf()
 			}
-			bs, _ := parser.Pack(u.uid, def.ST_User, cmd.BcOpt, opt)
+			bs, _ := codec.Pack(u.uid, def.ST_User, cmd.BcOpt, opt)
 			r.l.SendToGate(u.gateId, bs)
 		}
 	}
@@ -393,7 +393,7 @@ func (r *Room) gameOver(huUser *User) {
 		Hands:  huUser.Mj(),
 		HuType: ht,
 	})
-	buf, _ := parser.Pack(0, def.ST_User, cmd.GameOver, settle)
+	buf, _ := codec.Pack(0, def.ST_User, cmd.GameOver, settle)
 	r.SendAll(buf)
 	r.playing = false
 }

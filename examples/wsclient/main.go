@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/proto"
-	"frbg/parser"
 	"log"
 	"net"
 
@@ -65,12 +65,12 @@ func must(e error) {
 
 func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
 	log.Printf("svrt:%d scmd:%d req:%s", svrt, scmd, req)
-	bs := parser.NewMessage(uint32(uid), svrt, scmd, 1, req).Pack()
-	if err = parser.WsWrite(conn, bs); err != nil {
+	bs := codec.NewMessage(uint32(uid), svrt, scmd, 1, req).Pack()
+	if err = codec.WsWrite(conn, bs); err != nil {
 		return err
 	}
 	log.Printf("start read scmd:%d", scmd)
-	msg, err := parser.WsRead(conn)
+	msg, err := codec.WsRead(conn)
 	if err != nil {
 		return err
 	}

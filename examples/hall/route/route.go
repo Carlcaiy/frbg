@@ -2,6 +2,7 @@ package route
 
 import (
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/cmd"
 	"frbg/examples/db"
@@ -9,7 +10,6 @@ import (
 	"frbg/examples/proto"
 	"frbg/local"
 	"frbg/network"
-	"frbg/parser"
 	"log"
 )
 
@@ -37,17 +37,17 @@ func (l *Local) init() {
 	l.AddRoute(cmd.Test, l.test)
 }
 
-func (l *Local) offline(c *network.Conn, msg *parser.Message) error {
+func (l *Local) offline(c *network.Conn, msg *codec.Message) error {
 	return nil
 }
 
-func (l *Local) test(conn *network.Conn, msg *parser.Message) error {
+func (l *Local) test(conn *network.Conn, msg *codec.Message) error {
 	data := new(proto.Test)
 	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 
-	b, _ := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.Test{
+	b, _ := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.Test{
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
 	})
@@ -56,7 +56,7 @@ func (l *Local) test(conn *network.Conn, msg *parser.Message) error {
 	return err
 }
 
-func (l *Local) getGameList(c *network.Conn, msg *parser.Message) error {
+func (l *Local) getGameList(c *network.Conn, msg *codec.Message) error {
 	log.Println("getGameList")
 	req, rsp := new(proto.GetGameListReq), new(proto.GetGameListRsp)
 	if err := msg.Unpack(req); err != nil {
@@ -64,7 +64,7 @@ func (l *Local) getGameList(c *network.Conn, msg *parser.Message) error {
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		if errSend := l.SendToGate(msg.GateID, buf); errSend != nil {
 			log.Printf("SendToGate(%d) err:%s", msg.GateID, errSend.Error())
 		}
@@ -72,14 +72,14 @@ func (l *Local) getGameList(c *network.Conn, msg *parser.Message) error {
 	return nil
 }
 
-func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
+func (l *Local) getRoomList(c *network.Conn, msg *codec.Message) error {
 	log.Println("getRoomList")
 	req, rsp := new(proto.GetRoomListReq), new(proto.GetRoomListRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 	rsp.Rooms = db.GetRoomList(req.GameId)
-	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		l.SendToGate(msg.GateID, buf)
 		// c.Write(buf)
 	}
@@ -87,7 +87,7 @@ func (l *Local) getRoomList(c *network.Conn, msg *parser.Message) error {
 }
 
 // 请求进入老虎机
-func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
+func (l *Local) enterSlots(c *network.Conn, msg *codec.Message) error {
 	req := new(proto.EnterSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -104,7 +104,7 @@ func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		// c.Write(buf)
 		l.SendToGate(msg.GateID, buf)
 	}
@@ -112,7 +112,7 @@ func (l *Local) enterSlots(c *network.Conn, msg *parser.Message) error {
 }
 
 // 老虎机请求摇奖
-func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
+func (l *Local) spinSlots(c *network.Conn, msg *codec.Message) error {
 	req := new(proto.SlotsSpinReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
@@ -130,7 +130,7 @@ func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
 	if err != nil {
 		return err
 	}
-	if buf, err := parser.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
 		// c.Write(buf)
 		l.SendToGate(msg.GateID, buf)
 	}
@@ -138,7 +138,7 @@ func (l *Local) spinSlots(c *network.Conn, msg *parser.Message) error {
 }
 
 // 离开老虎机
-func (l *Local) leaveSlots(c *network.Conn, msg *parser.Message) error {
+func (l *Local) leaveSlots(c *network.Conn, msg *codec.Message) error {
 	req := new(proto.LeaveSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
