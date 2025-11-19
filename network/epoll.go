@@ -25,12 +25,13 @@ import (
 var wg sync.WaitGroup
 
 type Handler interface {
-	Init()                                      // Handler的初始化
-	Route(conn *Conn, msg *codec.Message) error // 消息路由
-	Close(conn *Conn)                           // 连接关闭的回调
-	OnConnect(conn *Conn)                       // 连接成功的回调
-	OnAccept(conn *Conn)                        // 新连接的回调
-	Tick()                                      // 心跳
+	Attach(poll *Poll)    // 绑定poll
+	Init()                // Handler的初始化
+	Route(*Message) error // 消息路由
+	Close(conn *Conn)     // 连接关闭的回调
+	OnConnect(conn *Conn) // 连接成功的回调
+	OnAccept(conn *Conn)  // 新连接的回调
+	Tick()                // 心跳
 }
 
 type PollConfig struct {
@@ -47,38 +48,23 @@ func NewPollConfig() *PollConfig {
 	}
 }
 
-type Conn struct {
-	*ServerConfig             // 信息
-	*net.TCPConn              // 连接
-	Fd            int         // 文件描述符
-	ActiveTime    int64       // 活跃时间
-	Uid           uint32      // 玩家
-	ctx           interface{} // 该链接附带信息
-}
-
-func (c *Conn) Context() interface{} {
-	return c.ctx
-}
-
-func (c *Conn) SetContext(d interface{}) {
-	c.ctx = d
-}
-
 type Poll struct {
 	epollFd    int
 	eventFd    int
 	listenFd   int
 	listener   *net.TCPListener
-	fdconns    map[int]*Conn
+	fdConns    map[int]*Conn
+	cliConns   map[uint16]*Conn
 	connNum    int64 // 改为 int64 便于原子操作
 	pollConfig *PollConfig
 	queue      *esqueue
 	handle     Handler
 	upgrader   *ws.Upgrader
-	serverConf *ServerConfig
+	ServerConf *ServerConfig
 	events     []unix.EpollEvent // 重用事件数组
 	mu         sync.RWMutex      // 保护 fdconns 和 connNum
 	ticker     *time.Ticker
+	heartBeat  *time.Ticker
 }
 
 func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
@@ -89,12 +75,13 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
 	return &Poll{
-		fdconns:    make(map[int]*Conn),
+		fdConns:    make(map[int]*Conn),
+		cliConns:   make(map[uint16]*Conn),
 		epollFd:    epollFd,
 		eventFd:    eventFd,
 		pollConfig: pconf,
 		handle:     handle,
-		serverConf: sconf,
+		ServerConf: sconf,
 		queue:      new(esqueue),
 		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
 	}
@@ -118,17 +105,20 @@ func (p *Poll) Close() error {
 	log.Println("poll close")
 	var errs []error
 
+	// 停止定时器
 	p.ticker.Stop()
+	p.heartBeat.Stop()
 
+	// 注销etcd服务
 	if p.pollConfig.Etcd {
-		if err := register.Del(p.serverConf.Svid()); err != nil {
+		if err := register.Del(p.ServerConf.Svid()); err != nil {
 			errs = append(errs, fmt.Errorf("etcd del error: %w", err))
 		}
 	}
 
 	// 关闭连接connfd
 	p.mu.Lock()
-	for _, c := range p.fdconns {
+	for _, c := range p.fdConns {
 		if err := c.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close conn %d error: %w", c.Fd, err))
 		}
@@ -165,7 +155,7 @@ func (p *Poll) LoopRun() {
 	defer wg.Done()
 
 	log.Printf("start looprun coroutine,st:%d sid:%d addr:%s",
-		p.serverConf.ServerType, p.serverConf.ServerId, p.serverConf.Addr)
+		p.ServerConf.ServerType, p.ServerConf.ServerId, p.ServerConf.Addr)
 
 	for {
 		n, err := unix.EpollWait(p.epollFd, p.events, 100)
@@ -264,7 +254,7 @@ func (p *Poll) processAccept() error {
 func (p *Poll) processClientData(fd int) error {
 	// 1. 线程安全地查找连接对象
 	p.mu.RLock()
-	conn, ok := p.fdconns[fd]
+	conn, ok := p.fdConns[fd]
 	p.mu.RUnlock()
 
 	if !ok {
@@ -272,17 +262,11 @@ func (p *Poll) processClientData(fd int) error {
 		return nil
 	}
 
-	// 2. 设置读取超时（防止阻塞）
-	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
-		log.Printf("set read deadline error: fd:%d err:%s", fd, err.Error())
-		return p.Del(fd) // 设置失败则关闭连接
-	}
-
 	// 3. 读取并解析网络消息
-	msg, err := codec.Read(conn, p.serverConf.ServerType)
+	msg, err := conn.Read()
 	if err != nil {
 		log.Printf("codec.Read error: type:%d fd:%d err:%s",
-			p.serverConf.ServerType, fd, err.Error())
+			p.ServerConf.ServerType, fd, err.Error())
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}
@@ -295,7 +279,8 @@ func (p *Poll) processClientData(fd int) error {
 
 	// 5. 路由消息到业务处理器
 	if p.handle != nil {
-		if err := p.handle.Route(conn, msg); err != nil {
+		msg := NewMessage(p, conn, msg)
+		if err := p.handle.Route(msg); err != nil {
 			log.Printf("route error: fd:%d err:%v", fd, err)
 			p.Del(fd) // 路由失败则关闭连接
 			return nil
@@ -340,13 +325,13 @@ func (p *Poll) Add(conn *net.TCPConn) error {
 
 	// 5. 创建连接对象并存储
 	c := &Conn{
-		TCPConn: conn,
-		Fd:      fd,
+		conn: conn,
+		Fd:   fd,
 	}
 
 	// 6. 线程安全地更新连接映射
 	p.mu.Lock()
-	p.fdconns[fd] = c
+	p.fdConns[fd] = c
 	p.incrConnNum()
 	p.mu.Unlock()
 
@@ -365,12 +350,12 @@ func (p *Poll) Del(fd int) error {
 	}
 
 	p.mu.Lock()
-	conn, ok := p.fdconns[fd]
+	conn, ok := p.fdConns[fd]
 	if !ok {
 		p.mu.Unlock()
 		return fmt.Errorf("connection not found for fd: %d", fd)
 	}
-	delete(p.fdconns, fd)
+	delete(p.fdConns, fd)
 	p.decrConnNum()
 	p.mu.Unlock()
 
@@ -392,7 +377,7 @@ func (p *Poll) ConnCheck() {
 		// 只收集需要删除的FD，不立即删除
 		p.mu.RLock()
 		timeoutFds := make([]int, 0, 64)
-		for fd, conn := range p.fdconns {
+		for fd, conn := range p.fdConns {
 			if now-conn.ActiveTime > timeoutDuration {
 				timeoutFds = append(timeoutFds, fd)
 			}
@@ -407,8 +392,34 @@ func (p *Poll) ConnCheck() {
 	}
 }
 
+func (p *Poll) ConnTick() {
+	p.heartBeat = time.NewTicker(time.Second)
+
+	for range p.heartBeat.C {
+		// 获取读锁，复制连接列表
+		p.mu.RLock()
+		conns := make([]*Conn, 0, len(p.cliConns))
+		for _, conn := range p.cliConns {
+			conns = append(conns, conn)
+		}
+		p.mu.RUnlock()
+
+		// 发送心跳
+		for _, conn := range conns {
+			msg := codec.NewMessage(0, 0, nil)
+			msg.Type = codec.HeartBeat
+
+			if err := conn.Write(msg.Bytes()); err != nil {
+				log.Printf("ConnTick Write error: fd:%d err:%s", conn.Fd, err.Error())
+				// 使用统一的连接清理机制
+				p.Del(conn.Fd)
+			}
+		}
+	}
+}
+
 func (p *Poll) Start() {
-	conf := p.serverConf
+	conf := p.ServerConf
 	if conf == nil || conf.Addr == "" {
 		log.Println("error addr", conf.Addr)
 		return
@@ -455,9 +466,10 @@ func (p *Poll) Start() {
 	wg.Add(1)
 	go p.LoopRun()
 	go p.ConnCheck()
+	go p.ConnTick()
 }
 
-func (p *Poll) AddConnector(conf *ServerConfig) (*Conn, error) {
+func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
 		log.Println(err)
@@ -470,11 +482,11 @@ func (p *Poll) AddConnector(conf *ServerConfig) (*Conn, error) {
 		return nil, err
 	}
 	ptr := &Conn{
-		TCPConn:      conn,
-		ServerConfig: conf,
-		Fd:           fd,
+		conn: conn,
+		conf: conf,
+		Fd:   fd,
 	}
-	p.fdconns[fd] = ptr
+	p.fdConns[fd] = ptr
 	p.handle.OnConnect(ptr)
 	return ptr, nil
 }
@@ -529,4 +541,25 @@ func must(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (poll *Poll) GetClient(conf *ServerConfig) *Conn {
+	var conn *Conn
+	poll.mu.RLock()
+	conn, ok := poll.cliConns[conf.Svid()]
+	if ok {
+		poll.mu.RUnlock()
+		return conn
+	}
+	poll.mu.RUnlock()
+
+	if conn, err := poll.Connect(conf); err == nil {
+		poll.mu.Lock()
+		poll.cliConns[conf.Svid()] = conn
+		poll.mu.Unlock()
+		return conn
+	} else {
+		log.Printf("Connect error: %v", err)
+	}
+	return nil
 }

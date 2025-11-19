@@ -15,6 +15,8 @@ import (
 )
 
 func init() {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
+	log.SetOutput(os.Stdout)
 	timer.Init(time.Second)
 }
 
@@ -36,7 +38,7 @@ func main() {
 		Etcd:    true,
 	}
 
-	poll := network.NewPoll(serverConfig, pollConfig, route.New(serverConfig))
+	poll := network.NewPoll(serverConfig, pollConfig, route.New())
 	poll.Start()
 
 	ch := make(chan os.Signal, 1)

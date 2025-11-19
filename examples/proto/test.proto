@@ -8,6 +8,7 @@ message LoginReq {
     string password = 1;
     int32 from = 2;
     uint32 gateId = 3;
+    uint32 uid = 4;
 }
 
 // 登录成功
@@ -24,7 +25,7 @@ message LoginRsp {
 
 // 离开
 message LogoutReq {
-    
+    uint32 uid = 1;
 }
 
 // 踢人
@@ -51,7 +52,10 @@ message GatePushMsg {
 
 // 请求游戏列表
 message GetGameListReq {
-    repeated int32 gids = 1;        // 游戏id len=0全部数据 len>0游戏数据
+    uint32 uid = 1;
+    uint32 gateId = 2;
+    uint32 serverId = 3;
+    repeated int32 gids = 4;        // 游戏id len=0全部数据 len>0游戏数据
 }
 
 // 房间信息
@@ -69,7 +73,9 @@ message GetGameListRsp {
 
 // 请求房间列表
 message GetRoomListReq {
-    uint32 gameId = 1;
+    uint32 uid = 1;
+    uint32 gameId = 2;
+    uint32 gateId = 3;
 }
 
 // 房间信息
@@ -88,8 +94,10 @@ message GetRoomListRsp {
 
 // 请求进入房间
 message EnterRoomReq {
-    uint32 gameId = 1;
-    uint32 roomId = 2;
+    uint32 uid = 1;
+    uint32 gateId = 2;
+    uint32 gameId = 3;
+    uint32 roomId = 4;
 }
 
 // 进房答复
@@ -99,7 +107,9 @@ message EnterRoomRsp {
 
 // 进入老虎机
 message EnterSlotsReq {
-    int32 gameId = 1;
+    uint32 gameId = 1;
+    uint32 uid = 2;
+    uint32 gateId = 3;
 }
 
 message SlotsElem {
@@ -116,27 +126,30 @@ message SlotsLine {
 }
 
 message EnterSlotsRsp {
-    int32 GameId = 1;
+    uint32 GameId = 1;
     repeated SlotsElem elems = 2;   // 元素
     repeated int32 bet = 3;         // 下注额
     repeated int32 level = 4;       // 下注等级
     repeated int32 line = 5;        // 下注线
     repeated SlotsLine lines = 6;   // 中奖线路
+    uint32 uid = 7;
 }
 
 
 // 离开老虎机
 message LeaveSlotsReq {
-    int32 slotsId = 1;
+    uint32 uid = 1;
+    int32 slotsId = 2;
 }
 
 // 老虎机摇奖
 message SlotsSpinReq {
-    int32 uid = 1;
-    int32 gameId = 2;
+    uint32 uid = 1;
+    uint32 gameId = 2;
     int32 bet = 3;      // 下注
     int32 level = 4;    // 级别
     int32 lines = 5;    // 线数
+    int32 gateId = 6;
 }
 
 // Free
@@ -173,6 +186,7 @@ message SlotsSpinRsp {
 message LeaveRoomReq {
     uint32 gateId = 1;
     uint32 roomId = 2;
+    uint32 uid = 3;
 }
 
 // 玩家离开房间
@@ -182,7 +196,7 @@ message LeaveRoomRsp {
 
 // 玩家离线
 message Offline {
-    
+    uint32 uid = 1;
 }
 
 // 开始游戏
@@ -264,10 +278,11 @@ message MultiBroadcast {
 
 // 重连
 message Reconnect {
-    uint32 tempId = 1;
-    uint32 roomId = 2;
-    uint32 hallId = 3;
-    uint32 gateId = 4;
+    uint32 uid = 1;
+    uint32 tempId = 2;
+    uint32 roomId = 3;
+    uint32 hallId = 4;
+    uint32 gateId = 5;
 }
 
 // 测试

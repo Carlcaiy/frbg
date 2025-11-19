@@ -2,52 +2,42 @@ package local
 
 import (
 	"fmt"
-	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
-	"frbg/examples/proto"
 	"frbg/network"
 	"frbg/register"
 	"frbg/timer"
 	"log"
 	"runtime"
-	"time"
 )
 
-type Handle func(*network.Conn, *codec.Message) error
+type Handle func(*network.Message) error
 
 type BaseLocal struct {
-	*network.ServerConfig
+	*network.Poll
 	m_users   map[uint32]interface{}
 	serverMgr *network.ServerMgr
 	m_route   map[uint16]Handle // 路由
 	*timer.TaskCtl
 }
 
-func NewBase(sconf *network.ServerConfig) *BaseLocal {
+func NewBase() *BaseLocal {
 	return &BaseLocal{
-		ServerConfig: sconf,
-		serverMgr:    network.NewServerMgr(),
-		m_route:      make(map[uint16]Handle),
-		TaskCtl:      timer.NewTaskCtl(),
+		serverMgr: network.NewServerMgr(),
+		m_route:   make(map[uint16]Handle),
+		TaskCtl:   timer.NewTaskCtl(),
 	}
+}
+
+func (l *BaseLocal) Attach(poll *network.Poll) {
+	l.Poll = poll
 }
 
 func (l *BaseLocal) Init() {
 	log.Println("base.Init")
-	l.AddRoute(cmd.HeartBeat, l.HeartBeat)
-	l.AddRoute(cmd.Test, l.TestRequest)
-	l.Start(timer.NewLoopTask(time.Second*5, l.TimerHeartBeat))
-}
-
-func (l *BaseLocal) TimerHeartBeat() {
-	log.Println("send tick failed")
 }
 
 // 连接成功的回调
 func (l *BaseLocal) OnConnect(conn *network.Conn) {
-	log.Printf("AddConn new:%+v\n", conn.ServerConfig)
-	l.serverMgr.AddServe(conn.ServerConfig, conn)
 }
 
 func (l *BaseLocal) OnAccept(conn *network.Conn) {
@@ -55,31 +45,6 @@ func (l *BaseLocal) OnAccept(conn *network.Conn) {
 }
 
 func (l *BaseLocal) Close(conn *network.Conn) {
-	l.serverMgr.DelServe(conn.ServerConfig)
-}
-
-func (l *BaseLocal) HeartBeat(conn *network.Conn, msg *codec.Message) error {
-	data := new(proto.HeartBeat)
-	if err := msg.Unpack(data); err != nil {
-		return err
-	}
-	conn.ActiveTime = time.Now().Unix()
-	// log.Println("HeartBeat", data.String())
-	return nil
-}
-
-func (l *BaseLocal) TestRequest(conn *network.Conn, msg *codec.Message) error {
-	data := new(proto.Test)
-	if err := msg.Unpack(data); err != nil {
-		return err
-	}
-
-	b, _ := msg.PackWith(msg.Cmd, &proto.Test{
-		Uid:       data.Uid,
-		StartTime: data.StartTime,
-	})
-	_, err := conn.Write(b)
-	return err
 }
 
 func (l *BaseLocal) Tick() {
@@ -88,19 +53,16 @@ func (l *BaseLocal) Tick() {
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	if _, ok := l.m_route[cmd]; ok {
-		log.Printf("warning: handler.Add cmd:%d\n", cmd)
+		log.Printf("repeated Add cmd:%d\n", cmd)
 	}
 	log.Printf("add route cmd:%d\n", cmd)
 	l.m_route[cmd] = h
 }
 
-func (l *BaseLocal) Route(conn *network.Conn, msg *codec.Message) error {
-	if msg.Cmd != cmd.HeartBeat {
-		log.Println(msg)
-	}
+func (l *BaseLocal) Route(msg *network.Message) error {
 	if handle, ok := l.m_route[msg.Cmd]; ok {
 		defer l.CatchEx()
-		return handle(conn, msg)
+		return handle(msg)
 	} else {
 		return fmt.Errorf("call: not find cmd %d", msg.Cmd)
 	}
@@ -124,23 +86,14 @@ func (l *BaseLocal) SendToGate(gateId uint8, buf []byte) error {
 }
 
 func (l *BaseLocal) SendToSid(serverId uint8, buf []byte, serverType uint8) error {
-	if svr := l.GetServer(serverType, serverId); svr != nil {
-		svr.Write(buf)
-		return nil
-	}
-	return fmt.Errorf("SendToSid: serverType=%d serverId=%d not found", serverType, serverId)
-}
-
-func (l *BaseLocal) GetServer(serverType uint8, serverId uint8) *network.Conn {
-	return l.serverMgr.GetServe(&network.ServerConfig{
-		Addr:       register.Get(uint16(serverType)*100 + uint16(serverId)),
-		ServerType: serverType,
+	conn := l.Poll.GetClient(&network.ServerConfig{
 		ServerId:   serverId,
+		ServerType: serverType,
 	})
-}
-
-func (l *BaseLocal) SendToHall(uid uint32, buf []byte) error {
-	return l.SendModUid(uid, buf, def.ST_Hall)
+	if conn == nil {
+		return fmt.Errorf("error not find server %d", serverId)
+	}
+	return conn.Write(buf)
 }
 
 func (l *BaseLocal) GetUser(uid uint32) interface{} {

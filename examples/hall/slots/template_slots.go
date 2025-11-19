@@ -51,7 +51,7 @@ func GetFuConf() *SlotsConf {
 }
 
 // 获取数据
-func GetSlotsData(uid uint32, gameId int32) *SlotsData {
+func GetSlotsData(uid uint32, gameId uint32) *SlotsData {
 	if value, ok := data.Load(uid); ok {
 		return value.(*SlotsData)
 	}

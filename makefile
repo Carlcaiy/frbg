@@ -3,7 +3,7 @@
 all: redis etcd gate hall game
 
 redis:
-	redis-server config/redis.conf
+	redis-server config/redis.conf &
 
 etcd:
 	etcd > log/etcd.log 2>&1 &

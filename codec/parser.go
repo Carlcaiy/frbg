@@ -44,14 +44,12 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 		return nil, fmt.Errorf("binary unpack error")
 	}
 	p = &Message{}
-	p.DestST = all[2]
-	p.GameID = all[3]
-	p.GateID = all[4]
-	p.UserID = byteOrder.Uint32(all[5:])
-	p.Ver = byteOrder.Uint16(all[9:])
-	p.Type = byteOrder.Uint32(all[11:])
-	p.Cmd = byteOrder.Uint16(all[15:])
-	p.Body = all[17:]
+	p.ServeType = all[2]
+	p.ServeID = all[3]
+	p.Ver = byteOrder.Uint16(all[4:])
+	p.Type = byteOrder.Uint32(all[6:])
+	p.Cmd = byteOrder.Uint16(all[10:])
+	p.Body = all[12:]
 	p.All = all
 	return p, nil
 }
@@ -82,44 +80,40 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 	copy(all, lenBs)
 
 	p = &Message{}
-	p.DestST = all[2]
-	p.GameID = all[3]
-	p.GateID = all[4]
-	p.UserID = byteOrder.Uint32(all[5:])
-	p.Ver = byteOrder.Uint16(all[9:])
-	p.Type = byteOrder.Uint32(all[11:])
-	p.Cmd = byteOrder.Uint16(all[15:])
-	p.Body = all[17:]
+	p.ServeType = all[2]
+	p.ServeID = all[3]
+	p.Ver = byteOrder.Uint16(all[4:])
+	p.Type = byteOrder.Uint32(all[6:])
+	p.Cmd = byteOrder.Uint16(all[10:])
+	p.Body = all[12:]
 	p.All = all
 	return
 }
 
-func TcpWrite(r io.Writer, uid uint32, dest uint8, cmd uint16, pro proto.Message) error {
+func TcpWrite(r io.Writer, dest uint8, cmd uint16, pro proto.Message) error {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return err
 	}
 	msg := Message{
-		UserID: uid,
-		DestST: dest,
-		Cmd:    cmd,
-		Body:   body,
+		ServeType: dest,
+		Cmd:       cmd,
+		Body:      body,
 	}
 	bs := msg.Pack()
 	_, err = r.Write(bs)
 	return err
 }
 
-func Pack(uid uint32, dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
+func Pack(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return nil, err
 	}
 	msg := &Message{
-		UserID: uid,
-		DestST: dest,
-		Cmd:    cmd,
-		Body:   body,
+		ServeType: dest,
+		Cmd:       cmd,
+		Body:      body,
 	}
 	return msg.Pack(), nil
 }

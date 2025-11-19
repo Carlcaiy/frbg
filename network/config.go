@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+var (
+	isWebSocket = false
+)
+
 type ServerConfig struct {
 	Addr       string // 服务地址
 	ServerType uint8  // 服务类型
@@ -28,4 +32,8 @@ func (s *ServerConfig) Svid() uint16 {
 
 func (s *ServerConfig) Equal(other *ServerConfig) bool {
 	return s.ServerType == other.ServerType && s.ServerId == other.ServerId
+}
+
+func Svid(serverType uint8, serverId uint8) uint16 {
+	return uint16(serverType)*100 + uint16(serverId)
 }

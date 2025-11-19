@@ -19,9 +19,9 @@ type Local struct {
 	*local.BaseLocal
 }
 
-func New(st *network.ServerConfig) *Local {
+func New() *Local {
 	route = &Local{
-		BaseLocal: local.NewBase(st),
+		BaseLocal: local.NewBase(),
 	}
 	route.init()
 	return route
@@ -37,26 +37,23 @@ func (l *Local) init() {
 	l.AddRoute(cmd.Test, l.test)
 }
 
-func (l *Local) offline(c *network.Conn, msg *codec.Message) error {
+func (l *Local) offline(msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) test(conn *network.Conn, msg *codec.Message) error {
+func (l *Local) test(msg *network.Message) error {
 	data := new(proto.Test)
 	if err := msg.Unpack(data); err != nil {
 		return err
 	}
 
-	b, _ := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, &proto.Test{
+	return msg.Response(def.ST_User, msg.Cmd, &proto.Test{
 		Uid:       data.Uid,
 		StartTime: data.StartTime,
 	})
-
-	_, err := conn.Write(b)
-	return err
 }
 
-func (l *Local) getGameList(c *network.Conn, msg *codec.Message) error {
+func (l *Local) getGameList(msg *network.Message) error {
 	log.Println("getGameList")
 	req, rsp := new(proto.GetGameListReq), new(proto.GetGameListRsp)
 	if err := msg.Unpack(req); err != nil {
@@ -64,35 +61,35 @@ func (l *Local) getGameList(c *network.Conn, msg *codec.Message) error {
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
-		if errSend := l.SendToGate(msg.GateID, buf); errSend != nil {
-			log.Printf("SendToGate(%d) err:%s", msg.GateID, errSend.Error())
+	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
+		if errSend := l.SendToGate(uint8(req.GateId), buf); errSend != nil {
+			log.Printf("SendToGate(%d) err:%s", req.GateId, errSend.Error())
 		}
 	}
 	return nil
 }
 
-func (l *Local) getRoomList(c *network.Conn, msg *codec.Message) error {
+func (l *Local) getRoomList(msg *network.Message) error {
 	log.Println("getRoomList")
 	req, rsp := new(proto.GetRoomListReq), new(proto.GetRoomListRsp)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 	rsp.Rooms = db.GetRoomList(req.GameId)
-	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
-		l.SendToGate(msg.GateID, buf)
+	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
+		l.SendToGate(uint8(req.GateId), buf)
 		// c.Write(buf)
 	}
 	return nil
 }
 
 // 请求进入老虎机
-func (l *Local) enterSlots(c *network.Conn, msg *codec.Message) error {
+func (l *Local) enterSlots(msg *network.Message) error {
 	req := new(proto.EnterSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	conf := slots.GetSlotsData(msg.UserID, req.GameId)
+	conf := slots.GetSlotsData(req.Uid, req.GameId)
 	if conf == nil {
 		return nil
 	}
@@ -104,21 +101,21 @@ func (l *Local) enterSlots(c *network.Conn, msg *codec.Message) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
 		// c.Write(buf)
-		l.SendToGate(msg.GateID, buf)
+		l.SendToGate(uint8(req.GateId), buf)
 	}
 	return nil
 }
 
 // 老虎机请求摇奖
-func (l *Local) spinSlots(c *network.Conn, msg *codec.Message) error {
+func (l *Local) spinSlots(msg *network.Message) error {
 	req := new(proto.SlotsSpinReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
 
-	slotsData := slots.GetSlotsData(msg.UserID, req.GameId)
+	slotsData := slots.GetSlotsData(req.Uid, req.GameId)
 	if slotsData == nil {
 		return fmt.Errorf("sltos %d not find", req.GameId)
 	}
@@ -130,26 +127,23 @@ func (l *Local) spinSlots(c *network.Conn, msg *codec.Message) error {
 	if err != nil {
 		return err
 	}
-	if buf, err := codec.Pack(msg.UserID, def.ST_User, msg.Cmd, rsp); err == nil {
+	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
 		// c.Write(buf)
-		l.SendToGate(msg.GateID, buf)
+		l.SendToGate(uint8(req.GateId), buf)
 	}
 	return nil
 }
 
 // 离开老虎机
-func (l *Local) leaveSlots(c *network.Conn, msg *codec.Message) error {
+func (l *Local) leaveSlots(msg *network.Message) error {
 	req := new(proto.LeaveSlotsReq)
 	if err := msg.Unpack(req); err != nil {
 		return err
 	}
-	slots.DelSlotsData(msg.UserID)
+	slots.DelSlotsData(req.Uid)
 	return nil
 }
 
 func (l *Local) Close(conn *network.Conn) {
 	l.BaseLocal.Close(conn)
-	if conn.ServerConfig == nil {
-		return
-	}
 }

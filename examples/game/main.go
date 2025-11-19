@@ -26,7 +26,7 @@ func main() {
 	pollConfig := &network.PollConfig{
 		MaxConn: 10000,
 	}
-	poll := network.NewPoll(serverConfig, pollConfig, route.NewLocal(serverConfig))
+	poll := network.NewPoll(serverConfig, pollConfig, route.NewLocal())
 	poll.Start()
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)

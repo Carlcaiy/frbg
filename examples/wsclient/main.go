@@ -65,8 +65,7 @@ func must(e error) {
 
 func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
 	log.Printf("svrt:%d scmd:%d req:%s", svrt, scmd, req)
-	bs := codec.NewMessage(uint32(uid), svrt, scmd, 1, req).Pack()
-	if err = codec.WsWrite(conn, bs); err != nil {
+	if err = codec.WsWrite(conn, codec.NewMessage(svrt, scmd, req).Pack()); err != nil {
 		return err
 	}
 	log.Printf("start read scmd:%d", scmd)
@@ -78,9 +77,6 @@ func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflec
 	err = msg.Unpack(rsp)
 	if err != nil {
 		return err
-	}
-	if cmd.Login == scmd {
-		uid = int(msg.UserID)
 	}
 	bsi, _ := json.MarshalIndent(rsp, "", "  ")
 	log.Println(string(bsi))
