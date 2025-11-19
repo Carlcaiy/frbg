@@ -61,10 +61,8 @@ func (l *Local) getGameList(msg *network.Message) error {
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
-		if errSend := l.SendToGate(uint8(req.GateId), buf); errSend != nil {
-			log.Printf("SendToGate(%d) err:%s", req.GateId, errSend.Error())
-		}
+	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
+		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
 }
@@ -76,9 +74,8 @@ func (l *Local) getRoomList(msg *network.Message) error {
 		return err
 	}
 	rsp.Rooms = db.GetRoomList(req.GameId)
-	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
-		l.SendToGate(uint8(req.GateId), buf)
-		// c.Write(buf)
+	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
+		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
 }
@@ -101,9 +98,8 @@ func (l *Local) enterSlots(msg *network.Message) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
-		// c.Write(buf)
-		l.SendToGate(uint8(req.GateId), buf)
+	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
+		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
 }
@@ -127,9 +123,8 @@ func (l *Local) spinSlots(msg *network.Message) error {
 	if err != nil {
 		return err
 	}
-	if buf, err := codec.Pack(def.ST_User, msg.Cmd, rsp); err == nil {
-		// c.Write(buf)
-		l.SendToGate(uint8(req.GateId), buf)
+	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
+		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
 }

@@ -8,34 +8,39 @@ import (
 
 const HeartBeat uint32 = 0x1 // 心跳包
 
-type Message struct {
-	ServeType uint8  // 目标服务TYPE
-	ServeID   uint8  // 游戏ID
-	Ver       uint16 // 版本
-	Type      uint32 // 保留字段
-	Cmd       uint16 // cmd
-	Body      []byte // cmd + []byte
-	All       []byte
+type Header struct {
+	Len uint16 // 消息长度
 }
 
-func NewMessage(st uint8, cmd uint16, pro proto.Message) *Message {
+type Message struct {
+	DestType uint8  // 目标服务类型
+	DestId   uint8  // 目标服务ID
+	Ver      uint16 // 版本
+	Type     uint32 // 保留字段
+	Cmd      uint16 // cmd
+	Body     []byte // cmd + []byte
+	All      []byte
+}
+
+func NewMessage(serverType uint8, serveID uint8, cmd uint16, pro proto.Message) *Message {
 	body, _ := proto.Marshal(pro)
 	return &Message{
-		ServeType: st,
-		Body:      body,
-		Cmd:       cmd,
+		DestType: serverType,
+		DestId:   serveID,
+		Body:     body,
+		Cmd:      cmd,
 	}
 }
 
 func (m *Message) String() string {
-	return fmt.Sprintf("Serve:%d ServeID:%d Ver:%d Hold:%d Cmd:%d Len:%d", m.ServeType, m.ServeID, m.Ver, m.Type, m.Cmd, len(m.All))
+	return fmt.Sprintf("Serve:%d ServeID:%d Ver:%d Hold:%d Cmd:%d Len:%d", m.DestType, m.DestId, m.Ver, m.Type, m.Cmd, len(m.All))
 }
 
 func (m *Message) Pack() []byte {
 	bs := make([]byte, HeaderLen+len(m.Body))
 	byteOrder.PutUint16(bs, HeaderLen+uint16(len(m.Body)))
-	bs[2] = m.ServeType
-	bs[3] = m.ServeID
+	bs[2] = m.DestType
+	bs[3] = m.DestId
 	byteOrder.PutUint16(bs[4:], m.Ver)
 	byteOrder.PutUint32(bs[6:], m.Type)
 	byteOrder.PutUint16(bs[10:], m.Cmd)

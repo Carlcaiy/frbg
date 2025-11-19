@@ -74,7 +74,7 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	must(err)
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
-	return &Poll{
+	poll := &Poll{
 		fdConns:    make(map[int]*Conn),
 		cliConns:   make(map[uint16]*Conn),
 		epollFd:    epollFd,
@@ -85,19 +85,69 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 		queue:      new(esqueue),
 		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
 	}
+	handle.Attach(poll)
+	return poll
 }
 
-// 添加连接数原子操作
-func (p *Poll) getConnNum() int {
-	return int(atomic.LoadInt64(&p.connNum))
-}
+func (p *Poll) Start() {
 
-func (p *Poll) incrConnNum() {
-	atomic.AddInt64(&p.connNum, 1)
-}
+	conf := p.ServerConf
+	if conf == nil || conf.Addr == "" {
+		log.Println("error addr", conf.Addr)
+		return
+	}
 
-func (p *Poll) decrConnNum() {
-	atomic.AddInt64(&p.connNum, -1)
+	// 初始化配置
+	if p.pollConfig.HeartBeat == 0 {
+		p.pollConfig.HeartBeat = 60
+	}
+	// 如果没有设置最大连接数，默认100
+	if p.pollConfig.MaxConn == 0 {
+		p.pollConfig.MaxConn = 100
+	}
+
+	// 注册etcd
+	if p.pollConfig.Etcd {
+		register.Put(conf.Svid(), conf.Addr)
+	}
+
+	// 是否为websocket
+	if conf.ServerType == def.ST_WsGate {
+		p.upgrader = &ws.Upgrader{
+			ReadBufferSize:  1024 * 64,
+			WriteBufferSize: 1024 * 64,
+			OnHeader: func(key, value []byte) (err error) {
+				log.Printf("non-websocket header: %q=%q", key, value)
+				return
+			},
+			Protocol: func(b []byte) bool {
+				log.Println(string(b))
+				return true
+			},
+		}
+	}
+
+	// 监听tcp
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
+	reuseport.Listen("tcp", conf.Addr)
+	must(err)
+	p.listenFd = listenFD(listener)
+	p.listener = listener
+	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
+	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
+
+	// 添加定时事件
+	if conf.ServerType != def.ST_WsGate {
+		timer.AddTrigger(func() {
+			p.Trigger(def.ET_Timer)
+		})
+	}
+
+	// 开始轮询
+	wg.Add(1)
+	go p.LoopRun()
+	go p.ConnCheck()
+	go p.ConnTick()
 }
 
 // 优化关闭函数
@@ -325,8 +375,11 @@ func (p *Poll) Add(conn *net.TCPConn) error {
 
 	// 5. 创建连接对象并存储
 	c := &Conn{
-		conn: conn,
-		Fd:   fd,
+		poll:       p,
+		conn:       conn,
+		Fd:         fd,
+		ActiveTime: time.Now().Unix(),
+		FromUser:   true,
 	}
 
 	// 6. 线程安全地更新连接映射
@@ -379,6 +432,7 @@ func (p *Poll) ConnCheck() {
 		timeoutFds := make([]int, 0, 64)
 		for fd, conn := range p.fdConns {
 			if now-conn.ActiveTime > timeoutDuration {
+				log.Printf("ConnCheck timeout fd:%d active_time:%d timeout_duration:%d now:%d", fd, conn.ActiveTime, timeoutDuration, now)
 				timeoutFds = append(timeoutFds, fd)
 			}
 		}
@@ -398,75 +452,24 @@ func (p *Poll) ConnTick() {
 	for range p.heartBeat.C {
 		// 获取读锁，复制连接列表
 		p.mu.RLock()
-		conns := make([]*Conn, 0, len(p.cliConns))
+		clients := make([]*Conn, 0, len(p.cliConns))
 		for _, conn := range p.cliConns {
-			conns = append(conns, conn)
+			clients = append(clients, conn)
 		}
 		p.mu.RUnlock()
 
 		// 发送心跳
-		for _, conn := range conns {
-			msg := codec.NewMessage(0, 0, nil)
+		for _, cli := range clients {
+			msg := codec.NewMessage(cli.conf.ServerType, cli.conf.ServerId, 0, nil)
 			msg.Type = codec.HeartBeat
 
-			if err := conn.Write(msg.Bytes()); err != nil {
-				log.Printf("ConnTick Write error: fd:%d err:%s", conn.Fd, err.Error())
+			if err := cli.Write(msg); err != nil {
+				log.Printf("ConnTick Write error: fd:%d err:%s", cli.Fd, err.Error())
 				// 使用统一的连接清理机制
-				p.Del(conn.Fd)
+				p.Del(cli.Fd)
 			}
 		}
 	}
-}
-
-func (p *Poll) Start() {
-	conf := p.ServerConf
-	if conf == nil || conf.Addr == "" {
-		log.Println("error addr", conf.Addr)
-		return
-	}
-
-	// 注册etcd
-	if p.pollConfig.Etcd {
-		register.Put(conf.Svid(), conf.Addr)
-	}
-
-	// 是否为websocket
-	if conf.ServerType == def.ST_WsGate {
-		p.upgrader = &ws.Upgrader{
-			ReadBufferSize:  1024 * 64,
-			WriteBufferSize: 1024 * 64,
-			OnHeader: func(key, value []byte) (err error) {
-				log.Printf("non-websocket header: %q=%q", key, value)
-				return
-			},
-			Protocol: func(b []byte) bool {
-				log.Println(string(b))
-				return true
-			},
-		}
-	}
-
-	// 监听tcp
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
-	reuseport.Listen("tcp", conf.Addr)
-	must(err)
-	p.listenFd = listenFD(listener)
-	p.listener = listener
-	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
-	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
-
-	// 添加定时事件
-	if conf.ServerType != def.ST_WsGate {
-		timer.AddTrigger(func() {
-			p.Trigger(def.ET_Timer)
-		})
-	}
-
-	// 开始轮询
-	wg.Add(1)
-	go p.LoopRun()
-	go p.ConnCheck()
-	go p.ConnTick()
 }
 
 func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
@@ -482,9 +485,11 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 		return nil, err
 	}
 	ptr := &Conn{
-		conn: conn,
-		conf: conf,
-		Fd:   fd,
+		poll:       p,
+		conn:       conn,
+		conf:       conf,
+		Fd:         fd,
+		ActiveTime: time.Now().Unix(),
 	}
 	p.fdConns[fd] = ptr
 	p.handle.OnConnect(ptr)
@@ -494,6 +499,19 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 func (p *Poll) Trigger(tri interface{}) {
 	p.queue.Add(tri)
 	unix.Write(p.eventFd, []byte{1, 1, 1, 1, 1, 1, 1, 1})
+}
+
+// 添加连接数原子操作
+func (p *Poll) getConnNum() int {
+	return int(atomic.LoadInt64(&p.connNum))
+}
+
+func (p *Poll) incrConnNum() {
+	atomic.AddInt64(&p.connNum, 1)
+}
+
+func (p *Poll) decrConnNum() {
+	atomic.AddInt64(&p.connNum, -1)
 }
 
 // 使用SyscallConn替代反射获取文件描述符
@@ -552,6 +570,12 @@ func (poll *Poll) GetClient(conf *ServerConfig) *Conn {
 		return conn
 	}
 	poll.mu.RUnlock()
+
+	addr := register.Get(conf.Svid())
+	if addr == "" {
+		return nil
+	}
+	conf.Addr = addr
 
 	if conn, err := poll.Connect(conf); err == nil {
 		poll.mu.Lock()

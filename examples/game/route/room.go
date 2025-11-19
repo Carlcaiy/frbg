@@ -123,8 +123,8 @@ func (r *Room) Reconnect(uid uint32, gateId uint8) {
 
 			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
-				bs, _ := codec.Pack(def.ST_User, cmd.Round, &proto.Empty{})
-				r.l.SendToGate(u.gateId, bs)
+				msg := codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.Round, &proto.Empty{})
+				r.l.Send(msg)
 			}
 			return
 		}
@@ -201,7 +201,7 @@ func (r *Room) Start() {
 		if u.uid == zhuang.uid {
 			canOp = can_op
 		}
-		bs, _ := codec.Pack(def.ST_User, cmd.GameFaPai, &proto.FaMj{
+		msg := codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.GameFaPai, &proto.FaMj{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
 			Touzi:  r.touzi,
@@ -209,7 +209,7 @@ func (r *Room) Start() {
 			Laizi:  int32(r.laizi),
 			CanOp:  canOp,
 		})
-		r.l.SendToGate(zhuang.gateId, bs)
+		r.l.Send(msg)
 	}
 }
 
@@ -318,8 +318,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 					opt.CanOp = canOp
 				}
 			}
-			bs, _ := codec.Pack(def.ST_User, cmd.OptGame, opt)
-			r.l.SendToGate(u.gateId, bs)
+			r.l.Send(codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.OptGame, opt))
 		}
 	}
 	// 如果有其他人可以操作，等待其他玩家操作
@@ -342,8 +341,8 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 				opt.Mj = int32(moPai)
 				opt.CanOp = u.CanOpSelf()
 			}
-			bs, _ := codec.Pack(def.ST_User, cmd.BcOpt, opt)
-			r.l.SendToGate(u.gateId, bs)
+			msg := codec.NewMessage(def.ST_User, uint8(turnUser.gateId), cmd.BcOpt, opt)
+			r.l.Send(msg)
 		}
 	}
 
@@ -393,21 +392,34 @@ func (r *Room) gameOver(huUser *User) {
 		Hands:  huUser.Mj(),
 		HuType: ht,
 	})
-	buf, _ := codec.Pack(def.ST_User, cmd.GameOver, settle)
-	r.SendAll(buf)
+	msg := codec.NewMessage(def.ST_User, huUser.gateId, cmd.GameOver, settle)
+	r.SendAll(msg)
 	r.playing = false
 }
 
-func (r *Room) SendOther(uid uint32, bs []byte) {
+func (r *Room) SendOther(uid uint32, msg *codec.Message) {
 	for _, u := range r.Users {
 		if u.uid != uid {
-			r.l.SendToGate(u.gateId, bs)
+			r.l.Send(msg)
 		}
 	}
 }
 
-func (r *Room) SendAll(bs []byte) {
+func (r *Room) SendAll(msg *codec.Message) {
+	wraper := make(map[uint32]*proto.MultiBroadcast)
 	for _, u := range r.Users {
-		r.l.SendToGate(u.gateId, bs)
+		data := wraper[uint32(u.gateId)]
+		if data == nil {
+			data = &proto.MultiBroadcast{
+				Uids: []uint32{u.uid},
+				Data: msg.Pack(),
+			}
+			wraper[uint32(u.gateId)] = data
+		} else {
+			data.Uids = append(data.Uids, u.uid)
+		}
+	}
+	for gateId, data := range wraper {
+		r.l.Send(codec.NewMessage(def.ST_User, uint8(gateId), cmd.MultiBC, data))
 	}
 }

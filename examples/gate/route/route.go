@@ -19,7 +19,7 @@ type Local struct {
 func New() *Local {
 	l := &Local{
 		BaseLocal: local.NewBase(),
-		clients:   new(Clients),
+		clients:   NewClients(),
 	}
 	l.Init()
 	return l
@@ -33,16 +33,16 @@ func (l *Local) Init() {
 }
 
 func (l *Local) Route(msg *network.Message) error {
-	switch msg.ServeType {
+	switch msg.DestType {
 	// 优先调用与本服务
 	case def.ST_WsGate, def.ST_Gate:
 		return l.BaseLocal.Route(msg)
 	// 大厅多个服务
 	case def.ST_Hall:
-		return l.SendToSid(msg.ServeID, msg.Bytes(), def.ST_Hall)
+		return l.Send(msg.Message)
 	// 游戏单个服务
 	case def.ST_Game:
-		return l.SendToSid(msg.ServeID, msg.Bytes(), def.ST_Game)
+		return l.Send(msg.Message)
 	}
 
 	return fmt.Errorf("without cmd %d route", msg.Cmd)
@@ -51,6 +51,7 @@ func (l *Local) Route(msg *network.Message) error {
 func (l *Local) login(msg *network.Message) error {
 	req := new(proto.LoginReq)
 	if err := msg.Unpack(req); err != nil {
+		log.Printf("login unpack error:%s", err.Error())
 		return err
 	}
 	log.Println(req)
@@ -58,6 +59,7 @@ func (l *Local) login(msg *network.Message) error {
 	if req.Uid == 0 {
 		uid, err := db.GenUserId()
 		if err != nil {
+			log.Printf("GenUserId err:%s", err.Error())
 			return msg.Response(def.ST_User, cmd.Login, &proto.LoginRsp{
 				Ret: 1,
 			})
@@ -77,13 +79,13 @@ func (l *Local) login(msg *network.Message) error {
 		if conn := l.clients.GetClient(req.Uid); conn != msg.GetClient() {
 			if conn != nil {
 				log.Println("给已经登录的连接推送挤号信息")
-				conn.Send(req.Uid, def.ST_User, cmd.GateKick, &proto.GateKick{
+				conn.Send(def.ST_User, cmd.GateKick, &proto.GateKick{
 					Type: proto.KickType_Squeeze,
 				})
 			}
 			l.clients.SetClient(req.Uid, msg.GetClient())
-			if err := db.SetGate(req.Uid, l.ServerConf.ServerId); err != nil {
-				log.Printf("db.SetGate(%d, %d) error:%s", req.Uid, l.ServerConf.ServerId, err.Error())
+			if err := db.SetGate(req.Uid, msg.DestId); err != nil {
+				log.Printf("db.SetGate(%d, %d) error:%s", req.Uid, msg.DestId, err.Error())
 				return nil
 			}
 		} else {
@@ -95,7 +97,8 @@ func (l *Local) login(msg *network.Message) error {
 			return err
 		}
 	}
-	return msg.GetClient().Send(0, 0, msg.Cmd, &proto.LoginRsp{
+	log.Printf("login uid:%d, gate:%d", info.Uid, msg.DestId)
+	return msg.Response(0, msg.Cmd, &proto.LoginRsp{
 		Ret:      0,
 		Nick:     info.Nick,
 		Uid:      info.Uid,
@@ -112,7 +115,7 @@ func (l *Local) multibc(msg *network.Message) error {
 	}
 	for _, uid := range req.Uids {
 		if client := l.clients.GetClient(uid); client != nil {
-			client.Write(req.Data)
+			client.Write(msg.Message)
 		}
 	}
 	return nil
@@ -126,7 +129,7 @@ func (l *Local) logout(msg *network.Message) error {
 	}
 	client := l.clients.GetClient(req.Uid)
 	if client != nil {
-		msg.GetClient().Send(0, def.ST_User, msg.Cmd, &proto.CommonRsp{
+		msg.GetClient().Send(def.ST_User, msg.Cmd, &proto.CommonRsp{
 			Code: proto.ErrorCode_Success,
 		})
 		l.clients.DelClient(req.Uid)

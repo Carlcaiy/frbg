@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	isWebSocket = false
-)
-
 type ServerConfig struct {
 	Addr       string // 服务地址
 	ServerType uint8  // 服务类型

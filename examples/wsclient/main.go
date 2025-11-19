@@ -17,7 +17,7 @@ import (
 )
 
 var uid int = 100005
-var gateid int = 6667
+var port int = 6666
 var conn net.Conn
 var err error
 
@@ -27,10 +27,10 @@ func init() {
 
 func main() {
 	flag.IntVar(&uid, "u", uid, "-u 123")
-	flag.IntVar(&gateid, "p", 6667, "-p 8080")
+	flag.IntVar(&port, "p", 6666, "-p 8080")
 	flag.Parse()
 
-	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", gateid))
+	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", port))
 	if err != nil {
 		must(err)
 		return
@@ -39,22 +39,11 @@ func main() {
 		conn.Close()
 	}()
 
-	must(rpc(def.ST_Gate, cmd.Login, &proto.LoginReq{Password: "123123", From: 1, GateId: 1}, &proto.LoginRsp{}))
-	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{}, &proto.GetGameListRsp{}))
+	must(rpc(def.ST_Gate, cmd.Login, &proto.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1}, &proto.LoginRsp{}))
+	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{Uid: uint32(uid)}, &proto.GetGameListRsp{}))
 	getRoomListRsp := &proto.GetRoomListRsp{}
-	must(rpc(def.ST_Hall, cmd.GetRoomList, &proto.GetRoomListReq{GameId: def.MahjongBanbisan}, getRoomListRsp))
-	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &proto.GetRoomListRsp{}))
-	// slots := &proto.EnterSlotsRsp{}
-	// must(rpc(def.ST_Hall, cmd.EnterSlots, &proto.EnterSlotsReq{GameId: def.SlotsFu}, slots))
-
-	// for {
-	// 	// must(rpc(def.ST_Hall, cmd.Test, &proto.Test{Uid: uint32(uid), StartTime: time.Now().Unix()}, &proto.Test{}))
-	// 	rsp := &proto.SlotsSpinRsp{}
-	// 	must(rpc(def.ST_Hall, cmd.SpinSlots, &proto.SlotsSpinReq{Uid: int32(uid), GameId: def.SlotsFu, Bet: slots.Bet[0], Level: slots.Level[0]}, rsp))
-	// 	bs, _ := json.MarshalIndent(rsp, "", "  ")
-	// 	log.Println(string(bs))
-	// 	time.Sleep(time.Second)
-	// }
+	must(rpc(def.ST_Hall, cmd.GetRoomList, &proto.GetRoomListReq{Uid: uint32(uid), GameId: def.MahjongBanbisan}, getRoomListRsp))
+	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &proto.GetRoomListRsp{}))
 }
 
 func must(e error) {
@@ -65,7 +54,7 @@ func must(e error) {
 
 func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
 	log.Printf("svrt:%d scmd:%d req:%s", svrt, scmd, req)
-	if err = codec.WsWrite(conn, codec.NewMessage(svrt, scmd, req).Pack()); err != nil {
+	if err = codec.WsWrite(conn, codec.NewMessage(svrt, 1, scmd, req)); err != nil {
 		return err
 	}
 	log.Printf("start read scmd:%d", scmd)

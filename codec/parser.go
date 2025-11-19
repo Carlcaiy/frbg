@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	HeaderLen = 17
+	HeaderLen = 12
 )
 
 // 封包
@@ -44,8 +44,8 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 		return nil, fmt.Errorf("binary unpack error")
 	}
 	p = &Message{}
-	p.ServeType = all[2]
-	p.ServeID = all[3]
+	p.DestType = all[2]
+	p.DestId = all[3]
 	p.Ver = byteOrder.Uint16(all[4:])
 	p.Type = byteOrder.Uint32(all[6:])
 	p.Cmd = byteOrder.Uint16(all[10:])
@@ -54,8 +54,8 @@ func WsRead(r io.ReadWriter) (p *Message, err error) {
 	return p, nil
 }
 
-func WsWrite(r io.ReadWriter, bs []byte) error {
-	return wsutil.WriteServerBinary(r, bs)
+func WsWrite(r io.ReadWriter, msg *Message) error {
+	return wsutil.WriteServerBinary(r, msg.Pack())
 }
 
 func TcpRead(r io.Reader) (p *Message, err error) {
@@ -80,8 +80,8 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 	copy(all, lenBs)
 
 	p = &Message{}
-	p.ServeType = all[2]
-	p.ServeID = all[3]
+	p.DestType = all[2]
+	p.DestId = all[3]
 	p.Ver = byteOrder.Uint16(all[4:])
 	p.Type = byteOrder.Uint32(all[6:])
 	p.Cmd = byteOrder.Uint16(all[10:])
@@ -90,18 +90,8 @@ func TcpRead(r io.Reader) (p *Message, err error) {
 	return
 }
 
-func TcpWrite(r io.Writer, dest uint8, cmd uint16, pro proto.Message) error {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return err
-	}
-	msg := Message{
-		ServeType: dest,
-		Cmd:       cmd,
-		Body:      body,
-	}
-	bs := msg.Pack()
-	_, err = r.Write(bs)
+func TcpWrite(r io.Writer, msg *Message) error {
+	_, err := r.Write(msg.Pack())
 	return err
 }
 
@@ -111,9 +101,9 @@ func Pack(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 		return nil, err
 	}
 	msg := &Message{
-		ServeType: dest,
-		Cmd:       cmd,
-		Body:      body,
+		DestType: dest,
+		Cmd:      cmd,
+		Body:     body,
 	}
 	return msg.Pack(), nil
 }

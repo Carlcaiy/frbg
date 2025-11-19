@@ -2,6 +2,7 @@ package network
 
 import (
 	"frbg/codec"
+	"frbg/def"
 	"log"
 	"net"
 	"time"
@@ -16,7 +17,7 @@ type Conn struct {
 	Fd         int           // 文件描述符
 	ActiveTime int64         // 活跃时间
 	Uid        uint32        // 玩家
-	payload    []byte        // 数据包
+	FromUser   bool          // 来源客户端
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
@@ -30,17 +31,22 @@ func (c *Conn) Read() (*codec.Message, error) {
 		c.poll.Del(c.Fd)
 		return nil, err
 	}
-	if isWebSocket {
+	if c.poll.ServerConf.ServerType == def.ST_WsGate {
 		return codec.WsRead(c.conn)
 	}
 
 	return codec.TcpRead(c.conn)
 }
 
-func (c *Conn) Write(msg []byte) error {
+func (c *Conn) Write(msg *codec.Message) error {
 	err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
 	if err == nil {
-		_, err = c.conn.Write(msg)
+		// 如果是用户连接，只能通过ws发送
+		if msg.DestType == def.ST_WsGate || c.FromUser {
+			err = codec.WsWrite(c.conn, msg)
+		} else {
+			err = codec.TcpWrite(c.conn, msg)
+		}
 	}
 	if err != nil {
 		log.Printf("Write error: %s", err.Error())
@@ -50,18 +56,18 @@ func (c *Conn) Write(msg []byte) error {
 	return err
 }
 
-func (c *Conn) Send(uid uint32, dest uint8, cmd uint16, pro proto.Message) error {
+func (c *Conn) Send(dest uint8, cmd uint16, pro proto.Message) error {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return err
 	}
 	msg := &codec.Message{
-		ServeType: dest,
-		Cmd:       cmd,
-		Body:      body,
+		DestType: dest,
+		Cmd:      cmd,
+		Body:     body,
 	}
 
-	return c.Write(msg.Pack())
+	return c.Write(msg)
 }
 
 func (c *Conn) Close() error {
@@ -97,9 +103,9 @@ func (r *Message) Response(dest uint8, cmd uint16, pro proto.Message) error {
 		return err
 	}
 	msg := &codec.Message{
-		ServeType: dest,
-		Cmd:       cmd,
-		Body:      body,
+		DestType: dest,
+		Cmd:      cmd,
+		Body:     body,
 	}
-	return r.conn.Write(msg.Pack())
+	return r.conn.Write(msg)
 }

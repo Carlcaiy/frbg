@@ -38,8 +38,8 @@ func main() {
 			var c int = 0
 			req := func(servetType def.ServerType) {
 				msg := &codec.Message{
-					ServeType: uint8(servetType),
-					Cmd:       cmd.Test,
+					DestType: uint8(servetType),
+					Cmd:      cmd.Test,
 				}
 				bs, _ := msg.PackWith(cmd.Test, &proto.Test{
 					Uid:       uid,
