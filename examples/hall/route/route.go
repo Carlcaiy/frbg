@@ -34,23 +34,10 @@ func (l *Local) init() {
 	l.AddRoute(cmd.EnterSlots, l.enterSlots)
 	l.AddRoute(cmd.SpinSlots, l.spinSlots)
 	l.AddRoute(cmd.LeaveSlots, l.leaveSlots)
-	l.AddRoute(cmd.Test, l.test)
 }
 
 func (l *Local) offline(msg *network.Message) error {
 	return nil
-}
-
-func (l *Local) test(msg *network.Message) error {
-	data := new(proto.Test)
-	if err := msg.Unpack(data); err != nil {
-		return err
-	}
-
-	return msg.Response(def.ST_User, msg.Cmd, &proto.Test{
-		Uid:       data.Uid,
-		StartTime: data.StartTime,
-	})
 }
 
 func (l *Local) getGameList(msg *network.Message) error {
@@ -61,10 +48,7 @@ func (l *Local) getGameList(msg *network.Message) error {
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
-		log.Printf("Send() err:%s", errSend.Error())
-	}
-	return nil
+	return msg.Response(msg.Cmd, rsp)
 }
 
 func (l *Local) getRoomList(msg *network.Message) error {

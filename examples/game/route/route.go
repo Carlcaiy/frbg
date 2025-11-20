@@ -89,7 +89,7 @@ func (l *Local) enterRoom(msg *network.Message) error {
 	}
 	l.users[req.Uid] = room
 	room.AddUser(req.Uid, uint8(req.GateId))
-	msg.Response(0, msg.Cmd, rsp)
+	msg.Response(msg.Cmd, rsp)
 	if room.Full() {
 		room.Start()
 	}
@@ -111,7 +111,7 @@ func (l *Local) leaveRoom(msg *network.Message) error {
 		return nil
 	}
 	room.DelUser(req.Uid)
-	msg.Response(0, msg.Cmd, rsp)
+	msg.Response(msg.Cmd, rsp)
 	return nil
 }
 

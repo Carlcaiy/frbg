@@ -1,109 +1,214 @@
 package codec
 
 import (
-	"encoding/binary"
 	"fmt"
-	"frbg/def"
 	"io"
+	"log"
+	"sync/atomic"
+	"time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"google.golang.org/protobuf/proto"
 )
 
+// 协议相关常量
 const (
-	HeaderLen = 12
+	// 最大消息长度 16MB
+	MaxMessageSize = 65535
+
+	// 默认心跳间隔
+	DefaultHeartBeatInterval = 30 * time.Second
 )
 
-// 封包
-// len + dest + destid + gate + ver + uid + hold + cmd + data
-// 2  +  1   +   1   +   1   +  2  +  4  +   4 +   2 +  data
+// Parser 消息解析器
+var seq uint32
 
-var byteOrder binary.ByteOrder = binary.BigEndian
-
-func Read(r io.ReadWriter, st uint8) (p *Message, err error) {
-	if st == def.ST_WsGate {
-		return WsRead(r)
-	}
-	return TcpRead(r)
-}
-
-func WsRead(r io.ReadWriter) (p *Message, err error) {
+// WsRead WebSocket消息读取
+func WsRead(r io.ReadWriter) (*Message, error) {
 	all, opCode, err := wsutil.ReadData(r, ws.StateClientSide)
+	if err != nil {
+		return nil, fmt.Errorf("websocket read error: %w", err)
+	}
+
 	if opCode == ws.OpClose {
-		return nil, err
+		return nil, fmt.Errorf("websocket connection closed")
 	}
-	if err != nil {
-		return nil, err
+
+	if len(all) < HeaderLen {
+		return nil, fmt.Errorf("message too short: %d < %d", len(all), HeaderLen)
 	}
-	length := byteOrder.Uint16(all[:2])
-	if int(length) != len(all) {
-		return nil, fmt.Errorf("binary unpack len error")
+
+	msg := AcquireMessage()
+
+	// 解析头部
+	msg.MagicNumber = all[OffsetMagic]
+	if msg.MagicNumber != magicNumber {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("invalid magic number: %02X", msg.MagicNumber)
 	}
-	if length < HeaderLen {
-		return nil, fmt.Errorf("binary unpack error")
+
+	msg.Version = all[OffsetVersion]
+	msg.Flags = all[OffsetFlags]
+	msg.DestType = all[OffsetDestType]
+	msg.DestId = all[OffsetDestId]
+	msg.Seq = byteOrder.Uint16(all[OffsetSeq:])
+	msg.Timestamp = byteOrder.Uint32(all[OffsetTimestamp:])
+	msg.Len = byteOrder.Uint16(all[OffsetLen:])
+	// 检查消息长度
+	if msg.Len > MaxMessageSize {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("message too large: %d > %d", msg.Len, MaxMessageSize)
 	}
-	p = &Message{}
-	p.DestType = all[2]
-	p.DestId = all[3]
-	p.Ver = byteOrder.Uint16(all[4:])
-	p.Type = byteOrder.Uint32(all[6:])
-	p.Cmd = byteOrder.Uint16(all[10:])
-	p.Body = all[12:]
-	p.All = all
-	return p, nil
+
+	msg.CheckSum = byteOrder.Uint16(all[OffsetCheckSum:])
+
+	// 解析命令字和负载
+	if len(all) > HeaderLen {
+		msg.Cmd = byteOrder.Uint16(all[HeaderLen:])
+		if len(all) > HeaderLen+2 {
+			msg.Payload = all[HeaderLen+2:]
+		}
+	}
+
+	// 验证校验和
+	expectedCheckSum := msg.calculateCheckSum()
+	if msg.CheckSum != expectedCheckSum {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("checksum mismatch: expected %04X, got %04X", expectedCheckSum, msg.CheckSum)
+	}
+
+	msg.All = all
+	return msg, nil
 }
 
+// WsWrite WebSocket消息写入
 func WsWrite(r io.ReadWriter, msg *Message) error {
-	return wsutil.WriteServerBinary(r, msg.Pack())
+	if msg == nil {
+		return fmt.Errorf("nil message")
+	}
+
+	data := msg.Pack()
+	log.Printf("send msg:%s", msg.String())
+	return wsutil.WriteServerBinary(r, data)
 }
 
-func TcpRead(r io.Reader) (p *Message, err error) {
-	lenBs := make([]byte, 2)
-	// 长度
-	_, err = io.ReadFull(r, lenBs[:2])
-	if err != nil {
-		return nil, err
+// TcpRead TCP消息读取
+func TcpRead(r io.Reader) (*Message, error) {
+	// 先读取头部
+	headerBuf := make([]byte, HeaderLen)
+	if _, err := io.ReadFull(r, headerBuf); err != nil {
+		return nil, fmt.Errorf("read header failed: %w", err)
 	}
 
-	// 检测长度
-	len := byteOrder.Uint16(lenBs[:2])
-	if len < HeaderLen {
-		return nil, fmt.Errorf("parse error len:%d", len)
+	msg := AcquireMessage()
+
+	// 解析头部
+	msg.MagicNumber = headerBuf[OffsetMagic]
+	if msg.MagicNumber != magicNumber {
+		return nil, fmt.Errorf("invalid magic number: %02X", msg.MagicNumber)
 	}
 
-	all := make([]byte, len)
-	_, err = io.ReadFull(r, all[2:])
-	if err != nil {
-		return nil, err
+	msg.Version = headerBuf[OffsetVersion]
+	msg.Flags = headerBuf[OffsetFlags]
+	msg.DestType = headerBuf[OffsetDestType]
+	msg.DestId = headerBuf[OffsetDestId]
+	msg.Seq = byteOrder.Uint16(headerBuf[OffsetSeq:])
+	msg.Timestamp = byteOrder.Uint32(headerBuf[OffsetTimestamp:])
+	msg.Len = byteOrder.Uint16(headerBuf[OffsetLen:])
+	// 检查消息长度
+	if msg.Len > MaxMessageSize {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("message too large: %d > %d", msg.Len, MaxMessageSize)
 	}
-	copy(all, lenBs)
+	msg.CheckSum = byteOrder.Uint16(headerBuf[OffsetCheckSum:])
 
-	p = &Message{}
-	p.DestType = all[2]
-	p.DestId = all[3]
-	p.Ver = byteOrder.Uint16(all[4:])
-	p.Type = byteOrder.Uint32(all[6:])
-	p.Cmd = byteOrder.Uint16(all[10:])
-	p.Body = all[12:]
-	p.All = all
-	return
+	// 读取命令字
+	cmdBuf := make([]byte, 2)
+	if _, err := io.ReadFull(r, cmdBuf); err != nil {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("read cmd failed: %w", err)
+	}
+	msg.Cmd = byteOrder.Uint16(cmdBuf)
+
+	// 读取负载
+	if msg.Len > 0 {
+		payloadBuf := make([]byte, msg.Len)
+		if _, err := io.ReadFull(r, payloadBuf); err != nil {
+			ReleaseMessage(msg)
+			return nil, fmt.Errorf("read payload failed: %w", err)
+		}
+		msg.Payload = payloadBuf
+	}
+
+	// 验证校验和
+	expectedCheckSum := msg.calculateCheckSum()
+	if msg.CheckSum != expectedCheckSum {
+		ReleaseMessage(msg)
+		return nil, fmt.Errorf("checksum mismatch: expected %04X, got %04X", expectedCheckSum, msg.CheckSum)
+	}
+
+	return msg, nil
 }
 
+// TcpWrite TCP消息写入
 func TcpWrite(r io.Writer, msg *Message) error {
-	_, err := r.Write(msg.Pack())
-	return err
+	if msg == nil {
+		return fmt.Errorf("nil message")
+	}
+
+	data := msg.Pack()
+	if _, err := r.Write(data); err != nil {
+		return fmt.Errorf("tcp write failed: %w", err)
+	}
+
+	return nil
 }
 
+// Pack 快速打包消息
 func Pack(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("protobuf marshal failed: %w", err)
 	}
-	msg := &Message{
-		DestType: dest,
-		Cmd:      cmd,
-		Body:     body,
-	}
+
+	msg := AcquireMessage()
+	defer ReleaseMessage(msg)
+
+	msg.DestType = dest
+	msg.MagicNumber = magicNumber
+	msg.Version = 1
+	msg.Seq = nextSeq()
+	msg.Timestamp = uint32(time.Now().Unix())
+	msg.Cmd = cmd
+	msg.Payload = body
+
 	return msg.Pack(), nil
+}
+
+// PackFast 使用对象池快速打包
+func PackFast(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
+	body, err := proto.Marshal(pro)
+	if err != nil {
+		return nil, fmt.Errorf("protobuf marshal failed: %w", err)
+	}
+
+	msg := AcquireMessage()
+	msg.DestType = dest
+	msg.MagicNumber = magicNumber
+	msg.Version = 1
+	msg.Seq = nextSeq()
+	msg.Timestamp = uint32(time.Now().Unix())
+	msg.Cmd = cmd
+	msg.Payload = body
+
+	data := msg.Pack()
+	ReleaseMessage(msg)
+
+	return data, nil
+}
+
+// nextSeq 生成下一个序列号
+func nextSeq() uint16 {
+	return uint16(atomic.AddUint32(&seq, 1))
 }

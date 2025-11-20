@@ -52,17 +52,17 @@ func must(e error) {
 	}
 }
 
-func rpc(svrt uint8, scmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
-	log.Printf("svrt:%d scmd:%d req:%s", svrt, scmd, req)
-	if err = codec.WsWrite(conn, codec.NewMessage(svrt, 1, scmd, req)); err != nil {
+func rpc(svrt uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+	msg := codec.NewMessage(svrt, 1, cmd, req)
+	if err = codec.WsWrite(conn, msg); err != nil {
 		return err
 	}
-	log.Printf("start read scmd:%d", scmd)
+	log.Printf("start read scmd:%d", cmd)
 	msg, err := codec.WsRead(conn)
 	if err != nil {
 		return err
 	}
-	log.Printf("read success:%d", scmd)
+	log.Printf("read success:%s", msg.String())
 	err = msg.Unpack(rsp)
 	if err != nil {
 		return err

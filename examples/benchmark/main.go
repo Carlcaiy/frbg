@@ -37,10 +37,7 @@ func main() {
 			var t time.Duration = 0
 			var c int = 0
 			req := func(servetType def.ServerType) {
-				msg := &codec.Message{
-					DestType: uint8(servetType),
-					Cmd:      cmd.Test,
-				}
+				msg := &codec.Message{}
 				bs, _ := msg.PackWith(cmd.Test, &proto.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),

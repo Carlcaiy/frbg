@@ -60,7 +60,7 @@ func (l *Local) login(msg *network.Message) error {
 		uid, err := db.GenUserId()
 		if err != nil {
 			log.Printf("GenUserId err:%s", err.Error())
-			return msg.Response(def.ST_User, cmd.Login, &proto.LoginRsp{
+			return msg.Response(cmd.Login, &proto.LoginRsp{
 				Ret: 1,
 			})
 		}
@@ -98,7 +98,7 @@ func (l *Local) login(msg *network.Message) error {
 		}
 	}
 	log.Printf("login uid:%d, gate:%d", info.Uid, msg.DestId)
-	return msg.Response(0, msg.Cmd, &proto.LoginRsp{
+	return msg.Response(msg.Cmd, &proto.LoginRsp{
 		Ret:      0,
 		Nick:     info.Nick,
 		Uid:      info.Uid,

@@ -315,14 +315,13 @@ func (p *Poll) processClientData(fd int) error {
 	// 3. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		log.Printf("codec.Read error: type:%d fd:%d err:%s",
-			p.ServerConf.ServerType, fd, err.Error())
+		log.Printf("codec.Read error: msg:%s err:%s", msg.String(), err.Error())
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}
 
 	// 4. 处理心跳包
-	if msg.Type == codec.HeartBeat {
+	if msg.IsHeartBeat() {
 		conn.ActiveTime = time.Now().Unix()
 		return nil
 	}
@@ -379,7 +378,12 @@ func (p *Poll) Add(conn *net.TCPConn) error {
 		conn:       conn,
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
-		FromUser:   true,
+	}
+
+	if p.ServerConf.ServerType == def.ST_WsGate {
+		c.Protocol = def.ProtocolWs
+	} else {
+		c.Protocol = def.ProtocolTcp
 	}
 
 	// 6. 线程安全地更新连接映射
@@ -460,9 +464,8 @@ func (p *Poll) ConnTick() {
 
 		// 发送心跳
 		for _, cli := range clients {
-			msg := codec.NewMessage(cli.conf.ServerType, cli.conf.ServerId, 0, nil)
-			msg.Type = codec.HeartBeat
-
+			msg := codec.AcquireMessage()
+			msg.SetFlags(codec.FlagsHeartBeat)
 			if err := cli.Write(msg); err != nil {
 				log.Printf("ConnTick Write error: fd:%d err:%s", cli.Fd, err.Error())
 				// 使用统一的连接清理机制
@@ -491,7 +494,16 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
 	}
-	p.fdConns[fd] = ptr
+
+	// 根据服务类型设置协议
+	if p.ServerConf.ServerType == def.ST_WsGate {
+		ptr.Protocol = def.ProtocolWs
+	} else {
+		ptr.Protocol = def.ProtocolTcp
+	}
+
+	// 客戶端连接不受fdConns管理
+	// p.fdConns[fd] = ptr
 	p.handle.OnConnect(ptr)
 	return ptr, nil
 }
