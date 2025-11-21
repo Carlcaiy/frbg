@@ -6,18 +6,15 @@ import (
 	"log"
 	"net"
 	"time"
-
-	"google.golang.org/protobuf/proto"
 )
 
 type Conn struct {
 	poll       *Poll
-	conf       *ServerConfig // 信息
-	conn       *net.TCPConn  // 连接
-	Fd         int           // 文件描述符
-	ActiveTime int64         // 活跃时间
-	Uid        uint32        // 玩家
-	Protocol   byte          // 协议 0:tcp 1:ws
+	conn       *net.TCPConn // 连接
+	Fd         int          // 文件描述符
+	ActiveTime int64        // 活跃时间
+	Uid        uint32       // 玩家
+	Protocol   byte         // 协议 0:tcp 1:ws
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
@@ -56,11 +53,6 @@ func (c *Conn) Write(msg *codec.Message) error {
 	return err
 }
 
-func (c *Conn) Send(dest uint8, cmd uint16, pro proto.Message) error {
-	msg := codec.NewMessage(dest, 0, cmd, pro)
-	return c.Write(msg)
-}
-
 func (c *Conn) Close() error {
 	return c.conn.Close()
 }
@@ -68,36 +60,4 @@ func (c *Conn) Close() error {
 type IConn interface {
 	Write(msg []byte) error
 	Close() error
-}
-
-func NewMessage(poll *Poll, conn *Conn, msg *codec.Message) *Message {
-	return &Message{
-		poll:    poll,
-		conn:    conn,
-		Message: msg,
-	}
-}
-
-type Message struct {
-	poll *Poll
-	conn *Conn
-	*codec.Message
-}
-
-func (r *Message) GetClient() *Conn {
-	return r.conn
-}
-
-// 原路返回
-func (r *Message) Response(cmd uint16, pro proto.Message) error {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return err
-	}
-	msg := &codec.Message{
-		Header:  r.Header,
-		Cmd:     cmd,
-		Payload: body,
-	}
-	return r.conn.Write(msg)
 }

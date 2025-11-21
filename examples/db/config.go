@@ -3,13 +3,13 @@ package db
 import (
 	"encoding/json"
 	"frbg/def"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
 
-var gameList = []*proto.GameInfo{
+var gameList = []*pb.GameInfo{
 	{
 		GameId:    def.SlotsFu,
 		Status:    1,
@@ -23,7 +23,7 @@ var gameList = []*proto.GameInfo{
 	},
 }
 
-func GetGameList() []*proto.GameInfo {
+func GetGameList() []*pb.GameInfo {
 	if gameList == nil {
 		bs, err := redis.Bytes(redis_cli.Do("GET", "game_list"))
 		if err != nil {
@@ -37,7 +37,7 @@ func GetGameList() []*proto.GameInfo {
 	return gameList
 }
 
-var roomList = []*proto.RoomInfo{
+var roomList = []*pb.RoomInfo{
 	{
 		GameId:   def.MahjongBanbisan,
 		ServerId: 1,
@@ -47,7 +47,7 @@ var roomList = []*proto.RoomInfo{
 	},
 }
 
-func GetRoomList(gid uint32) []*proto.RoomInfo {
+func GetRoomList(gid uint32) []*pb.RoomInfo {
 	if roomList == nil {
 		bs, err := redis.Bytes(redis_cli.Do("GET", "room_list"))
 		if err != nil {
@@ -58,7 +58,7 @@ func GetRoomList(gid uint32) []*proto.RoomInfo {
 			return nil
 		}
 	}
-	copy := make([]*proto.RoomInfo, 0)
+	copy := make([]*pb.RoomInfo, 0)
 	for _, ptr := range roomList {
 		if ptr.GameId == gid {
 			copy = append(copy, ptr)

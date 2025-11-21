@@ -33,3 +33,10 @@ func (s *ServerConfig) Equal(other *ServerConfig) bool {
 func Svid(serverType uint8, serverId uint8) uint16 {
 	return uint16(serverType)*100 + uint16(serverId)
 }
+
+func ServerType(svid uint16) uint8 {
+	return uint8(svid / 100)
+}
+func ServerId(svid uint16) uint8 {
+	return uint8(svid % 100)
+}

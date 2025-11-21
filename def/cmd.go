@@ -1,4 +1,4 @@
-package cmd
+package def
 
 // 网关消息
 const (
@@ -13,6 +13,8 @@ const (
 	Offline      = 1009 // 断线
 	Test         = 1010 // 测试
 	ToClient     = 1011 // 发送给客户端
+	PacketIn     = 1012 // 客户端需要网关转发到内部服务的消息
+	PacketOut    = 1013 // 内部服务需要网关转发给客户端的消息
 	GateEnd      = 1999 // Gate
 )
 

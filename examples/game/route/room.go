@@ -3,12 +3,13 @@ package route
 import (
 	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"frbg/mj"
 	"log"
 	"math/rand"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Room struct {
@@ -48,10 +49,11 @@ func (r *Room) GetUserByUID(uid uint32) *User {
 	return nil
 }
 
-func (r *Room) AddUser(uid uint32, gateId uint8) {
+func (r *Room) AddUser(uid uint32, gateId uint16) {
 	r.Users = append(r.Users, &User{
+		l:      r.l,
 		uid:    uid,
-		gateId: uint8(gateId),
+		gateId: gateId,
 	})
 }
 
@@ -113,7 +115,7 @@ func (r *Room) Offline(uid uint32) {
 	}
 }
 
-func (r *Room) Reconnect(uid uint32, gateId uint8) {
+func (r *Room) Reconnect(uid uint32, gateId uint16) {
 	for i, u := range r.Users {
 		if u.uid == uid {
 			u.gateId = gateId
@@ -123,8 +125,7 @@ func (r *Room) Reconnect(uid uint32, gateId uint8) {
 
 			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
 			if i == r.turn {
-				msg := codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.Round, &proto.Empty{})
-				r.l.Send(msg)
+				u.Send(def.Round, &pb.Empty{})
 			}
 			return
 		}
@@ -136,7 +137,7 @@ func (r *Room) Start() {
 	r.Reset()
 	log.Println("Start", "turn:", r.turn)
 
-	faPai := make([]*proto.DeskMj, 0, 4*3+4+1)
+	faPai := make([]*pb.DeskMj, 0, 4*3+4+1)
 	// 每个玩家发3轮
 	for t := 0; t < 3; t++ {
 		// 4个玩家，从庄家开始
@@ -145,7 +146,7 @@ func (r *Room) Start() {
 			// 每个玩家发4个马建
 			for j := 0; j < 4; j++ {
 				mjVal := r.mj[r.mjIndex]
-				faPai = append(faPai, &proto.DeskMj{
+				faPai = append(faPai, &pb.DeskMj{
 					Index: int32(r.mjIndex),
 					Uid:   u.uid,
 					MjVal: int32(mjVal),
@@ -158,7 +159,7 @@ func (r *Room) Start() {
 	for i := 0; i < 5; i++ {
 		u := r.Users[(r.turn+i)%4]
 		mjVal := r.mj[r.mjIndex]
-		faPai = append(faPai, &proto.DeskMj{
+		faPai = append(faPai, &pb.DeskMj{
 			Index: int32(r.mjIndex),
 			Uid:   u.uid,
 			MjVal: int32(r.mj[r.mjIndex]),
@@ -180,16 +181,16 @@ func (r *Room) Start() {
 	zhuang := r.Users[r.turn]
 	can_op := zhuang.CanOpSelf()
 
-	piziMj := &proto.DeskMj{
+	piziMj := &pb.DeskMj{
 		Index: piziIndex,
 		MjVal: int32(r.pizi),
 	}
 
 	r.waitOther = false
 	for _, u := range r.Users {
-		handsMj := make([]*proto.DeskMj, len(faPai))
+		handsMj := make([]*pb.DeskMj, len(faPai))
 		for i := range faPai {
-			handsMj[i] = &proto.DeskMj{
+			handsMj[i] = &pb.DeskMj{
 				Index: faPai[i].Index,
 				Uid:   faPai[i].Uid,
 			}
@@ -201,7 +202,7 @@ func (r *Room) Start() {
 		if u.uid == zhuang.uid {
 			canOp = can_op
 		}
-		msg := codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.GameFaPai, &proto.FaMj{
+		u.Send(def.GameFaPai, &pb.FaMj{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
 			Touzi:  r.touzi,
@@ -209,7 +210,6 @@ func (r *Room) Start() {
 			Laizi:  int32(r.laizi),
 			CanOp:  canOp,
 		})
-		r.l.Send(msg)
 	}
 }
 
@@ -269,7 +269,7 @@ func (r *Room) getDistance(idx int) int {
 	return dis
 }
 
-func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
+func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 	// 获取当前玩家
 	currUser := r.GetUserByUID(uid)
 	if currUser == nil {
@@ -318,7 +318,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 					opt.CanOp = canOp
 				}
 			}
-			r.l.Send(codec.NewMessage(def.ST_User, uint8(u.gateId), cmd.OptGame, opt))
+			u.Send(def.OptGame, opt)
 		}
 	}
 	// 如果有其他人可以操作，等待其他玩家操作
@@ -333,7 +333,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 		turnUser.MoMj(moPai)
 
 		for _, u := range r.Users {
-			opt := &proto.MjOpt{
+			opt := &pb.MjOpt{
 				Op:  mj.MoPai,
 				Uid: uid,
 			}
@@ -341,8 +341,7 @@ func (r *Room) MjOp(uid uint32, opt *proto.MjOpt) {
 				opt.Mj = int32(moPai)
 				opt.CanOp = u.CanOpSelf()
 			}
-			msg := codec.NewMessage(def.ST_User, uint8(turnUser.gateId), cmd.BcOpt, opt)
-			r.l.Send(msg)
+			u.Send(def.BcOpt, opt)
 		}
 	}
 
@@ -369,7 +368,7 @@ func (r *Room) gameOver(huUser *User) {
 			pai = uint8(opt.Mj)
 		}
 	}
-	settle := &proto.GameOver{}
+	settle := &pb.GameOver{}
 	ht, hs := huUser.HuPai(pai, r.laizi)
 	win := int64(0)
 	for _, u := range r.Users {
@@ -379,47 +378,49 @@ func (r *Room) gameOver(huUser *User) {
 		fan := u.FanShu()
 		lose := int64(hs) * int64(fan)
 		win += lose
-		userSettle := proto.GameOverUser{
+		userSettle := pb.GameOverUser{
 			Uid:   u.uid,
 			Win:   -lose,
 			Hands: u.Mj(),
 		}
 		settle.Users = append(settle.Users, &userSettle)
 	}
-	settle.Users = append(settle.Users, &proto.GameOverUser{
+	settle.Users = append(settle.Users, &pb.GameOverUser{
 		Uid:    huUser.uid,
 		Win:    win,
 		Hands:  huUser.Mj(),
 		HuType: ht,
 	})
-	msg := codec.NewMessage(def.ST_User, huUser.gateId, cmd.GameOver, settle)
+	msg := codec.NewMessage(def.GameOver, settle)
 	r.SendAll(msg)
 	r.playing = false
 }
 
-func (r *Room) SendOther(uid uint32, msg *codec.Message) {
+func (r *Room) SendOther(uid uint32, cmd uint16, data proto.Message) {
 	for _, u := range r.Users {
 		if u.uid != uid {
-			r.l.Send(msg)
+			u.Send(cmd, data)
 		}
 	}
 }
 
 func (r *Room) SendAll(msg *codec.Message) {
-	wraper := make(map[uint32]*proto.MultiBroadcast)
+	wraper := make(map[uint16]*pb.MultiBroadcast)
 	for _, u := range r.Users {
-		data := wraper[uint32(u.gateId)]
+		data := wraper[u.gateId]
 		if data == nil {
-			data = &proto.MultiBroadcast{
+			data = &pb.MultiBroadcast{
 				Uids: []uint32{u.uid},
 				Data: msg.Pack(),
 			}
-			wraper[uint32(u.gateId)] = data
+			wraper[u.gateId] = data
 		} else {
 			data.Uids = append(data.Uids, u.uid)
 		}
 	}
 	for gateId, data := range wraper {
-		r.l.Send(codec.NewMessage(def.ST_User, uint8(gateId), cmd.MultiBC, data))
+		if gate := r.l.Poll.GetServer(gateId); gate != nil {
+			gate.Write(codec.NewMessage(def.MultiBC, data))
+		}
 	}
 }

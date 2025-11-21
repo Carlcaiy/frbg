@@ -1,7 +1,7 @@
 package local
 
 import (
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"log"
 
 	"google.golang.org/grpc"
@@ -9,7 +9,7 @@ import (
 )
 
 type GRPC struct {
-	proto.RPCClient
+	pb.RPCClient
 	client *grpc.ClientConn
 	addr   string
 }
@@ -27,7 +27,7 @@ func (g *GRPC) Init() {
 		return
 	}
 	g.client = client
-	g.RPCClient = proto.NewRPCClient(client)
+	g.RPCClient = pb.NewRPCClient(client)
 }
 
 func (g *GRPC) Close() {

@@ -1,12 +1,19 @@
 package route
 
 import (
+	"frbg/codec"
+	"frbg/def"
+	"frbg/examples/pb"
 	"frbg/mj"
+	"log"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type User struct {
+	l             *Local
 	uid           uint32
-	gateId        uint8 // 网关ID
+	gateId        uint16 // 网关ID
 	pai           int32
 	offline       bool
 	can_ops_group []*mj.Group
@@ -19,6 +26,22 @@ type User struct {
 	can_ops_flag  int32
 	hu_type       int32
 	prepare       bool // 准备状态
+}
+
+func (u *User) Send(cmd uint16, data proto.Message) {
+	payload, err := proto.Marshal(data)
+	if err != nil {
+		log.Printf("Send proto.Marshal() err:%s", err.Error())
+		return
+	}
+	msg := codec.NewMessage(def.PacketOut, &pb.PacketOut{
+		Uid:     u.uid,
+		Cmd:     uint32(cmd),
+		Payload: payload,
+	})
+	if conn := u.l.Poll.GetServer(u.gateId); conn != nil {
+		conn.Write(msg)
+	}
 }
 
 func (u *User) Reset() {

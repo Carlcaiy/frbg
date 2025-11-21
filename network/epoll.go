@@ -25,13 +25,13 @@ import (
 var wg sync.WaitGroup
 
 type Handler interface {
-	Attach(poll *Poll)    // 绑定poll
-	Init()                // Handler的初始化
-	Route(*Message) error // 消息路由
-	Close(conn *Conn)     // 连接关闭的回调
-	OnConnect(conn *Conn) // 连接成功的回调
-	OnAccept(conn *Conn)  // 新连接的回调
-	Tick()                // 心跳
+	Attach(poll *Poll)                          // 绑定poll
+	Init()                                      // Handler的初始化
+	Route(conn *Conn, msg *codec.Message) error // 消息路由
+	Close(conn *Conn)                           // 连接关闭的回调
+	OnConnect(conn *Conn)                       // 连接成功的回调
+	OnAccept(conn *Conn)                        // 新连接的回调
+	Tick()                                      // 心跳
 }
 
 type PollConfig struct {
@@ -328,8 +328,7 @@ func (p *Poll) processClientData(fd int) error {
 
 	// 5. 路由消息到业务处理器
 	if p.handle != nil {
-		msg := NewMessage(p, conn, msg)
-		if err := p.handle.Route(msg); err != nil {
+		if err := p.handle.Route(conn, msg); err != nil {
 			log.Printf("route error: fd:%d err:%v", fd, err)
 			p.Del(fd) // 路由失败则关闭连接
 			return nil
@@ -490,20 +489,19 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 	ptr := &Conn{
 		poll:       p,
 		conn:       conn,
-		conf:       conf,
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
 	}
 
 	// 根据服务类型设置协议
-	if p.ServerConf.ServerType == def.ST_WsGate {
+	if conf.ServerType == def.ST_WsGate {
 		ptr.Protocol = def.ProtocolWs
 	} else {
 		ptr.Protocol = def.ProtocolTcp
 	}
 
 	// 客戶端连接不受fdConns管理
-	// p.fdConns[fd] = ptr
+	p.fdConns[fd] = ptr
 	p.handle.OnConnect(ptr)
 	return ptr, nil
 }
@@ -573,21 +571,26 @@ func must(err error) {
 	}
 }
 
-func (poll *Poll) GetClient(conf *ServerConfig) *Conn {
+func (poll *Poll) GetServer(svid uint16) *Conn {
 	var conn *Conn
 	poll.mu.RLock()
-	conn, ok := poll.cliConns[conf.Svid()]
+	conn, ok := poll.cliConns[svid]
 	if ok {
 		poll.mu.RUnlock()
 		return conn
 	}
 	poll.mu.RUnlock()
 
-	addr := register.Get(conf.Svid())
+	addr := register.Get(svid)
 	if addr == "" {
 		return nil
 	}
-	conf.Addr = addr
+
+	conf := &ServerConfig{
+		ServerType: ServerType(svid),
+		ServerId:   ServerId(svid),
+		Addr:       addr,
+	}
 
 	if conn, err := poll.Connect(conf); err == nil {
 		poll.mu.Lock()

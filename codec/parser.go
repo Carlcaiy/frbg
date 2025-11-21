@@ -50,8 +50,6 @@ func WsRead(r io.ReadWriter) (*Message, error) {
 
 	msg.Version = all[OffsetVersion]
 	msg.Flags = all[OffsetFlags]
-	msg.DestType = all[OffsetDestType]
-	msg.DestId = all[OffsetDestId]
 	msg.Seq = byteOrder.Uint16(all[OffsetSeq:])
 	msg.Timestamp = byteOrder.Uint32(all[OffsetTimestamp:])
 	msg.Len = byteOrder.Uint16(all[OffsetLen:])
@@ -89,7 +87,7 @@ func WsWrite(r io.ReadWriter, msg *Message) error {
 	}
 
 	data := msg.Pack()
-	log.Printf("send msg:%s", msg.String())
+	log.Printf("send ws msg:%s", msg.String())
 	return wsutil.WriteServerBinary(r, data)
 }
 
@@ -111,8 +109,6 @@ func TcpRead(r io.Reader) (*Message, error) {
 
 	msg.Version = headerBuf[OffsetVersion]
 	msg.Flags = headerBuf[OffsetFlags]
-	msg.DestType = headerBuf[OffsetDestType]
-	msg.DestId = headerBuf[OffsetDestId]
 	msg.Seq = byteOrder.Uint16(headerBuf[OffsetSeq:])
 	msg.Timestamp = byteOrder.Uint32(headerBuf[OffsetTimestamp:])
 	msg.Len = byteOrder.Uint16(headerBuf[OffsetLen:])
@@ -156,6 +152,7 @@ func TcpWrite(r io.Writer, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
 	}
+	log.Printf("send tcp msg:%s", msg.String())
 
 	data := msg.Pack()
 	if _, err := r.Write(data); err != nil {
@@ -166,7 +163,7 @@ func TcpWrite(r io.Writer, msg *Message) error {
 }
 
 // Pack 快速打包消息
-func Pack(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
+func Pack(cmd uint16, pro proto.Message) ([]byte, error) {
 	body, err := proto.Marshal(pro)
 	if err != nil {
 		return nil, fmt.Errorf("protobuf marshal failed: %w", err)
@@ -175,7 +172,6 @@ func Pack(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	msg := AcquireMessage()
 	defer ReleaseMessage(msg)
 
-	msg.DestType = dest
 	msg.MagicNumber = magicNumber
 	msg.Version = 1
 	msg.Seq = nextSeq()
@@ -194,7 +190,6 @@ func PackFast(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
 	}
 
 	msg := AcquireMessage()
-	msg.DestType = dest
 	msg.MagicNumber = magicNumber
 	msg.Version = 1
 	msg.Seq = nextSeq()

@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"log"
 	"net"
+
+	protobuf "google.golang.org/protobuf/proto"
 
 	"github.com/gobwas/ws"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -39,11 +40,11 @@ func main() {
 		conn.Close()
 	}()
 
-	must(rpc(def.ST_Gate, cmd.Login, &proto.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1}, &proto.LoginRsp{}))
-	must(rpc(def.ST_Hall, cmd.GetGameList, &proto.GetGameListReq{Uid: uint32(uid)}, &proto.GetGameListRsp{}))
-	getRoomListRsp := &proto.GetRoomListRsp{}
-	must(rpc(def.ST_Hall, cmd.GetRoomList, &proto.GetRoomListReq{Uid: uint32(uid), GameId: def.MahjongBanbisan}, getRoomListRsp))
-	must(rpc(def.ST_Hall, cmd.EnterRoom, &proto.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &proto.GetRoomListRsp{}))
+	must(rpc(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1}, &pb.LoginRsp{}))
+	must(rpc(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)}, &pb.GetGameListRsp{}))
+	getRoomListRsp := &pb.GetRoomListRsp{}
+	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.MahjongBanbisan}, getRoomListRsp))
+	must(rpc(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &pb.GetRoomListRsp{}))
 }
 
 func must(e error) {
@@ -52,8 +53,13 @@ func must(e error) {
 	}
 }
 
-func rpc(svrt uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
-	msg := codec.NewMessage(svrt, 1, cmd, req)
+func rpc(svid uint16, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+	bs, _ := protobuf.Marshal(req)
+	msg := codec.NewMessage(cmd, &pb.PacketIn{
+		Svid:    uint32(svid),
+		Cmd:     uint32(cmd),
+		Payload: bs,
+	})
 	if err = codec.WsWrite(conn, msg); err != nil {
 		return err
 	}

@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"log"
 	"net"
 	"os"
@@ -38,7 +37,7 @@ func main() {
 			var c int = 0
 			req := func(servetType def.ServerType) {
 				msg := &codec.Message{}
-				bs, _ := msg.PackWith(cmd.Test, &proto.Test{
+				bs, _ := msg.PackWith(def.Test, &pb.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				})
@@ -52,8 +51,8 @@ func main() {
 				}
 				log.Println("receive msg:", msg.Cmd)
 				switch msg.Cmd {
-				case cmd.Test:
-					p := new(proto.Test)
+				case def.Test:
+					p := new(pb.Test)
 					err := msg.Unpack(p)
 					if err != nil {
 						log.Println(err)

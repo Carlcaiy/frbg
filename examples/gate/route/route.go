@@ -2,10 +2,10 @@ package route
 
 import (
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
 	"frbg/examples/db"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"frbg/local"
 	"frbg/network"
 	"log"
@@ -27,30 +27,16 @@ func New() *Local {
 
 func (l *Local) Init() {
 	l.BaseLocal.Init()
-	l.AddRoute(cmd.Login, l.login)
-	l.AddRoute(cmd.MultiBC, l.multibc)
-	l.AddRoute(cmd.Logout, l.logout)
+	l.AddRoute(def.Login, l.login)
+	l.AddRoute(def.MultiBC, l.multibc)
+	l.AddRoute(def.Logout, l.logout)
+	l.AddRoute(def.PacketIn, l.packetIn)
+	l.AddRoute(def.PacketOut, l.packetOut)
 }
 
-func (l *Local) Route(msg *network.Message) error {
-	switch msg.DestType {
-	// 优先调用与本服务
-	case def.ST_WsGate, def.ST_Gate:
-		return l.BaseLocal.Route(msg)
-	// 大厅多个服务
-	case def.ST_Hall:
-		return l.Send(msg.Message)
-	// 游戏单个服务
-	case def.ST_Game:
-		return l.Send(msg.Message)
-	}
-
-	return fmt.Errorf("without cmd %d route", msg.Cmd)
-}
-
-func (l *Local) login(msg *network.Message) error {
-	req := new(proto.LoginReq)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) login(in *local.Input) error {
+	req := new(pb.LoginReq)
+	if err := in.Unpack(req); err != nil {
 		log.Printf("login unpack error:%s", err.Error())
 		return err
 	}
@@ -60,7 +46,7 @@ func (l *Local) login(msg *network.Message) error {
 		uid, err := db.GenUserId()
 		if err != nil {
 			log.Printf("GenUserId err:%s", err.Error())
-			return msg.Response(cmd.Login, &proto.LoginRsp{
+			return in.Response(req.Uid, def.Login, &pb.LoginRsp{
 				Ret: 1,
 			})
 		}
@@ -69,23 +55,22 @@ func (l *Local) login(msg *network.Message) error {
 			Sex:    0,
 			IconId: 1,
 			Uid:    uid,
-			conn:   msg.GetClient(),
 		}
 		if err := db.SetUser(uid, info); err != nil {
 			return err
 		}
-		l.clients.SetClient(uid, msg.GetClient())
+		l.clients.SetClient(uid, in.Client())
 	} else {
-		if conn := l.clients.GetClient(req.Uid); conn != msg.GetClient() {
+		if conn := l.clients.GetClient(req.Uid); conn != in.Client() {
 			if conn != nil {
 				log.Println("给已经登录的连接推送挤号信息")
-				conn.Send(def.ST_User, cmd.GateKick, &proto.GateKick{
-					Type: proto.KickType_Squeeze,
-				})
+				conn.Write(codec.NewMessage(def.GateKick, &pb.GateKick{
+					Type: pb.KickType_Squeeze,
+				}))
 			}
-			l.clients.SetClient(req.Uid, msg.GetClient())
-			if err := db.SetGate(req.Uid, msg.DestId); err != nil {
-				log.Printf("db.SetGate(%d, %d) error:%s", req.Uid, msg.DestId, err.Error())
+			l.clients.SetClient(req.Uid, in.Client())
+			if err := db.SetGate(req.Uid, uint8(req.GateId)); err != nil {
+				log.Printf("db.SetGate(%d, %d) error:%s", req.Uid, req.GateId, err.Error())
 				return nil
 			}
 		} else {
@@ -97,8 +82,8 @@ func (l *Local) login(msg *network.Message) error {
 			return err
 		}
 	}
-	log.Printf("login uid:%d, gate:%d", info.Uid, msg.DestId)
-	return msg.Response(msg.Cmd, &proto.LoginRsp{
+	log.Printf("login uid:%d, gate:%d", info.Uid, req.GateId)
+	return in.Response(req.Uid, in.Cmd, &pb.LoginRsp{
 		Ret:      0,
 		Nick:     info.Nick,
 		Uid:      info.Uid,
@@ -108,34 +93,65 @@ func (l *Local) login(msg *network.Message) error {
 	})
 }
 
-func (l *Local) multibc(msg *network.Message) error {
-	req := new(proto.MultiBroadcast)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) multibc(in *local.Input) error {
+	req := new(pb.MultiBroadcast)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	for _, uid := range req.Uids {
 		if client := l.clients.GetClient(uid); client != nil {
-			client.Write(msg.Message)
+			client.Write(in.Message)
 		}
 	}
 	return nil
 }
 
 // 离开网关
-func (l *Local) logout(msg *network.Message) error {
-	req := new(proto.LogoutReq)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) logout(in *local.Input) error {
+	req := new(pb.LogoutReq)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	client := l.clients.GetClient(req.Uid)
 	if client != nil {
-		msg.GetClient().Send(def.ST_User, msg.Cmd, &proto.CommonRsp{
-			Code: proto.ErrorCode_Success,
-		})
+		client.Write(codec.NewMessage(in.Cmd, &pb.CommonRsp{
+			Code: pb.ErrorCode_Success,
+		}))
 		l.clients.DelClient(req.Uid)
 		return nil
 	}
 	return fmt.Errorf("reqLeaveGate not find user: %d", req.Uid)
+}
+
+func (l *Local) packetIn(in *local.Input) error {
+	req := new(pb.PacketIn)
+	if err := in.Unpack(req); err != nil {
+		return err
+	}
+	cli := l.Poll.GetServer(uint16(req.Svid))
+	if cli == nil {
+		return fmt.Errorf("not find server %d", req.Svid)
+	}
+	data := in.Message
+	data.Cmd = uint16(req.Cmd)
+	data.Payload = req.Payload
+	return cli.Write(data)
+}
+
+func (l *Local) packetOut(in *local.Input) error {
+	req := new(pb.PacketOut)
+	if err := in.Unpack(req); err != nil {
+		return err
+	}
+	cli := l.clients.GetClient(req.Uid)
+	if cli == nil {
+		return fmt.Errorf("not find user %d", req.Uid)
+	}
+	cli.Write(codec.NewMessage(in.Cmd, &pb.PacketOut{
+		Cmd:     uint32(req.Cmd),
+		Payload: req.Payload,
+	}))
+	return nil
 }
 
 func (l *Local) Close(conn *network.Conn) {

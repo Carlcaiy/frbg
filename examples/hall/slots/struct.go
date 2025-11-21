@@ -1,7 +1,7 @@
 package slots
 
 import (
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"math/rand"
 )
 
@@ -96,12 +96,12 @@ func (b *BonusConf) Rand(sum int32) (int32, int32) {
 
 type SlotsConf struct {
 	GameID    int32 // 游戏ID
-	ElemConf  []*proto.SlotsElem
-	RouteConf []*proto.SlotsLine // 中奖线路
-	ReelsConf []*ReelConf        // 摇奖元素概率
-	BetConf   *BetConf           // 摇奖选项
-	FreeConf  *FreeConf          // 免费游戏配置
-	BonusConf *BonusConf         // bonus配置
+	ElemConf  []*pb.SlotsElem
+	RouteConf []*pb.SlotsLine // 中奖线路
+	ReelsConf []*ReelConf     // 摇奖元素概率
+	BetConf   *BetConf        // 摇奖选项
+	FreeConf  *FreeConf       // 免费游戏配置
+	BonusConf *BonusConf      // bonus配置
 }
 
 type SlotsData struct {

@@ -11,7 +11,7 @@ import (
 
 const (
 	// 消息头长度：16字节
-	HeaderLen = 15
+	HeaderLen = 13
 
 	// 魔术字
 	magicNumber = 0x12
@@ -27,12 +27,10 @@ const (
 	OffsetMagic     = 0
 	OffsetVersion   = 1
 	OffsetFlags     = 2
-	OffsetDestType  = 3
-	OffsetDestId    = 4
-	OffsetSeq       = 5
-	OffsetTimestamp = 7
-	OffsetLen       = 11
-	OffsetCheckSum  = 13
+	OffsetSeq       = 3
+	OffsetTimestamp = 5
+	OffsetLen       = 9
+	OffsetCheckSum  = 11
 )
 
 var byteOrder binary.ByteOrder = binary.BigEndian
@@ -50,8 +48,6 @@ type Header struct {
 	MagicNumber uint8  // 魔术字 - 放在最前面快速识别
 	Version     uint8  // 版本号
 	Flags       uint8  // 标志位：压缩、加密、心跳等
-	DestType    uint8  // 目标服务类型
-	DestId      uint8  // 目标服务ID
 	Seq         uint16 // 消息序列号
 	Timestamp   uint32 // 时间戳
 	Len         uint16 // 消息长度
@@ -89,10 +85,8 @@ func (m *Message) Reset() {
 }
 
 // NewMessage 创建新消息
-func NewMessage(serverType uint8, serveID uint8, cmd uint16, pro proto.Message) *Message {
+func NewMessage(cmd uint16, pro proto.Message) *Message {
 	msg := AcquireMessage()
-	msg.DestType = serverType
-	msg.DestId = serveID
 	msg.MagicNumber = magicNumber
 	msg.Version = 1
 	msg.Seq = 0
@@ -119,8 +113,8 @@ func (m *Message) String() string {
 	if m == nil {
 		return "nil"
 	}
-	return fmt.Sprintf("Magic:%02X Ver:%d Flags:%02X Dest:%d/%d Seq:%d Cmd:%d Len:%d TS:%d CheckSum:%04X",
-		m.MagicNumber, m.Version, m.Flags, m.DestType, m.DestId, m.Seq, m.Cmd, m.Len, m.Timestamp, m.CheckSum)
+	return fmt.Sprintf("Magic:%02X Ver:%d Flags:%02X Seq:%d Cmd:%d Len:%d TS:%d CheckSum:%04X",
+		m.MagicNumber, m.Version, m.Flags, m.Seq, m.Cmd, m.Len, m.Timestamp, m.CheckSum)
 }
 
 // Pack 快速打包（复用缓冲区）
@@ -139,8 +133,6 @@ func (m *Message) Pack() []byte {
 	m.All[OffsetMagic] = m.MagicNumber
 	m.All[OffsetVersion] = m.Version
 	m.All[OffsetFlags] = m.Flags
-	m.All[OffsetDestType] = m.DestType
-	m.All[OffsetDestId] = m.DestId
 	byteOrder.PutUint16(m.All[OffsetSeq:], m.Seq)
 	byteOrder.PutUint32(m.All[OffsetTimestamp:], m.Timestamp)
 	byteOrder.PutUint16(m.All[OffsetLen:], m.Len)
@@ -183,8 +175,6 @@ func (m *Message) calculateCheckSum() uint16 {
 	sum += uint32(m.MagicNumber)
 	sum += uint32(m.Version)
 	sum += uint32(m.Flags)
-	sum += uint32(m.DestType)
-	sum += uint32(m.DestId)
 	sum += uint32(m.Seq)
 	sum += uint32(m.Timestamp >> 16)
 	sum += uint32(m.Timestamp & 0xFFFF)

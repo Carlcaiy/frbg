@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"frbg/codec"
 	"frbg/def"
-	"frbg/examples/cmd"
 	"frbg/examples/db"
 	"frbg/examples/hall/slots"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"frbg/local"
 	"frbg/network"
 	"log"
@@ -29,52 +28,55 @@ func New() *Local {
 
 func (l *Local) init() {
 	l.BaseLocal.Init()
-	l.AddRoute(cmd.GetGameList, l.getGameList)
-	l.AddRoute(cmd.GetRoomList, l.getRoomList)
-	l.AddRoute(cmd.EnterSlots, l.enterSlots)
-	l.AddRoute(cmd.SpinSlots, l.spinSlots)
-	l.AddRoute(cmd.LeaveSlots, l.leaveSlots)
+	l.AddRoute(def.Offline, l.offline)
+	l.AddRoute(def.GetGameList, l.getGameList)
+	l.AddRoute(def.GetRoomList, l.getRoomList)
+	l.AddRoute(def.EnterSlots, l.enterSlots)
+	l.AddRoute(def.SpinSlots, l.spinSlots)
+	l.AddRoute(def.LeaveSlots, l.leaveSlots)
 }
 
-func (l *Local) offline(msg *network.Message) error {
+func (l *Local) offline(in *local.Input) error {
 	return nil
 }
 
-func (l *Local) getGameList(msg *network.Message) error {
+func (l *Local) getGameList(in *local.Input) error {
 	log.Println("getGameList")
-	req, rsp := new(proto.GetGameListReq), new(proto.GetGameListRsp)
-	if err := msg.Unpack(req); err != nil {
+	req, rsp := new(pb.GetGameListReq), new(pb.GetGameListRsp)
+	if err := in.Unpack(req); err != nil {
 		log.Printf("getGameList msg.Unpack() err:%s", err.Error())
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	return msg.Response(msg.Cmd, rsp)
+	codec.NewMessage(in.Cmd, rsp)
+
+	return in.Response(req.Uid, in.Cmd, rsp)
 }
 
-func (l *Local) getRoomList(msg *network.Message) error {
+func (l *Local) getRoomList(in *local.Input) error {
 	log.Println("getRoomList")
-	req, rsp := new(proto.GetRoomListReq), new(proto.GetRoomListRsp)
-	if err := msg.Unpack(req); err != nil {
+	req, rsp := new(pb.GetRoomListReq), new(pb.GetRoomListRsp)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	rsp.Rooms = db.GetRoomList(req.GameId)
-	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
+	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
 		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
 }
 
 // 请求进入老虎机
-func (l *Local) enterSlots(msg *network.Message) error {
-	req := new(proto.EnterSlotsReq)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) enterSlots(in *local.Input) error {
+	req := new(pb.EnterSlotsReq)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	conf := slots.GetSlotsData(req.Uid, req.GameId)
 	if conf == nil {
 		return nil
 	}
-	rsp := &proto.EnterSlotsRsp{
+	rsp := &pb.EnterSlotsRsp{
 		GameId: req.GameId,
 		Bet:    conf.BetConf.Bet,
 		Level:  conf.BetConf.Level,
@@ -82,16 +84,16 @@ func (l *Local) enterSlots(msg *network.Message) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
-		log.Printf("Send() err:%s", errSend.Error())
+	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
+		log.Printf("Response() err:%s", errSend.Error())
 	}
 	return nil
 }
 
 // 老虎机请求摇奖
-func (l *Local) spinSlots(msg *network.Message) error {
-	req := new(proto.SlotsSpinReq)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) spinSlots(in *local.Input) error {
+	req := new(pb.SlotsSpinReq)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 
@@ -107,16 +109,16 @@ func (l *Local) spinSlots(msg *network.Message) error {
 	if err != nil {
 		return err
 	}
-	if errSend := l.Send(codec.NewMessage(def.ST_User, uint8(req.GateId), msg.Cmd, rsp)); errSend != nil {
-		log.Printf("Send() err:%s", errSend.Error())
+	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
+		log.Printf("Response() err:%s", errSend.Error())
 	}
 	return nil
 }
 
 // 离开老虎机
-func (l *Local) leaveSlots(msg *network.Message) error {
-	req := new(proto.LeaveSlotsReq)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) leaveSlots(in *local.Input) error {
+	req := new(pb.LeaveSlotsReq)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	slots.DelSlotsData(req.Uid)

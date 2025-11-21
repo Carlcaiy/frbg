@@ -1,7 +1,7 @@
 package local
 
 import (
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"log"
 	"net"
 
@@ -9,12 +9,12 @@ import (
 )
 
 type GRPCServer struct {
-	handle proto.RPCServer
+	handle pb.RPCServer
 	server *grpc.Server
 	addr   string
 }
 
-func NewGRPCServer(addr string, method proto.RPCServer) *GRPCServer {
+func NewGRPCServer(addr string, method pb.RPCServer) *GRPCServer {
 	return &GRPCServer{
 		addr:   addr,
 		handle: method,

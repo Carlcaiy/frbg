@@ -4,7 +4,7 @@
 // - protoc             v4.25.0
 // source: game.proto
 
-package proto
+package pb
 
 import (
 	context "context"

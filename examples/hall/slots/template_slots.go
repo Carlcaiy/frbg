@@ -3,7 +3,7 @@ package slots
 import (
 	"frbg/def"
 	"frbg/examples/db"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"log"
 	"sync"
 )
@@ -13,7 +13,7 @@ var data sync.Map
 func GetFuConf() *SlotsConf {
 	return &SlotsConf{
 		GameID: def.SlotsFu,
-		ElemConf: []*proto.SlotsElem{
+		ElemConf: []*pb.SlotsElem{
 			{ElemId: 1, ElemName: "A", Multi3: 1},
 			{ElemId: 2, ElemName: "B", Multi3: 2},
 			{ElemId: 3, ElemName: "C", Multi3: 3},
@@ -30,7 +30,7 @@ func GetFuConf() *SlotsConf {
 			{Weight: []int32{30, 20, 20, 10, 10, 10, 10, 3, 3, 3}, Length: 4},
 			{Weight: []int32{30, 20, 20, 10, 10, 10, 10, 3, 3, 3}, Length: 3},
 		},
-		RouteConf: []*proto.SlotsLine{
+		RouteConf: []*pb.SlotsLine{
 			{LineId: 1, LinePos: []int32{1, 4, 7}},
 			{LineId: 2, LinePos: []int32{1, 5, 9}},
 			{LineId: 3, LinePos: []int32{2, 5, 8}},
@@ -98,7 +98,7 @@ func (s *SlotsData) shuffle() {
 }
 
 // 摇奖
-func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
+func (s *SlotsData) Spin(bet int64) (*pb.SlotsSpinRsp, error) {
 	free := false
 	sumWin := int64(0)
 	lines := make([]int32, 0)
@@ -154,7 +154,7 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 			}
 		}
 	}
-	rsp := &proto.SlotsSpinRsp{
+	rsp := &pb.SlotsSpinRsp{
 		Bet:      bet,
 		Win:      sumWin,
 		Board:    board,
@@ -166,7 +166,7 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 	// free
 	if count, pos := s.Elem(ElemFree); count >= 3 {
 		rsp.Free = true
-		rsp.FreeData = &proto.SlotsFree{
+		rsp.FreeData = &pb.SlotsFree{
 			Pos:      pos,
 			FreeSpin: s.FreeConf.GetSpin(count),
 		}
@@ -181,7 +181,7 @@ func (s *SlotsData) Spin(bet int64) (*proto.SlotsSpinRsp, error) {
 		win := bet * int64(m1)
 
 		rsp.Bonus = true
-		rsp.BonusData = &proto.SlotsBonus{
+		rsp.BonusData = &pb.SlotsBonus{
 			Pos:   pos,
 			Board: []int32{b1, b2, b3},
 			Win:   win,

@@ -3,12 +3,12 @@ package db
 import (
 	"encoding/json"
 	"fmt"
-	"frbg/examples/proto"
+	"frbg/examples/pb"
 	"testing"
 )
 
 func TestGetGameList(t *testing.T) {
-	var gameList = []*proto.GameInfo{
+	var gameList = []*pb.GameInfo{
 		{GameId: 1},
 		{GameId: 2},
 		{GameId: 3},
@@ -30,7 +30,7 @@ func TestGetGameList(t *testing.T) {
 
 func TestGetRoomList(t *testing.T) {
 	gameId := uint32(1)
-	var roomList = []*proto.RoomInfo{
+	var roomList = []*pb.RoomInfo{
 		{RoomId: 1},
 		{RoomId: 2},
 		{RoomId: 3},

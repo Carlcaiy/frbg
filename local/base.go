@@ -9,7 +9,7 @@ import (
 	"runtime"
 )
 
-type Handle func(*network.Message) error
+type Handle func(*Input) error
 
 type BaseLocal struct {
 	*network.Poll
@@ -26,6 +26,7 @@ func NewBase() *BaseLocal {
 
 func (l *BaseLocal) Attach(poll *network.Poll) {
 	l.Poll = poll
+	serverType = poll.ServerConf.ServerType
 }
 
 func (l *BaseLocal) Init() {
@@ -55,22 +56,24 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	l.m_route[cmd] = h
 }
 
-func (l *BaseLocal) Route(msg *network.Message) error {
+func (l *BaseLocal) Route(conn *network.Conn, msg *codec.Message) error {
+	// 1. 检查消息是否为空
+	if msg == nil {
+		return fmt.Errorf("msg is nil")
+	}
+	// 2. 检查消息是否有路由
 	if handle, ok := l.m_route[msg.Cmd]; ok {
 		defer l.CatchEx()
-		return handle(msg)
+		return handle(NewInput(conn, msg))
 	} else {
 		return fmt.Errorf("call: not find cmd %d", msg.Cmd)
 	}
 }
 
-func (l *BaseLocal) Send(msg *codec.Message) error {
-	conn := l.Poll.GetClient(&network.ServerConfig{
-		ServerId:   msg.DestId,
-		ServerType: msg.DestType,
-	})
+func (l *BaseLocal) Send(svid uint16, msg *codec.Message) error {
+	conn := l.Poll.GetServer(svid)
 	if conn == nil {
-		return fmt.Errorf("error not find server %d", msg.DestId)
+		return fmt.Errorf("error not find server %d", svid)
 	}
 	return conn.Write(msg)
 }

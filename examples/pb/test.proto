@@ -1,5 +1,5 @@
 syntax = "proto3";
-option go_package=".;proto";
+option go_package=".;pb";
 import "enum.proto";
 
 
@@ -48,6 +48,20 @@ message Regist {
 // 推送
 message GatePushMsg {
     string data = 1;
+}
+
+// 转发到消息
+message PacketIn {
+    uint32 svid = 1;
+    uint32 cmd = 2;
+    bytes payload = 3;
+}
+
+// 转发到消息
+message PacketOut {
+    uint32 uid = 1;
+    uint32 cmd = 2;
+    bytes payload = 3;
 }
 
 // 请求游戏列表

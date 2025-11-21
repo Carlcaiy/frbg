@@ -1,10 +1,9 @@
 package route
 
 import (
-	"frbg/examples/cmd"
-	"frbg/examples/proto"
+	"frbg/def"
+	"frbg/examples/pb"
 	"frbg/local"
-	"frbg/network"
 	"log"
 )
 
@@ -24,16 +23,16 @@ func NewLocal() *Local {
 
 func (l *Local) Init() {
 	l.BaseLocal.Init()
-	l.AddRoute(cmd.EnterRoom, l.enterRoom)
-	l.AddRoute(cmd.LeaveRoom, l.leaveRoom)
-	l.AddRoute(cmd.OptGame, l.optGame)
-	l.AddRoute(cmd.Reconnect, l.reconnect)
-	l.AddRoute(cmd.Offline, l.offline)
+	l.AddRoute(def.EnterRoom, l.enterRoom)
+	l.AddRoute(def.LeaveRoom, l.leaveRoom)
+	l.AddRoute(def.OptGame, l.optGame)
+	l.AddRoute(def.Reconnect, l.reconnect)
+	l.AddRoute(def.Offline, l.offline)
 }
 
-func (l *Local) offline(msg *network.Message) error {
-	req := new(proto.Offline)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) offline(in *local.Input) error {
+	req := new(pb.Offline)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	log.Println("offline", req.String())
@@ -43,25 +42,25 @@ func (l *Local) offline(msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) reconnect(msg *network.Message) error {
-	req := new(proto.Reconnect)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) reconnect(in *local.Input) error {
+	req := new(pb.Reconnect)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	log.Println("reconnect", req.String())
 	if req.RoomId > 0 {
 		room, ok := l.rooms[req.RoomId]
 		if ok {
-			room.Reconnect(req.Uid, uint8(req.GateId))
+			room.Reconnect(req.Uid, uint16(req.GateId))
 		}
 	}
 
 	return nil
 }
 
-func (l *Local) enterRoom(msg *network.Message) error {
-	req, rsp := new(proto.EnterRoomReq), new(proto.EnterRoomRsp)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) enterRoom(in *local.Input) error {
+	req, rsp := new(pb.EnterRoomReq), new(pb.EnterRoomRsp)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	log.Println("enterRoom", req.String())
@@ -88,8 +87,8 @@ func (l *Local) enterRoom(msg *network.Message) error {
 		l.rooms[room.roomId] = room
 	}
 	l.users[req.Uid] = room
-	room.AddUser(req.Uid, uint8(req.GateId))
-	msg.Response(msg.Cmd, rsp)
+	room.AddUser(req.Uid, uint16(req.GateId))
+	in.Response(req.Uid, in.Cmd, rsp)
 	if room.Full() {
 		room.Start()
 	}
@@ -97,9 +96,9 @@ func (l *Local) enterRoom(msg *network.Message) error {
 	return nil
 }
 
-func (l *Local) leaveRoom(msg *network.Message) error {
-	req, rsp := new(proto.LeaveRoomReq), new(proto.LeaveRoomRsp)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) leaveRoom(in *local.Input) error {
+	req, rsp := new(pb.LeaveRoomReq), new(pb.LeaveRoomRsp)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 	log.Println("leaveRoom", req.String())
@@ -111,13 +110,13 @@ func (l *Local) leaveRoom(msg *network.Message) error {
 		return nil
 	}
 	room.DelUser(req.Uid)
-	msg.Response(msg.Cmd, rsp)
+	in.Response(req.Uid, in.Cmd, rsp)
 	return nil
 }
 
-func (l *Local) optGame(msg *network.Message) error {
-	req := new(proto.MjOpt)
-	if err := msg.Unpack(req); err != nil {
+func (l *Local) optGame(in *local.Input) error {
+	req := new(pb.MjOpt)
+	if err := in.Unpack(req); err != nil {
 		return err
 	}
 
