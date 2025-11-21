@@ -36,12 +36,10 @@ func main() {
 			var t time.Duration = 0
 			var c int = 0
 			req := func(servetType def.ServerType) {
-				msg := &codec.Message{}
-				bs, _ := msg.PackWith(def.Test, &pb.Test{
+				conn.Write(codec.NewMessage(def.Test, &pb.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
-				})
-				conn.Write(bs)
+				}).Pack())
 			}
 			req(def.ST_Gate)
 			for !close {

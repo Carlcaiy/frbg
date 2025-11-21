@@ -143,17 +143,6 @@ func (m *Message) Pack() []byte {
 	return m.All
 }
 
-// PackWith 使用新的命令字和protobuf消息打包
-func (m *Message) PackWith(cmd uint16, pro proto.Message) ([]byte, error) {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return nil, err
-	}
-	m.Cmd = cmd
-	m.Payload = body
-	return m.Pack(), nil
-}
-
 // Unpack 解包protobuf消息
 func (m *Message) Unpack(pro proto.Message) error {
 	if len(m.Payload) == 0 {

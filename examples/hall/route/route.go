@@ -2,7 +2,6 @@ package route
 
 import (
 	"fmt"
-	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/db"
 	"frbg/examples/hall/slots"
@@ -48,8 +47,6 @@ func (l *Local) getGameList(in *local.Input) error {
 		return err
 	}
 	rsp.Games = db.GetGameList()
-	codec.NewMessage(in.Cmd, rsp)
-
 	return in.Response(req.Uid, in.Cmd, rsp)
 }
 

@@ -8,6 +8,7 @@ import (
 	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/pb"
+	"frbg/network"
 	"log"
 	"net"
 
@@ -53,13 +54,18 @@ func must(e error) {
 	}
 }
 
-func rpc(svid uint16, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
-	bs, _ := protobuf.Marshal(req)
-	msg := codec.NewMessage(cmd, &pb.PacketIn{
-		Svid:    uint32(svid),
-		Cmd:     uint32(cmd),
-		Payload: bs,
-	})
+func rpc(svid uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+	var msg *codec.Message
+	if svid == def.ST_Gate || svid == def.ST_WsGate {
+		msg = codec.NewMessage(cmd, req)
+	} else {
+		bs, _ := protobuf.Marshal(req)
+		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
+			Svid:    uint32(network.Svid(svid, 1)),
+			Cmd:     uint32(cmd),
+			Payload: bs,
+		})
+	}
 	if err = codec.WsWrite(conn, msg); err != nil {
 		return err
 	}

@@ -147,11 +147,9 @@ func (l *Local) packetOut(in *local.Input) error {
 	if cli == nil {
 		return fmt.Errorf("not find user %d", req.Uid)
 	}
-	cli.Write(codec.NewMessage(in.Cmd, &pb.PacketOut{
-		Cmd:     uint32(req.Cmd),
-		Payload: req.Payload,
-	}))
-	return nil
+	in.Message.Cmd = uint16(req.Cmd)
+	in.Message.Payload = req.Payload
+	return cli.Write(in.Message)
 }
 
 func (l *Local) Close(conn *network.Conn) {
