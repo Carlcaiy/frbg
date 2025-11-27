@@ -45,7 +45,7 @@ func main() {
 	must(rpc(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)}, &pb.GetGameListRsp{}))
 	getRoomListRsp := &pb.GetRoomListRsp{}
 	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.MahjongBanbisan}, getRoomListRsp))
-	must(rpc(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &pb.GetRoomListRsp{}))
+	// must(rpc(def.ST_Game, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &pb.EnterRoomRsp{}))
 }
 
 func must(e error) {

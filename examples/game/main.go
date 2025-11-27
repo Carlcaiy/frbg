@@ -24,6 +24,7 @@ func main() {
 		ServerId:   1,
 	}
 	pollConfig := &network.PollConfig{
+		Etcd:    true,
 		MaxConn: 10000,
 	}
 	poll := network.NewPoll(serverConfig, pollConfig, route.NewLocal())

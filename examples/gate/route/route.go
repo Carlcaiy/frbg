@@ -117,7 +117,7 @@ func (l *Local) logout(in *local.Input) error {
 		client.Write(codec.NewMessage(in.Cmd, &pb.CommonRsp{
 			Code: pb.ErrorCode_Success,
 		}))
-		l.clients.DelClient(req.Uid)
+		l.clients.DelClient(client)
 		return nil
 	}
 	return fmt.Errorf("reqLeaveGate not find user: %d", req.Uid)
@@ -153,5 +153,5 @@ func (l *Local) packetOut(in *local.Input) error {
 }
 
 func (l *Local) Close(conn *network.Conn) {
-	l.clients.DelClient(conn.Uid)
+	l.clients.DelClient(conn)
 }

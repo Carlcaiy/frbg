@@ -54,7 +54,6 @@ type Poll struct {
 	listenFd   int
 	listener   *net.TCPListener
 	fdConns    map[int]*Conn
-	cliConns   map[uint16]*Conn
 	connNum    int64 // 改为 int64 便于原子操作
 	pollConfig *PollConfig
 	queue      *esqueue
@@ -76,7 +75,6 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	must(err)
 	poll := &Poll{
 		fdConns:    make(map[int]*Conn),
-		cliConns:   make(map[uint16]*Conn),
 		epollFd:    epollFd,
 		eventFd:    eventFd,
 		pollConfig: pconf,
@@ -315,7 +313,7 @@ func (p *Poll) processClientData(fd int) error {
 	// 3. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		log.Printf("codec.Read error: msg:%s err:%s", msg.String(), err.Error())
+		log.Println(err.Error())
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}
@@ -412,8 +410,11 @@ func (p *Poll) Del(fd int) error {
 		return fmt.Errorf("connection not found for fd: %d", fd)
 	}
 	delete(p.fdConns, fd)
-	p.decrConnNum()
 	p.mu.Unlock()
+	p.decrConnNum()
+	if conn.Svid != 0 {
+		innerServerMgr.DelServe(conn.Svid)
+	}
 
 	log.Printf("Del fd:%d addr:%s conn_num=%d",
 		fd, conn.RemoteAddr(), p.getConnNum())
@@ -451,26 +452,13 @@ func (p *Poll) ConnCheck() {
 
 func (p *Poll) ConnTick() {
 	p.heartBeat = time.NewTicker(time.Second)
-
 	for range p.heartBeat.C {
-		// 获取读锁，复制连接列表
-		p.mu.RLock()
-		clients := make([]*Conn, 0, len(p.cliConns))
-		for _, conn := range p.cliConns {
-			clients = append(clients, conn)
-		}
-		p.mu.RUnlock()
-
 		// 发送心跳
-		for _, cli := range clients {
+		innerServerMgr.Range(func(cli *Conn) error {
 			msg := codec.AcquireMessage()
 			msg.SetFlags(codec.FlagsHeartBeat)
-			if err := cli.Write(msg); err != nil {
-				log.Printf("ConnTick Write error: fd:%d err:%s", cli.Fd, err.Error())
-				// 使用统一的连接清理机制
-				p.Del(cli.Fd)
-			}
-		}
+			return cli.Write(msg)
+		})
 	}
 }
 
@@ -491,7 +479,10 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 		conn:       conn,
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
+		Svid:       conf.Svid(),
 	}
+
+	log.Printf("Connect fd:%d addr:%s", fd, conn.RemoteAddr().String())
 
 	// 根据服务类型设置协议
 	if conf.ServerType == def.ST_WsGate {
@@ -500,8 +491,9 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 		ptr.Protocol = def.ProtocolTcp
 	}
 
-	// 客戶端连接不受fdConns管理
 	p.fdConns[fd] = ptr
+	p.incrConnNum()
+	innerServerMgr.AddServe(conf.Svid(), ptr)
 	p.handle.OnConnect(ptr)
 	return ptr, nil
 }
@@ -572,15 +564,10 @@ func must(err error) {
 }
 
 func (poll *Poll) GetServer(svid uint16) *Conn {
-	var conn *Conn
-	poll.mu.RLock()
-	conn, ok := poll.cliConns[svid]
-	if ok {
-		poll.mu.RUnlock()
+	conn := innerServerMgr.GetServe(svid)
+	if conn != nil {
 		return conn
 	}
-	poll.mu.RUnlock()
-
 	addr := register.Get(svid)
 	if addr == "" {
 		return nil
@@ -593,9 +580,6 @@ func (poll *Poll) GetServer(svid uint16) *Conn {
 	}
 
 	if conn, err := poll.Connect(conf); err == nil {
-		poll.mu.Lock()
-		poll.cliConns[conf.Svid()] = conn
-		poll.mu.Unlock()
 		return conn
 	} else {
 		log.Printf("Connect error: %v", err)

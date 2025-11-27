@@ -80,6 +80,7 @@ func ReleaseMessage(msg *Message) {
 func (m *Message) Reset() {
 	m.Header = Header{}
 	m.Cmd = 0
+	m.MagicNumber = magicNumber
 	m.Payload = m.Payload[:0]
 	m.All = m.All[:0]
 }

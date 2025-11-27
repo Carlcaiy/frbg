@@ -29,12 +29,14 @@ func (u *User) GateID() uint8 {
 
 type Clients struct {
 	mu      sync.RWMutex
-	m_users map[uint32]*network.Conn
+	fd_uid  map[int]uint32           // fd -> uid
+	m_users map[uint32]*network.Conn // uid -> conn
 }
 
 func NewClients() *Clients {
 	return &Clients{
 		m_users: make(map[uint32]*network.Conn),
+		fd_uid:  make(map[int]uint32),
 	}
 }
 
@@ -44,14 +46,16 @@ func (u *Clients) GetClient(uid uint32) *network.Conn {
 	return u.m_users[uid]
 }
 
-func (u *Clients) SetClient(uid uint32, data *network.Conn) {
+func (u *Clients) SetClient(uid uint32, conn *network.Conn) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.m_users[uid] = data
+	u.m_users[uid] = conn
+	u.fd_uid[conn.Fd] = uid
 }
 
-func (u *Clients) DelClient(uid uint32) {
+func (u *Clients) DelClient(conn *network.Conn) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	delete(u.m_users, uid)
+	delete(u.m_users, u.fd_uid[conn.Fd])
+	delete(u.fd_uid, conn.Fd)
 }
