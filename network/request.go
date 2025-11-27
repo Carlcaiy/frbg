@@ -14,12 +14,28 @@ type Conn struct {
 	Fd         int          // 文件描述符
 	ActiveTime int64        // 活跃时间
 	Protocol   byte         // 协议 0:tcp 1:ws
-	Svid       uint16       // 服务id
-	Uid        uint32       // 用户id
+	svid       uint16       // 服务id
+	uid        uint32       // 用户id
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
+}
+
+func (c *Conn) Uid() uint32 {
+	return c.uid
+}
+
+func (c *Conn) SetUid(uid uint32) {
+	c.uid = uid
+}
+
+func (c *Conn) Svid() uint16 {
+	return c.svid
+}
+
+func (c *Conn) SetSvid(svid uint16) {
+	c.svid = svid
 }
 
 func (c *Conn) Read() (*codec.Message, error) {
@@ -48,10 +64,10 @@ func (c *Conn) Write(msg *codec.Message) error {
 	}
 	if err != nil {
 		log.Printf("Write error: %s", err.Error())
-		if c.Svid == 0 {
+		if c.svid == 0 {
 			c.poll.Del(c.Fd)
 		} else {
-			innerServerMgr.DelServe(c.Svid)
+			innerServerMgr.DelServe(c.svid)
 		}
 	}
 

@@ -412,8 +412,8 @@ func (p *Poll) Del(fd int) error {
 	delete(p.fdConns, fd)
 	p.mu.Unlock()
 	p.decrConnNum()
-	if conn.Svid != 0 {
-		innerServerMgr.DelServe(conn.Svid)
+	if conn.Svid() != 0 {
+		innerServerMgr.DelServe(conn.Svid())
 	}
 
 	log.Printf("Del fd:%d addr:%s conn_num=%d",
@@ -479,7 +479,7 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 		conn:       conn,
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
-		Svid:       conf.Svid(),
+		svid:       conf.Svid(),
 	}
 
 	log.Printf("Connect fd:%d addr:%s", fd, conn.RemoteAddr().String())
