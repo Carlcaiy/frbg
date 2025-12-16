@@ -14,16 +14,17 @@ import (
 
 type Room struct {
 	l         *Local
-	master    uint32  // 房主ID
-	roomId    uint32  // 房间ID
-	Users     []*User // 用户
-	turn      int     // 庄家
-	mj        []uint8 // 麻将
-	mjIndex   int16   // 麻将索引
-	touzi     []int32 // 骰子
-	pizi      uint8   // 皮子
-	laizi     uint8   // 赖子
-	waitOther bool    // 等待其他玩家操作
+	master    uint32   // 房主ID
+	roomId    uint32   // 房间ID
+	BookUids  []uint32 // 已预约用户
+	Users     []*User  // 用户
+	turn      int      // 庄家
+	mj        []uint8  // 麻将
+	mjIndex   int16    // 麻将索引
+	touzi     []int32  // 骰子
+	pizi      uint8    // 皮子
+	laizi     uint8    // 赖子
+	waitOther bool     // 等待其他玩家操作
 	history   []*mj.MjOp
 	playing   bool
 	endTime   time.Time

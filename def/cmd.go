@@ -33,15 +33,16 @@ const (
 
 // 游戏消息
 const (
-	GameBegin = 3000 // Game
-	EnterRoom = 3001 // 进入游戏
-	BcOpt     = 3002 // 广播操作
-	OptGame   = 3003 // 点击游戏
-	Round     = 3004 // 回合
-	GameOver  = 3005 // 游戏结束
-	Reconnect = 3006 // 重连
-	CountDown = 3007 // 倒计时
-	GameFaPai = 3008 // 发牌
-	LeaveRoom = 3009 // 离开游戏
-	GameEnd   = 3999 // Game
+	GameBegin  = 3000 // Game
+	StartGame  = 3001 // 进入游戏
+	BcOpt      = 3002 // 广播操作
+	OptGame    = 3003 // 点击游戏
+	Round      = 3004 // 回合
+	GameOver   = 3005 // 游戏结束
+	Reconnect  = 3006 // 重连
+	CountDown  = 3007 // 倒计时
+	GameFaPai  = 3008 // 发牌
+	LeaveRoom  = 3009 // 离开游戏
+	GameStatus = 3010 // 获取游戏状态
+	GameEnd    = 3999 // Game
 )

@@ -23,11 +23,26 @@ func NewLocal() *Local {
 
 func (l *Local) Init() {
 	l.BaseLocal.Init()
-	l.AddRoute(def.EnterRoom, l.enterRoom)
+	l.AddRoute(def.GameStatus, l.getGameStatus)
+	l.AddRoute(def.StartGame, l.startGame)
 	l.AddRoute(def.LeaveRoom, l.leaveRoom)
 	l.AddRoute(def.OptGame, l.optGame)
 	l.AddRoute(def.Reconnect, l.reconnect)
 	l.AddRoute(def.Offline, l.offline)
+}
+
+func (l *Local) getGameStatus(in *local.Input) error {
+	req := new(pb.GameStatusReq)
+	if err := in.Unpack(req); err != nil {
+		return err
+	}
+	rsp := new(pb.GameStatusRsp)
+	room, ok := l.users[req.Uid]
+	if ok && room.playing {
+		rsp.RoomId = room.roomId
+	}
+	in.Response(req.Uid, in.Cmd, rsp)
+	return nil
 }
 
 func (l *Local) offline(in *local.Input) error {
@@ -58,37 +73,21 @@ func (l *Local) reconnect(in *local.Input) error {
 	return nil
 }
 
-func (l *Local) enterRoom(in *local.Input) error {
-	req, rsp := new(pb.EnterRoomReq), new(pb.EnterRoomRsp)
+func (l *Local) startGame(in *local.Input) error {
+	req := new(pb.StartGame)
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
-	log.Println("enterRoom", req.String())
-	var room *Room
-	for _, v := range l.rooms {
-		if v.playing {
-			continue
-		}
-		if len(v.Users) == 4 {
-			continue
-		}
-		if room == nil {
-			room = v
-		}
-		if len(room.Users) < len(v.Users) {
-			room = v
-		}
-		if len(room.Users) == 3 {
-			break
-		}
-	}
+	log.Println("startGame", req.String())
+	room := l.rooms[req.RoomId]
 	if room == nil {
-		room = NewRoom(l, 0)
+		room = NewRoom(l, req.RoomId)
 		l.rooms[room.roomId] = room
 	}
-	l.users[req.Uid] = room
-	room.AddUser(req.Uid, uint16(req.GateId))
-	in.Response(req.Uid, in.Cmd, rsp)
+	for uid, gateId := range req.Users {
+		room.AddUser(uid, uint16(gateId))
+		l.users[uid] = room
+	}
 	if room.Full() {
 		room.Start()
 	}

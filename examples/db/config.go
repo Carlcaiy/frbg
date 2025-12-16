@@ -43,6 +43,7 @@ var roomList = []*pb.RoomInfo{
 		ServerId: 1,
 		RoomId:   1,
 		Tag:      def.TagNormal,
+		Level:    1,
 		Info:     "半壁山麻将",
 	},
 }

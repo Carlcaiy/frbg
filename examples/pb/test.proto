@@ -98,7 +98,8 @@ message RoomInfo {
     uint32 roomId = 2;
     uint32 tag = 3;          // 0正常房间 1热门房间 2推荐房间 3新的房间
     uint32 gameId = 4;       // 游戏id
-    string info = 5;        // 房间描述
+    uint32 level = 5;        // 等级
+    string info = 6;         // 房间描述
 }
 
 // 答复房间列表
@@ -112,11 +113,13 @@ message EnterRoomReq {
     uint32 gateId = 2;
     uint32 gameId = 3;
     uint32 roomId = 4;
+    uint32 multi = 5;
 }
 
 // 进房答复
 message EnterRoomRsp {
-    repeated uint32 uids = 1;
+    uint32 roomId = 1;
+    repeated uint32 uids = 2;
 }
 
 // 进入老虎机
@@ -208,6 +211,14 @@ message LeaveRoomRsp {
     uint32 code = 1;
 }
 
+message GameStatusReq {
+    uint32 uid = 1;
+}
+
+message GameStatusRsp {
+    uint32 roomId = 1;
+}
+
 // 玩家离线
 message Offline {
     uint32 uid = 1;
@@ -217,7 +228,7 @@ message Offline {
 message StartGame {
     uint32 roomId = 1;          // 房间ID
     uint32 hallId = 2;          // 大厅ID
-    uint32 deskId = 3;          // 模板ID
+    int32 multi = 3;            // 倍数
     map<uint32,uint32> users = 4;// 所有玩家的uid
 }
 

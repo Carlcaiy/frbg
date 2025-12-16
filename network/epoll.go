@@ -40,6 +40,8 @@ type PollConfig struct {
 	Etcd      bool
 }
 
+type RpcCallback func(*codec.Message, error)
+
 func NewPollConfig() *PollConfig {
 	return &PollConfig{
 		MaxConn:   10000,
@@ -64,6 +66,10 @@ type Poll struct {
 	mu         sync.RWMutex      // 保护 fdconns 和 connNum
 	ticker     *time.Ticker
 	heartBeat  *time.Ticker
+	// RPC响应管理
+	rpcResponses map[uint16]chan *codec.Message
+	rpcCallbacks map[uint16]RpcCallback
+	rpcMu        sync.RWMutex
 }
 
 func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
@@ -324,7 +330,12 @@ func (p *Poll) processClientData(fd int) error {
 		return nil
 	}
 
-	// 5. 路由消息到业务处理器
+	// 5. 处理RPC响应
+	if p.HandleRpcResponse(msg) {
+		return nil
+	}
+
+	// 6. 路由消息到业务处理器
 	if p.handle != nil {
 		if err := p.handle.Route(conn, msg); err != nil {
 			log.Printf("route error: fd:%d err:%v", fd, err)
@@ -585,4 +596,51 @@ func (poll *Poll) GetServer(svid uint16) *Conn {
 		log.Printf("Connect error: %v", err)
 	}
 	return nil
+}
+
+// RegisterRpc 注册RPC响应等待
+func (p *Poll) RegisterRpc(seq uint16, respChan chan *codec.Message) {
+	p.rpcMu.Lock()
+	defer p.rpcMu.Unlock()
+	p.rpcResponses[seq] = respChan
+}
+
+// UnregisterRpc 取消注册RPC响应等待
+func (p *Poll) UnregisterRpc(seq uint16) {
+	p.rpcMu.Lock()
+	defer p.rpcMu.Unlock()
+	delete(p.rpcResponses, seq)
+}
+
+// RegisterRpcCallback 注册RPC异步回调
+func (p *Poll) RegisterRpcCallback(seq uint16, callback RpcCallback) {
+	p.rpcMu.Lock()
+	defer p.rpcMu.Unlock()
+	p.rpcCallbacks[seq] = callback
+}
+
+// HandleRpcResponse 处理RPC响应
+func (p *Poll) HandleRpcResponse(msg *codec.Message) bool {
+	seq := msg.Seq
+
+	p.rpcMu.RLock()
+	// 优先处理同步等待
+	if respChan, ok := p.rpcResponses[seq]; ok {
+		p.rpcMu.RUnlock()
+		select {
+		case respChan <- msg:
+		default:
+			// 通道已关闭或满，丢弃
+		}
+		return true
+	}
+
+	// 处理异步回调
+	if callback, ok := p.rpcCallbacks[seq]; ok {
+		p.rpcMu.RUnlock()
+		go callback(msg, nil)
+		return true
+	}
+	p.rpcMu.RUnlock()
+	return false
 }

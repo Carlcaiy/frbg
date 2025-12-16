@@ -2,6 +2,7 @@ package route
 
 import (
 	"fmt"
+	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/db"
 	"frbg/examples/hall/slots"
@@ -9,12 +10,23 @@ import (
 	"frbg/local"
 	"frbg/network"
 	"log"
+	"sync/atomic"
 )
 
+var incRoomId atomic.Uint32
 var route *Local
+
+type User struct {
+	Uid    uint32
+	GateId uint16
+	GameId uint32
+	Multi  uint32
+	RoomId uint32
+}
 
 type Local struct {
 	*local.BaseLocal
+	userGame map[uint32]*User // 用户状态 0:等待进入房间 >0:在房间内
 }
 
 func New() *Local {
@@ -30,6 +42,7 @@ func (l *Local) init() {
 	l.AddRoute(def.Offline, l.offline)
 	l.AddRoute(def.GetGameList, l.getGameList)
 	l.AddRoute(def.GetRoomList, l.getRoomList)
+	l.AddRoute(def.StartGame, l.enterRoom)
 	l.AddRoute(def.EnterSlots, l.enterSlots)
 	l.AddRoute(def.SpinSlots, l.spinSlots)
 	l.AddRoute(def.LeaveSlots, l.leaveSlots)
@@ -61,6 +74,87 @@ func (l *Local) getRoomList(in *local.Input) error {
 		log.Printf("Send() err:%s", errSend.Error())
 	}
 	return nil
+}
+
+// 如果只是配桌，同时活跃的用户不会很多，全部写在内存也不会占用多少
+// 考虑到服务器重启，只需要在服务器间同步配桌数据
+// 如果出现服务器挂掉的情况，需要重新配桌，这个数据又不重要，所以不做处理
+// 如果用户已经在房间内，直接返回
+func (l *Local) enterRoom(in *local.Input) error {
+	log.Println("enterRoom")
+	req, rsp := new(pb.EnterRoomReq), new(pb.EnterRoomRsp)
+	if err := in.Unpack(req); err != nil {
+		return err
+	}
+
+	// 如果用户已经在房间内，直接返回
+	if game := l.userGame[req.Uid]; game != nil && game.RoomId > 0 {
+		rsp.RoomId = game.RoomId
+		return in.Response(req.Uid, in.Cmd, rsp)
+	}
+
+	// 查询用户状态
+	greq, grsp := &pb.GameStatusReq{
+		Uid: req.Uid,
+	}, new(pb.GameStatusRsp)
+	if err := l.RpcCall(def.ST_Game, def.GameStatus, greq, grsp); err != nil {
+		return err
+	}
+
+	// 如果用户已经在房间内，直接返回
+	if grsp.RoomId != 0 {
+		rsp.RoomId = grsp.RoomId
+		if game := l.userGame[req.Uid]; game == nil {
+			game = &User{
+				Uid:    req.Uid,
+				GameId: req.GameId,
+				RoomId: req.RoomId,
+			}
+			l.userGame[req.Uid] = game
+		} else {
+			game.RoomId = grsp.RoomId
+		}
+		return in.Response(req.Uid, in.Cmd, rsp)
+	}
+
+	l.userGame[req.Uid] = &User{
+		Uid:    req.Uid,
+		GateId: uint16(req.GateId),
+		GameId: req.GameId,
+		Multi:  req.Multi,
+	}
+
+	matchUid := []uint32{req.Uid}
+	matchUser := map[uint32]uint32{req.Uid: req.GateId}
+	for uid, user := range l.userGame {
+		if uid != req.Uid && user.GameId == req.GameId && user.Multi == req.Multi && user.RoomId == 0 {
+			matchUid = append(matchUid, uid)
+			matchUser[user.Uid] = uint32(user.GateId)
+			if len(matchUid) == 4 {
+				break
+			}
+		}
+	}
+
+	// 4人配桌
+	if len(matchUid) < 4 {
+		return nil
+	}
+
+	// 配桌信息
+	rsp.RoomId = incRoomId.Add(1)
+	for _, uid := range matchUid {
+		l.userGame[uid].RoomId = rsp.RoomId
+	}
+
+	// 通知游戏预约房间
+	return l.Send(def.ST_Game, codec.NewMessage(
+		def.StartGame,
+		&pb.StartGame{
+			RoomId: rsp.RoomId,
+			Users:  matchUser,
+		},
+	))
 }
 
 // 请求进入老虎机

@@ -7,6 +7,8 @@ import (
 	"frbg/timer"
 	"log"
 	"runtime"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Handle func(*Input) error
@@ -76,6 +78,28 @@ func (l *BaseLocal) Send(svid uint16, msg *codec.Message) error {
 		return fmt.Errorf("error not find server %d", svid)
 	}
 	return conn.Write(msg)
+}
+
+func (l *BaseLocal) RpcCall(svid uint16, cmd uint16, req proto.Message, rsp proto.Message) error {
+	conn := l.Poll.GetServer(svid)
+	if conn == nil {
+		return fmt.Errorf("error not find server %d", svid)
+	}
+
+	msg, err := conn.RpcWrite(cmd, req, 1000)
+	if err != nil {
+		return err
+	}
+	return msg.Unpack(rsp)
+}
+
+func (l *BaseLocal) RpcCallAsync(svid uint16, cmd uint16, req proto.Message, f func(msg *codec.Message, err error)) error {
+	conn := l.Poll.GetServer(svid)
+	if conn == nil {
+		return fmt.Errorf("error not find server %d", svid)
+	}
+
+	return conn.RpcWriteAsync(cmd, req, f)
 }
 
 var buf = make([]byte, 1024)
