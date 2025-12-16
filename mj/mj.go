@@ -38,12 +38,12 @@ var BanBiShanMJ = []uint8{
 
 // 操作枚举
 const (
-	MoPai, DaPai, GuoPai = 1, 2, 3
-	LChi, MChi, RChi     = 4, 5, 6
-	Peng                 = 7
-	MGang, BGang, AGang  = 8, 9, 10
-	HuPai                = 11
-	Jiang, Shun, Ke      = 12, 13, 14
+	MoPai, ChuPai, GuoPai = 1, 2, 3
+	LChi, MChi, RChi      = 4, 5, 6
+	Peng                  = 7
+	MGang, BGang, AGang   = 8, 9, 10
+	HuPai                 = 11
+	Jiang, Shun, Ke       = 12, 13, 14
 )
 
 func OpBit(op uint8) int32 {

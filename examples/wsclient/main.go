@@ -8,20 +8,21 @@ import (
 	"frbg/codec"
 	"frbg/def"
 	"frbg/examples/pb"
+	"frbg/mj"
 	"frbg/network"
 	"log"
 	"net"
 
-	protobuf "google.golang.org/protobuf/proto"
-
 	"github.com/gobwas/ws"
-	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/proto"
 )
 
 var uid int = 100005
 var port int = 6666
 var conn net.Conn
 var err error
+var gameData *pb.StartGameRsp
+var mjs []uint8
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -44,8 +45,74 @@ func main() {
 	must(rpc(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1}, &pb.LoginRsp{}))
 	must(rpc(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)}, &pb.GetGameListRsp{}))
 	getRoomListRsp := &pb.GetRoomListRsp{}
-	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.MahjongBanbisan}, getRoomListRsp))
-	// must(rpc(def.ST_Game, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}, &pb.EnterRoomRsp{}))
+	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan}, getRoomListRsp))
+	must(send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}))
+
+	for {
+		msg, err := codec.WsRead(conn)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		switch msg.Cmd {
+		case def.StartGame:
+			rsp := new(pb.StartGameRsp)
+			logdata(rsp, msg)
+			gameData = rsp
+			send(def.ST_Game, def.SyncStatus, &pb.SyncStatus{
+				Uid:    uint32(uid),
+				RoomId: gameData.RoomId,
+				Cmd:    def.StartGame,
+			})
+		case def.GameFaPai:
+			rsp := new(pb.FaPai)
+			logdata(rsp, msg)
+			for i := range rsp.Fapai {
+				if rsp.Fapai[i].Uid == uint32(uid) {
+					mjs = append(mjs, uint8(rsp.Fapai[i].MjVal))
+				}
+			}
+			send(def.ST_Game, def.SyncStatus, &pb.SyncStatus{
+				Uid:    uint32(uid),
+				RoomId: gameData.RoomId,
+				Cmd:    def.GameFaPai,
+			})
+		case def.NotifyChuPai:
+			rsp := new(pb.MjOpt)
+			logdata(rsp, msg)
+			send(def.ST_Game, def.OptGame, &pb.MjOpt{
+				Uid:    uint32(uid),
+				RoomId: gameData.RoomId,
+				Op:     mj.ChuPai,
+				Mj:     int32(mjs[0]),
+			})
+		case def.BcOpt:
+			rsp := new(pb.MjOpt)
+			logdata(rsp, msg)
+			if rsp.Uid == uint32(uid) && rsp.Op == mj.ChuPai && rsp.Mj > 0 {
+				for i, mj := range mjs {
+					if int32(mj) == rsp.Mj {
+						mjs = append(mjs[:i], mjs[i+1:]...)
+						break
+					}
+				}
+			}
+			if rsp.CanOp&mj.GuoPai == mj.GuoPai {
+				send(def.ST_Game, def.OptGame, &pb.MjOpt{
+					Uid:    uint32(uid),
+					RoomId: gameData.RoomId,
+					Op:     mj.GuoPai,
+				})
+			} else if rsp.CanOp&mj.ChuPai == mj.ChuPai {
+				send(def.ST_Game, def.OptGame, &pb.MjOpt{
+					Uid:    uint32(uid),
+					RoomId: gameData.RoomId,
+					Op:     mj.ChuPai,
+				})
+			}
+		}
+	}
 }
 
 func must(e error) {
@@ -54,12 +121,22 @@ func must(e error) {
 	}
 }
 
-func rpc(svid uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect.ProtoMessage) error {
+func logdata(data proto.Message, msg *codec.Message) {
+	err = msg.Unpack(data)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	bsi, _ := json.MarshalIndent(data, "", "  ")
+	log.Println(string(bsi))
+}
+
+func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
 	var msg *codec.Message
 	if svid == def.ST_Gate || svid == def.ST_WsGate {
 		msg = codec.NewMessage(cmd, req)
 	} else {
-		bs, _ := protobuf.Marshal(req)
+		bs, _ := proto.Marshal(req)
 		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
 			Svid:    uint32(network.Svid(svid, 1)),
 			Cmd:     uint32(cmd),
@@ -81,5 +158,23 @@ func rpc(svid uint8, cmd uint16, req protoreflect.ProtoMessage, rsp protoreflect
 	}
 	bsi, _ := json.MarshalIndent(rsp, "", "  ")
 	log.Println(string(bsi))
+	return nil
+}
+
+func send(svid uint8, cmd uint16, req proto.Message) error {
+	var msg *codec.Message
+	if svid == def.ST_Gate || svid == def.ST_WsGate {
+		msg = codec.NewMessage(cmd, req)
+	} else {
+		bs, _ := proto.Marshal(req)
+		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
+			Svid:    uint32(network.Svid(svid, 1)),
+			Cmd:     uint32(cmd),
+			Payload: bs,
+		})
+	}
+	if err = codec.WsWrite(conn, msg); err != nil {
+		return err
+	}
 	return nil
 }

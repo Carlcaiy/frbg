@@ -234,7 +234,7 @@ func (m *stat) CanOpSelf() []*Group {
 
 func (m *stat) CanOpOther(val uint8, op uint8) []*Group {
 	ret := make([]*Group, 0)
-	if op == DaPai {
+	if op == ChuPai {
 		for i := range m.num {
 			if m.val[i] == val {
 				if i+2 < len(m.val) && m.val[i+1] == val+1 && m.val[i+2] == val+2 {

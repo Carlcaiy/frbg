@@ -284,7 +284,7 @@ func (m *statlz) CanOpSelf() []*Group {
 
 func (m *statlz) CanOpOther(val, op uint8) []*Group {
 	ret := make([]*Group, 0)
-	if op == DaPai {
+	if op == ChuPai {
 		if m.num[val+1] > 0 && m.num[val+2] > 0 {
 			ret = append(ret, &Group{
 				Op:  LChi,

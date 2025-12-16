@@ -24,6 +24,7 @@ func NewLocal() *Local {
 func (l *Local) Init() {
 	l.BaseLocal.Init()
 	l.AddRoute(def.GameStatus, l.getGameStatus)
+	l.AddRoute(def.SyncStatus, l.syncStatus)
 	l.AddRoute(def.StartGame, l.startGame)
 	l.AddRoute(def.LeaveRoom, l.leaveRoom)
 	l.AddRoute(def.OptGame, l.optGame)
@@ -74,7 +75,7 @@ func (l *Local) reconnect(in *local.Input) error {
 }
 
 func (l *Local) startGame(in *local.Input) error {
-	req := new(pb.StartGame)
+	req, rsp := new(pb.StartGameReq), new(pb.StartGameRsp)
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
@@ -88,10 +89,46 @@ func (l *Local) startGame(in *local.Input) error {
 		room.AddUser(uid, uint16(gateId))
 		l.users[uid] = room
 	}
-	if room.Full() {
-		room.Start()
+
+	rsp.RoomId = room.roomId
+	rsp.Multi = req.Multi
+	rsp.Users = make(map[uint32]int32)
+	for uid := range req.Users {
+		rsp.Users[uid] = room.GetUserByUID(uid).Seat()
+	}
+	room.wait.WaitAll(def.StartGame)
+	for uid := range req.Users {
+		room.GetUserByUID(uid).Send(def.StartGame, rsp)
 	}
 
+	return nil
+}
+
+func (l *Local) syncStatus(in *local.Input) error {
+	req := new(pb.SyncStatus)
+	if err := in.Unpack(req); err != nil {
+		return err
+	}
+	log.Println("syncStatus", req.String())
+	room, ok := l.rooms[req.RoomId]
+	if !ok {
+		return nil
+	}
+	user := room.GetUserByUID(req.Uid)
+	if user == nil {
+		return nil
+	}
+	if ok := room.wait.Done(req.Cmd, int32(user.Seat())); !ok {
+		return nil
+	}
+	if !room.wait.IsFull() {
+		return nil
+	}
+	if req.Cmd == def.StartGame {
+		room.Start()
+	} else if req.Cmd == def.GameFaPai {
+		room.NotifyChuPai()
+	}
 	return nil
 }
 

@@ -28,6 +28,7 @@ type Room struct {
 	history   []*mj.MjOp
 	playing   bool
 	endTime   time.Time
+	wait      *Wait
 }
 
 func NewRoom(l *Local, master uint32) *Room {
@@ -36,6 +37,7 @@ func NewRoom(l *Local, master uint32) *Room {
 		mj:     make([]uint8, len(mj.BanBiShanMJ)),
 		touzi:  make([]int32, 2),
 		master: master,
+		wait:   NewWait(4),
 	}
 	copy(room.mj, mj.BanBiShanMJ)
 	return room
@@ -180,14 +182,12 @@ func (r *Room) Start() {
 
 	// 组装信息
 	zhuang := r.Users[r.turn]
-	can_op := zhuang.CanOpSelf()
-
 	piziMj := &pb.DeskMj{
 		Index: piziIndex,
 		MjVal: int32(r.pizi),
 	}
 
-	r.waitOther = false
+	r.wait.WaitAll(def.GameFaPai)
 	for _, u := range r.Users {
 		handsMj := make([]*pb.DeskMj, len(faPai))
 		for i := range faPai {
@@ -199,19 +199,27 @@ func (r *Room) Start() {
 				handsMj[i].MjVal = faPai[i].MjVal
 			}
 		}
-		canOp := int32(0)
-		if u.uid == zhuang.uid {
-			canOp = can_op
-		}
-		u.Send(def.GameFaPai, &pb.FaMj{
+		u.Send(def.GameFaPai, &pb.FaPai{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
 			Touzi:  r.touzi,
 			Pizi:   piziMj,
 			Laizi:  int32(r.laizi),
-			CanOp:  canOp,
 		})
 	}
+}
+
+func (r *Room) NotifyChuPai() {
+	zhuang := r.GetUser(r.turn)
+	if zhuang == nil {
+		log.Printf("NotifyChuPai error: not find uid:%d\n", r.turn)
+		return
+	}
+	canOp := zhuang.CanOpSelf()
+	zhuang.Send(def.NotifyChuPai, &pb.MjOpt{
+		Uid:   zhuang.uid,
+		CanOp: int32(canOp),
+	})
 }
 
 func (r *Room) MoPai() uint8 {
@@ -312,7 +320,7 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 	if finalOp != mj.GuoPai {
 		for _, u := range r.Users {
 			// 如果是出牌操作，告知其他玩家可执行的操作
-			if finalOp == mj.DaPai || finalOp == mj.BGang {
+			if finalOp == mj.ChuPai || finalOp == mj.BGang {
 				canOp := u.CanOpOther(uint8(pai), uint8(finalOp), r.laizi)
 				if canOp > 0 {
 					noCanOp = false
@@ -326,7 +334,7 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 	r.waitOther = !noCanOp
 
 	// 出牌操作，没有人有操作，给下一家发牌，并告知可执行操作
-	if (finalOp == mj.DaPai && noCanOp) ||
+	if (finalOp == mj.ChuPai && noCanOp) ||
 		finalOp == mj.GuoPai || finalOp == mj.AGang || finalOp == mj.MGang {
 		r.turn = (r.turn + 1) % len(r.Users)
 		turnUser := r.Users[r.turn]
@@ -365,7 +373,7 @@ func (r *Room) gameOver(huUser *User) {
 	log.Println("game over")
 	pai := uint8(0)
 	if r.waitOther {
-		if opt := r.getLatestOp(mj.DaPai | mj.BGang); opt != nil {
+		if opt := r.getLatestOp(mj.ChuPai | mj.BGang); opt != nil {
 			pai = uint8(opt.Mj)
 		}
 	}

@@ -16,7 +16,7 @@ var gameList = []*pb.GameInfo{
 		StartTime: uint32(time.Now().Unix()),
 		EndTime:   0,
 	}, {
-		GameId:    def.MahjongBanbisan,
+		GameId:    def.SID_MahjongBanbisan,
 		Status:    1,
 		StartTime: uint32(time.Now().Unix()),
 		EndTime:   0,
@@ -39,8 +39,8 @@ func GetGameList() []*pb.GameInfo {
 
 var roomList = []*pb.RoomInfo{
 	{
-		GameId:   def.MahjongBanbisan,
-		ServerId: 1,
+		GameId:   def.SID_MahjongBanbisan,
+		ServerId: def.ST_Game,
 		RoomId:   1,
 		Tag:      def.TagNormal,
 		Level:    1,

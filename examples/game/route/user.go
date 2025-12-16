@@ -28,6 +28,10 @@ type User struct {
 	prepare       bool // 准备状态
 }
 
+func (u *User) Seat() int32 {
+	return int32(u.seat)
+}
+
 func (u *User) Send(cmd uint16, data proto.Message) {
 	payload, err := proto.Marshal(data)
 	if err != nil {
@@ -204,7 +208,7 @@ func (u *User) CanOpSelf() int32 {
 	u.waiting = len(u.can_ops_group) > 0
 
 	// 可以出牌
-	u.can_ops_flag = int32(mj.DaPai)
+	u.can_ops_flag = int32(mj.ChuPai)
 	// 其他操作
 	for i := range u.can_ops_group {
 		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)

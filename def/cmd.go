@@ -23,26 +23,27 @@ const (
 	HallBegin   = 2000 // Hall
 	GetGameList = 2001 // 获取游戏列表
 	GetRoomList = 2002 // 获取房间列表
-	// EnterRoom   = 2003 // 进房请求
-	// LeaveRoom  = 2006 // 请求离开房间
-	EnterSlots = 2008 // 进入老虎机
-	SpinSlots  = 2009 // 老虎机摇奖
-	LeaveSlots = 2010 // 离开老虎机
-	HallEnd    = 2999 // Hall
+	EnterRoom   = 2003 // 进房请求
+	LeaveRoom   = 2006 // 请求离开房间
+	EnterSlots  = 2008 // 进入老虎机
+	SpinSlots   = 2009 // 老虎机摇奖
+	LeaveSlots  = 2010 // 离开老虎机
+	HallEnd     = 2999 // Hall
 )
 
 // 游戏消息
 const (
-	GameBegin  = 3000 // Game
-	StartGame  = 3001 // 进入游戏
-	BcOpt      = 3002 // 广播操作
-	OptGame    = 3003 // 点击游戏
-	Round      = 3004 // 回合
-	GameOver   = 3005 // 游戏结束
-	Reconnect  = 3006 // 重连
-	CountDown  = 3007 // 倒计时
-	GameFaPai  = 3008 // 发牌
-	LeaveRoom  = 3009 // 离开游戏
-	GameStatus = 3010 // 获取游戏状态
-	GameEnd    = 3999 // Game
+	GameBegin    = 3000 // Game
+	StartGame    = 3001 // 开始游戏
+	BcOpt        = 3002 // 广播操作
+	OptGame      = 3003 // 点击游戏
+	Round        = 3004 // 回合
+	GameOver     = 3005 // 游戏结束
+	Reconnect    = 3006 // 重连
+	CountDown    = 3007 // 倒计时
+	GameFaPai    = 3008 // 发牌
+	GameStatus   = 3010 // 获取游戏状态
+	SyncStatus   = 3011 // 同步状态
+	NotifyChuPai = 3012 // 通知出牌
+	GameEnd      = 3999 // Game
 )

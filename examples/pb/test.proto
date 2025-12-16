@@ -225,11 +225,26 @@ message Offline {
 }
 
 // 开始游戏
-message StartGame {
+message StartGameReq {
     uint32 roomId = 1;          // 房间ID
     uint32 hallId = 2;          // 大厅ID
     int32 multi = 3;            // 倍数
     map<uint32,uint32> users = 4;// 所有玩家的uid
+}
+
+// 开始游戏
+message StartGameRsp {
+    uint32 roomId = 1;          // 房间ID
+    uint32 hallId = 2;          // 大厅ID
+    int32 multi = 3;            // 倍数
+    map<uint32,int32> users = 4;// 所有玩家的uid
+}
+
+// 同步状态
+message SyncStatus {
+    uint32 roomId = 1;
+    uint32 cmd = 2;
+    uint32 uid = 3;
 }
 
 // 同步数据
@@ -247,13 +262,12 @@ message DeskMj {
 }
 
 // 手牌
-message FaMj {
+message FaPai {
     repeated DeskMj fapai = 1;      // 发牌
     DeskMj pizi = 2;                // 皮子
     repeated int32 touzi = 3;       // 骰子
     uint32 zhuang = 4;              // 庄家
     int32 laizi = 5;                // 赖子
-    int32 can_op = 7;               // 庄家可执行操作
 }
 
 // 完成数据

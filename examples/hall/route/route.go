@@ -42,7 +42,7 @@ func (l *Local) init() {
 	l.AddRoute(def.Offline, l.offline)
 	l.AddRoute(def.GetGameList, l.getGameList)
 	l.AddRoute(def.GetRoomList, l.getRoomList)
-	l.AddRoute(def.StartGame, l.enterRoom)
+	l.AddRoute(def.EnterRoom, l.enterRoom)
 	l.AddRoute(def.EnterSlots, l.enterSlots)
 	l.AddRoute(def.SpinSlots, l.spinSlots)
 	l.AddRoute(def.LeaveSlots, l.leaveSlots)
@@ -81,11 +81,11 @@ func (l *Local) getRoomList(in *local.Input) error {
 // 如果出现服务器挂掉的情况，需要重新配桌，这个数据又不重要，所以不做处理
 // 如果用户已经在房间内，直接返回
 func (l *Local) enterRoom(in *local.Input) error {
-	log.Println("enterRoom")
 	req, rsp := new(pb.EnterRoomReq), new(pb.EnterRoomRsp)
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
+	log.Println("enterRoom", req.String())
 
 	// 如果用户已经在房间内，直接返回
 	if game := l.userGame[req.Uid]; game != nil && game.RoomId > 0 {
@@ -148,9 +148,9 @@ func (l *Local) enterRoom(in *local.Input) error {
 	}
 
 	// 通知游戏预约房间
-	return l.Send(def.ST_Game, codec.NewMessage(
+	return l.Send(network.Svid(def.ST_Game, uint8(req.GameId)), codec.NewMessage(
 		def.StartGame,
-		&pb.StartGame{
+		&pb.StartGameReq{
 			RoomId: rsp.RoomId,
 			Users:  matchUser,
 		},

@@ -21,7 +21,7 @@ func main() {
 	serverConfig := &network.ServerConfig{
 		Addr:       ":6686",
 		ServerType: def.ST_Game,
-		ServerId:   1,
+		ServerId:   def.SID_MahjongBanbisan,
 	}
 	pollConfig := &network.PollConfig{
 		Etcd:    true,
