@@ -26,7 +26,7 @@ func New() *Local {
 }
 
 func (l *Local) Init() {
-	l.BaseLocal.Init()
+	l.Start()
 	l.AddRoute(def.Login, l.login)
 	l.AddRoute(def.MultiBC, l.multibc)
 	l.AddRoute(def.Logout, l.logout)
@@ -143,6 +143,7 @@ func (l *Local) packetOut(in *local.Input) error {
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
+	log.Printf("packetOut uid:%d, cmd:%d", req.Uid, req.Cmd)
 	cli := l.clients.GetClient(req.Uid)
 	if cli == nil {
 		return fmt.Errorf("not find user %d", req.Uid)

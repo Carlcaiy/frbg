@@ -14,15 +14,17 @@ type Local struct {
 }
 
 func NewLocal() *Local {
-	return &Local{
+	l := &Local{
 		BaseLocal: local.NewBase(),
 		rooms:     make(map[uint32]*Room),
 		users:     make(map[uint32]*Room),
 	}
+	l.init()
+	return l
 }
 
-func (l *Local) Init() {
-	l.BaseLocal.Init()
+func (l *Local) init() {
+	l.Start()
 	l.AddRoute(def.GameStatus, l.getGameStatus)
 	l.AddRoute(def.SyncStatus, l.syncStatus)
 	l.AddRoute(def.StartGame, l.startGame)
@@ -37,13 +39,13 @@ func (l *Local) getGameStatus(in *local.Input) error {
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
+	log.Println("getGameStatus", req.String())
 	rsp := new(pb.GameStatusRsp)
 	room, ok := l.users[req.Uid]
 	if ok && room.playing {
 		rsp.RoomId = room.roomId
 	}
-	in.Response(req.Uid, in.Cmd, rsp)
-	return nil
+	return in.Rpc(rsp)
 }
 
 func (l *Local) offline(in *local.Input) error {
@@ -94,7 +96,7 @@ func (l *Local) startGame(in *local.Input) error {
 	rsp.Multi = req.Multi
 	rsp.Users = make(map[uint32]int32)
 	for uid := range req.Users {
-		rsp.Users[uid] = room.GetUserByUID(uid).Seat()
+		rsp.Users[uid] = int32(room.GetUserByUID(uid).Seat())
 	}
 	room.wait.WaitAll(def.StartGame)
 	for uid := range req.Users {

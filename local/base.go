@@ -5,6 +5,7 @@ import (
 	"frbg/codec"
 	"frbg/network"
 	"frbg/timer"
+	"frbg/util"
 	"log"
 	"runtime"
 
@@ -14,6 +15,7 @@ import (
 type Handle func(*Input) error
 
 type BaseLocal struct {
+	queue *util.ArrayQueue
 	*network.Poll
 	m_route map[uint16]Handle // 路由
 	*timer.TaskCtl
@@ -23,6 +25,7 @@ func NewBase() *BaseLocal {
 	return &BaseLocal{
 		m_route: make(map[uint16]Handle),
 		TaskCtl: timer.NewTaskCtl(),
+		queue:   util.NewArrayQueue(128),
 	}
 }
 
@@ -31,8 +34,24 @@ func (l *BaseLocal) Attach(poll *network.Poll) {
 	serverType = poll.ServerConf.ServerType
 }
 
-func (l *BaseLocal) Init() {
-	log.Println("base.Init")
+func (l *BaseLocal) Start() {
+	go func() {
+		for {
+			if !l.queue.IsEmpty() {
+				i, err := l.queue.Dequeue()
+				if err != nil {
+					log.Printf("dequeue error:%s", err.Error())
+					continue
+				}
+				input := i.(*Input)
+				if err := l.Route(input); err != nil {
+					log.Printf("Route error:%s", err.Error())
+				}
+				continue
+			}
+			runtime.Gosched()
+		}
+	}()
 }
 
 // 连接成功的回调
@@ -50,6 +69,10 @@ func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
+func (l *BaseLocal) Push(conn *network.Conn, msg *codec.Message) error {
+	return l.queue.Enqueue(NewInput(conn, msg))
+}
+
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	if _, ok := l.m_route[cmd]; ok {
 		log.Printf("repeated Add cmd:%d\n", cmd)
@@ -58,17 +81,13 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	l.m_route[cmd] = h
 }
 
-func (l *BaseLocal) Route(conn *network.Conn, msg *codec.Message) error {
-	// 1. 检查消息是否为空
-	if msg == nil {
-		return fmt.Errorf("msg is nil")
-	}
+func (l *BaseLocal) Route(input *Input) error {
 	// 2. 检查消息是否有路由
-	if handle, ok := l.m_route[msg.Cmd]; ok {
+	if handle, ok := l.m_route[input.Cmd]; ok {
 		defer l.CatchEx()
-		return handle(NewInput(conn, msg))
+		return handle(input)
 	} else {
-		return fmt.Errorf("call: not find cmd %d", msg.Cmd)
+		return fmt.Errorf("call: not find cmd %d", input.Cmd)
 	}
 }
 
@@ -86,7 +105,7 @@ func (l *BaseLocal) RpcCall(svid uint16, cmd uint16, req proto.Message, rsp prot
 		return fmt.Errorf("error not find server %d", svid)
 	}
 
-	msg, err := conn.RpcWrite(cmd, req, 1000)
+	msg, err := conn.RpcWrite(cmd, req, 10000)
 	if err != nil {
 		return err
 	}

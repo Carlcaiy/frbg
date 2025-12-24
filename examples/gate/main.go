@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 	serverConfig := &network.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
-		ServerType: def.ST_WsGate,
+		ServerType: def.ST_Gate,
 		ServerId:   uint8(sid),
 	}
 	pollConfig := &network.PollConfig{

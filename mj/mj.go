@@ -38,6 +38,7 @@ var BanBiShanMJ = []uint8{
 
 // 操作枚举
 const (
+	FaPai                 = 0
 	MoPai, ChuPai, GuoPai = 1, 2, 3
 	LChi, MChi, RChi      = 4, 5, 6
 	Peng                  = 7
@@ -53,6 +54,10 @@ func OpBit(op uint8) int32 {
 type Group struct {
 	Op  uint8
 	Val uint8
+}
+
+func (p *Group) ToBytes() []uint8 {
+	return []uint8{p.Op, p.Val}
 }
 
 func (p *Group) String() string {

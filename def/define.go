@@ -3,13 +3,7 @@ package def
 type ServerType uint8
 
 const (
-	ProtocolTcp byte = 0
-	ProtocolWs  byte = 1
-)
-
-const (
 	ST_User      = 1 // 客户端
-	ST_WsGate    = 2 // 网关服
 	ST_Gate      = 3 // 网关服
 	ST_Login     = 4 // 登录服
 	ST_Hall      = 5 // 大厅服

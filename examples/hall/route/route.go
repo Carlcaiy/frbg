@@ -32,13 +32,14 @@ type Local struct {
 func New() *Local {
 	route = &Local{
 		BaseLocal: local.NewBase(),
+		userGame:  make(map[uint32]*User),
 	}
 	route.init()
 	return route
 }
 
 func (l *Local) init() {
-	l.BaseLocal.Init()
+	l.Start()
 	l.AddRoute(def.Offline, l.offline)
 	l.AddRoute(def.GetGameList, l.getGameList)
 	l.AddRoute(def.GetRoomList, l.getRoomList)
@@ -86,18 +87,23 @@ func (l *Local) enterRoom(in *local.Input) error {
 		return err
 	}
 	log.Println("enterRoom", req.String())
+	svid := network.Svid(def.ST_Game, uint8(req.GameId))
 
 	// 如果用户已经在房间内，直接返回
 	if game := l.userGame[req.Uid]; game != nil && game.RoomId > 0 {
 		rsp.RoomId = game.RoomId
-		return in.Response(req.Uid, in.Cmd, rsp)
+		reconnect := pb.Reconnect{
+			Uid:    req.Uid,
+			GateId: uint32(req.GateId),
+		}
+		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
 	}
 
 	// 查询用户状态
 	greq, grsp := &pb.GameStatusReq{
 		Uid: req.Uid,
 	}, new(pb.GameStatusRsp)
-	if err := l.RpcCall(def.ST_Game, def.GameStatus, greq, grsp); err != nil {
+	if err := l.RpcCall(svid, def.GameStatus, greq, grsp); err != nil {
 		return err
 	}
 
@@ -107,6 +113,7 @@ func (l *Local) enterRoom(in *local.Input) error {
 		if game := l.userGame[req.Uid]; game == nil {
 			game = &User{
 				Uid:    req.Uid,
+				GateId: uint16(req.GateId),
 				GameId: req.GameId,
 				RoomId: req.RoomId,
 			}
@@ -114,7 +121,11 @@ func (l *Local) enterRoom(in *local.Input) error {
 		} else {
 			game.RoomId = grsp.RoomId
 		}
-		return in.Response(req.Uid, in.Cmd, rsp)
+		reconnect := pb.Reconnect{
+			Uid:    req.Uid,
+			GateId: uint32(req.GateId),
+		}
+		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
 	}
 
 	l.userGame[req.Uid] = &User{
@@ -148,13 +159,15 @@ func (l *Local) enterRoom(in *local.Input) error {
 	}
 
 	// 通知游戏预约房间
-	return l.Send(network.Svid(def.ST_Game, uint8(req.GameId)), codec.NewMessage(
+	startGameReq := codec.NewMessage(
 		def.StartGame,
 		&pb.StartGameReq{
 			RoomId: rsp.RoomId,
 			Users:  matchUser,
 		},
-	))
+	)
+	log.Printf("StartGame svid:%d startGameReq:%s", svid, startGameReq)
+	return l.Send(svid, startGameReq)
 }
 
 // 请求进入老虎机

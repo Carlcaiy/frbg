@@ -20,6 +20,7 @@ const (
 	FlagsCompress  = 0x1 // 压缩标志位
 	FlagsEncrypt   = 0x2 // 加密标志位
 	FlagsHeartBeat = 0x4 // 心跳标志位
+	FlagsWebSocket = 0x8 // websocket标志位
 )
 
 // 消息头字段偏移常量

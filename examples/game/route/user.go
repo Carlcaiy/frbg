@@ -5,6 +5,7 @@ import (
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
+	"frbg/network"
 	"log"
 
 	"google.golang.org/protobuf/proto"
@@ -28,8 +29,8 @@ type User struct {
 	prepare       bool // 准备状态
 }
 
-func (u *User) Seat() int32 {
-	return int32(u.seat)
+func (u *User) Seat() int {
+	return u.seat
 }
 
 func (u *User) Send(cmd uint16, data proto.Message) {
@@ -43,7 +44,8 @@ func (u *User) Send(cmd uint16, data proto.Message) {
 		Cmd:     uint32(cmd),
 		Payload: payload,
 	})
-	if conn := u.l.Poll.GetServer(u.gateId); conn != nil {
+	svid := network.Svid(def.ST_Gate, uint8(u.gateId))
+	if conn := u.l.Poll.GetServer(svid); conn != nil {
 		conn.Write(msg)
 	}
 }
@@ -79,8 +81,8 @@ func (u *User) DaMj(val uint8) bool {
 }
 
 // 摸麻将
-func (u *User) MoMj(val uint8) {
-	u.mj_hands = append(u.mj_hands, val)
+func (u *User) MoMj(val ...uint8) {
+	u.mj_hands = append(u.mj_hands, val...)
 }
 
 // 左吃麻将

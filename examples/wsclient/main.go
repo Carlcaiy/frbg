@@ -33,9 +33,9 @@ func main() {
 	flag.IntVar(&port, "p", 6666, "-p 8080")
 	flag.Parse()
 
-	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", port))
+	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", port+1))
 	if err != nil {
-		must(err)
+		log.Println(err)
 		return
 	}
 	defer func() {
@@ -46,7 +46,12 @@ func main() {
 	must(rpc(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)}, &pb.GetGameListRsp{}))
 	getRoomListRsp := &pb.GetRoomListRsp{}
 	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan}, getRoomListRsp))
-	must(send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{Uid: uint32(uid), RoomId: uint32(getRoomListRsp.Rooms[0].RoomId)}))
+	must(send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{
+		Uid:    uint32(uid),
+		GateId: 1,
+		GameId: def.SID_MahjongBanbisan,
+		RoomId: uint32(getRoomListRsp.Rooms[0].RoomId),
+	}))
 
 	for {
 		msg, err := codec.WsRead(conn)
@@ -111,6 +116,14 @@ func main() {
 					Op:     mj.ChuPai,
 				})
 			}
+		case def.Reconnect:
+			rsp := new(pb.DeskSnapshot)
+			logdata(rsp, msg)
+			for _, info := range rsp.Info {
+				if info.Uid == uint32(uid) {
+					mjs = append(mjs, info.Hands...)
+				}
+			}
 		}
 	}
 }
@@ -133,7 +146,7 @@ func logdata(data proto.Message, msg *codec.Message) {
 
 func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
 	var msg *codec.Message
-	if svid == def.ST_Gate || svid == def.ST_WsGate {
+	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)
 	} else {
 		bs, _ := proto.Marshal(req)
@@ -143,6 +156,7 @@ func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
 			Payload: bs,
 		})
 	}
+	log.Printf("send scmd:%d", cmd)
 	if err = codec.WsWrite(conn, msg); err != nil {
 		return err
 	}
@@ -163,12 +177,12 @@ func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
 
 func send(svid uint8, cmd uint16, req proto.Message) error {
 	var msg *codec.Message
-	if svid == def.ST_Gate || svid == def.ST_WsGate {
+	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)
 	} else {
 		bs, _ := proto.Marshal(req)
 		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
-			Svid:    uint32(network.Svid(svid, 1)),
+			Svid:    uint32(network.Svid(svid, def.SID_MahjongBanbisan)),
 			Cmd:     uint32(cmd),
 			Payload: bs,
 		})

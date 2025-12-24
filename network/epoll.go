@@ -25,19 +25,33 @@ import (
 var wg sync.WaitGroup
 
 type Handler interface {
-	Attach(poll *Poll)                          // 绑定poll
-	Init()                                      // Handler的初始化
-	Route(conn *Conn, msg *codec.Message) error // 消息路由
-	Close(conn *Conn)                           // 连接关闭的回调
-	OnConnect(conn *Conn)                       // 连接成功的回调
-	OnAccept(conn *Conn)                        // 新连接的回调
-	Tick()                                      // 心跳
+	Attach(poll *Poll) // 绑定poll
+	// Init()                                     // Handler的初始化
+	Push(conn *Conn, msg *codec.Message) error // 消息路由
+	// Route(conn *Conn, msg *codec.Message) error // 消息路由
+	Close(conn *Conn)     // 连接关闭的回调
+	OnConnect(conn *Conn) // 连接成功的回调
+	OnAccept(conn *Conn)  // 新连接的回调
+	Tick()                // 心跳
 }
 
 type PollConfig struct {
 	MaxConn   int   // 最大连接数
 	HeartBeat int64 // 心跳时间
 	Etcd      bool
+}
+
+var upgrader = &ws.Upgrader{
+	ReadBufferSize:  1024 * 64,
+	WriteBufferSize: 1024 * 64,
+	OnHeader: func(key, value []byte) (err error) {
+		log.Printf("non-websocket header: %q=%q", key, value)
+		return
+	},
+	Protocol: func(b []byte) bool {
+		log.Println(string(b))
+		return true
+	},
 }
 
 type RpcCallback func(*codec.Message, error)
@@ -51,21 +65,22 @@ func NewPollConfig() *PollConfig {
 }
 
 type Poll struct {
-	epollFd    int
-	eventFd    int
-	listenFd   int
-	listener   *net.TCPListener
-	fdConns    map[int]*Conn
-	connNum    int64 // 改为 int64 便于原子操作
-	pollConfig *PollConfig
-	queue      *esqueue
-	handle     Handler
-	upgrader   *ws.Upgrader
-	ServerConf *ServerConfig
-	events     []unix.EpollEvent // 重用事件数组
-	mu         sync.RWMutex      // 保护 fdconns 和 connNum
-	ticker     *time.Ticker
-	heartBeat  *time.Ticker
+	epollFd     int
+	eventFd     int
+	wsListenFd  int
+	wsListener  *net.TCPListener
+	tcpListenFd int
+	tcpListener *net.TCPListener
+	fdConns     map[int]*Conn
+	connNum     int64 // 改为 int64 便于原子操作
+	pollConfig  *PollConfig
+	queue       *esqueue
+	handle      Handler
+	ServerConf  *ServerConfig
+	events      []unix.EpollEvent // 重用事件数组
+	mu          sync.RWMutex      // 保护 fdconns 和 connNum
+	ticker      *time.Ticker
+	heartBeat   *time.Ticker
 	// RPC响应管理
 	rpcResponses map[uint16]chan *codec.Message
 	rpcCallbacks map[uint16]RpcCallback
@@ -80,14 +95,16 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
 	poll := &Poll{
-		fdConns:    make(map[int]*Conn),
-		epollFd:    epollFd,
-		eventFd:    eventFd,
-		pollConfig: pconf,
-		handle:     handle,
-		ServerConf: sconf,
-		queue:      new(esqueue),
-		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
+		fdConns:      make(map[int]*Conn),
+		epollFd:      epollFd,
+		eventFd:      eventFd,
+		pollConfig:   pconf,
+		handle:       handle,
+		ServerConf:   sconf,
+		queue:        new(esqueue),
+		events:       make([]unix.EpollEvent, 64), // 预分配事件数组
+		rpcResponses: make(map[uint16]chan *codec.Message),
+		rpcCallbacks: make(map[uint16]RpcCallback),
 	}
 	handle.Attach(poll)
 	return poll
@@ -115,33 +132,28 @@ func (p *Poll) Start() {
 		register.Put(conf.Svid(), conf.Addr)
 	}
 
-	// 是否为websocket
-	if conf.ServerType == def.ST_WsGate {
-		p.upgrader = &ws.Upgrader{
-			ReadBufferSize:  1024 * 64,
-			WriteBufferSize: 1024 * 64,
-			OnHeader: func(key, value []byte) (err error) {
-				log.Printf("non-websocket header: %q=%q", key, value)
-				return
-			},
-			Protocol: func(b []byte) bool {
-				log.Println(string(b))
-				return true
-			},
-		}
-	}
-
 	// 监听tcp
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	reuseport.Listen("tcp", conf.Addr)
 	must(err)
-	p.listenFd = listenFD(listener)
-	p.listener = listener
-	log.Printf("AddListener fd:%d conf:%+v\n", p.listenFd, conf)
-	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.listenFd)})
+	p.tcpListenFd = listenFD(listener)
+	p.tcpListener = listener
+	log.Printf("AddListener fd:%d conf:%+v\n", p.tcpListenFd, conf)
+	unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.tcpListenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.tcpListenFd)})
+
+	if conf.ServerType == def.ST_Gate {
+		// 监听ws
+		wsListener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: conf.IP(), Port: conf.Port() + 1})
+		reuseport.Listen("tcp", fmt.Sprintf("%s:%d", conf.Addr, conf.Port()+1))
+		must(err)
+		p.wsListenFd = listenFD(wsListener)
+		p.wsListener = wsListener
+		log.Printf("AddWsListener fd:%d conf:%+v\n", p.wsListenFd, conf)
+		unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, p.wsListenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(p.wsListenFd)})
+	}
 
 	// 添加定时事件
-	if conf.ServerType != def.ST_WsGate {
+	if conf.ServerType != def.ST_Gate {
 		timer.AddTrigger(func() {
 			p.Trigger(def.ET_Timer)
 		})
@@ -192,8 +204,8 @@ func (p *Poll) Close() error {
 		}
 	}
 	// 关闭listenFd
-	if p.listenFd > 0 {
-		if err := unix.Close(p.listenFd); err != nil {
+	if p.tcpListenFd > 0 {
+		if err := unix.Close(p.tcpListenFd); err != nil {
 			errs = append(errs, fmt.Errorf("close listen fd error: %w", err))
 		}
 	}
@@ -262,8 +274,8 @@ func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 	switch fd {
 	case p.eventFd:
 		return p.processEventFd()
-	case p.listenFd:
-		return p.processAccept()
+	case p.tcpListenFd, p.wsListenFd:
+		return p.processAccept(fd)
 	default:
 		return p.processClientData(fd)
 	}
@@ -283,8 +295,16 @@ func (p *Poll) processEventFd() error {
 }
 
 // 处理新连接
-func (p *Poll) processAccept() error {
-	conn, err := p.listener.AcceptTCP()
+func (p *Poll) processAccept(fd int) error {
+	var conn *net.TCPConn
+	var err error
+
+	if fd == p.tcpListenFd {
+		conn, err = p.tcpListener.AcceptTCP()
+	} else {
+		conn, err = p.wsListener.AcceptTCP()
+	}
+
 	if err != nil {
 		if !isTemporaryError(err) {
 			log.Printf("AcceptTCP error: %v", err)
@@ -292,15 +312,22 @@ func (p *Poll) processAccept() error {
 		return nil // 临时错误不返回错误，继续循环
 	}
 
-	if p.upgrader != nil {
-		if _, err = p.upgrader.Upgrade(conn); err != nil {
+	// 处理websocket升级
+	if fd == p.wsListenFd {
+		if _, err = upgrader.Upgrade(conn); err != nil {
 			log.Printf("websocket upgrade error: %s", err)
 			conn.Close()
 			return nil
 		}
 	}
 
-	p.Add(conn)
+	// 添加连接到poll
+	if err := p.Add(conn, fd == p.wsListenFd); err != nil {
+		log.Printf("Add conn error: %v", err)
+		conn.Close()
+		return nil
+	}
+
 	return nil
 }
 
@@ -330,6 +357,7 @@ func (p *Poll) processClientData(fd int) error {
 		return nil
 	}
 
+	log.Printf("processClientData fd:%d msg:%v", fd, msg)
 	// 5. 处理RPC响应
 	if p.HandleRpcResponse(msg) {
 		return nil
@@ -337,13 +365,7 @@ func (p *Poll) processClientData(fd int) error {
 
 	// 6. 路由消息到业务处理器
 	if p.handle != nil {
-		if err := p.handle.Route(conn, msg); err != nil {
-			log.Printf("route error: fd:%d err:%v", fd, err)
-			p.Del(fd) // 路由失败则关闭连接
-			return nil
-		}
-	} else {
-		log.Printf("handler is nil, cannot process message from fd:%d", fd)
+		p.handle.Push(conn, msg)
 	}
 	return nil
 }
@@ -357,7 +379,7 @@ func isTemporaryError(err error) bool {
 }
 
 // 优化Add函数
-func (p *Poll) Add(conn *net.TCPConn) error {
+func (p *Poll) Add(conn *net.TCPConn, isWs bool) error {
 	// 1. 检查连接数限制
 	if p.getConnNum() >= p.pollConfig.MaxConn {
 		return fmt.Errorf("connection limit exceeded: %d", p.pollConfig.MaxConn)
@@ -386,12 +408,7 @@ func (p *Poll) Add(conn *net.TCPConn) error {
 		conn:       conn,
 		Fd:         fd,
 		ActiveTime: time.Now().Unix(),
-	}
-
-	if p.ServerConf.ServerType == def.ST_WsGate {
-		c.Protocol = def.ProtocolWs
-	} else {
-		c.Protocol = def.ProtocolTcp
+		isWs:       isWs, // 是否为websocket连接
 	}
 
 	// 6. 线程安全地更新连接映射
@@ -494,13 +511,6 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 	}
 
 	log.Printf("Connect fd:%d addr:%s", fd, conn.RemoteAddr().String())
-
-	// 根据服务类型设置协议
-	if conf.ServerType == def.ST_WsGate {
-		ptr.Protocol = def.ProtocolWs
-	} else {
-		ptr.Protocol = def.ProtocolTcp
-	}
 
 	p.fdConns[fd] = ptr
 	p.incrConnNum()
@@ -623,15 +633,18 @@ func (p *Poll) RegisterRpcCallback(seq uint16, callback RpcCallback) {
 func (p *Poll) HandleRpcResponse(msg *codec.Message) bool {
 	seq := msg.Seq
 
+	fmt.Println("HandleRpcResponse seq:", seq, p.rpcResponses)
+
 	p.rpcMu.RLock()
 	// 优先处理同步等待
 	if respChan, ok := p.rpcResponses[seq]; ok {
 		p.rpcMu.RUnlock()
-		select {
-		case respChan <- msg:
-		default:
-			// 通道已关闭或满，丢弃
-		}
+		respChan <- msg
+		// select {
+		// case respChan <- msg:
+		// default:
+		// 通道已关闭或满，丢弃
+		// }
 		return true
 	}
 

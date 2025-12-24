@@ -3,7 +3,6 @@ package network
 import (
 	"fmt"
 	"frbg/codec"
-	"frbg/def"
 	"log"
 	"net"
 	"sync/atomic"
@@ -19,7 +18,7 @@ type Conn struct {
 	conn       *net.TCPConn // 连接
 	Fd         int          // 文件描述符
 	ActiveTime int64        // 活跃时间
-	Protocol   byte         // 协议 0:tcp 1:ws
+	isWs       bool         // 是否为websocket连接
 	svid       uint16       // 服务id
 	uid        uint32       // 用户id
 }
@@ -51,7 +50,7 @@ func (c *Conn) Read() (*codec.Message, error) {
 		c.poll.Del(c.Fd)
 		return nil, err
 	}
-	if c.Protocol == def.ProtocolWs {
+	if c.isWs {
 		return codec.WsRead(c.conn)
 	}
 
@@ -62,7 +61,7 @@ func (c *Conn) Write(msg *codec.Message) error {
 	err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		// 如果是用户连接，只能通过ws发送
-		if c.Protocol == def.ProtocolWs {
+		if c.isWs {
 			err = codec.WsWrite(c.conn, msg)
 		} else {
 			err = codec.TcpWrite(c.conn, msg)
@@ -110,6 +109,7 @@ func (c *Conn) RpcWrite(reqCmd uint16, reqMsg proto.Message, timeout int) (*code
 		return nil, fmt.Errorf("send request failed: %w", err)
 	}
 
+	log.Printf("RpcWrite seq:%d, req:%v p.rpcResponses:%v", seq, req, c.poll.rpcResponses)
 	// 5. 等待响应或超时
 	select {
 	case resp := <-respChan:

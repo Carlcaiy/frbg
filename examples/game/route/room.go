@@ -5,6 +5,7 @@ import (
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
+	"frbg/network"
 	"log"
 	"math/rand"
 	"time"
@@ -12,23 +13,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type DeskMj struct {
+	MjVal  byte
+	Belong byte
+}
+
 type Room struct {
-	l         *Local
-	master    uint32   // 房主ID
-	roomId    uint32   // 房间ID
-	BookUids  []uint32 // 已预约用户
-	Users     []*User  // 用户
-	turn      int      // 庄家
-	mj        []uint8  // 麻将
-	mjIndex   int16    // 麻将索引
-	touzi     []int32  // 骰子
-	pizi      uint8    // 皮子
-	laizi     uint8    // 赖子
-	waitOther bool     // 等待其他玩家操作
-	history   []*mj.MjOp
-	playing   bool
-	endTime   time.Time
-	wait      *Wait
+	l           *Local
+	master      uint32   // 房主ID
+	roomId      uint32   // 房间ID
+	BookUids    []uint32 // 已预约用户
+	Users       []*User  // 用户
+	turn        int      // 庄家
+	mj          []uint8  // 麻将
+	usedMjIndex []uint8  // 已使用的麻将下标
+	mjIndex     uint8    // 麻将索引
+	touzi       []int32  // 骰子
+	pizi        uint8    // 皮子
+	laizi       uint8    // 赖子
+	zhuang      int32    // 庄家
+	waitOther   bool     // 等待其他玩家操作
+	history     []*mj.MjOp
+	playing     bool
+	endTime     time.Time
+	wait        *Wait
 }
 
 func NewRoom(l *Local, master uint32) *Room {
@@ -96,6 +104,7 @@ func (r *Room) Reset() {
 	r.touzi[0] = rand.Int31n(6) + 1
 	r.touzi[1] = rand.Int31n(6) + 1
 	r.mjIndex = 0
+	r.usedMjIndex = r.usedMjIndex[:0]
 	r.history = r.history[:0]
 	r.playing = true
 	r.waitOther = false
@@ -119,21 +128,42 @@ func (r *Room) Offline(uid uint32) {
 }
 
 func (r *Room) Reconnect(uid uint32, gateId uint16) {
+	req := &pb.DeskSnapshot{
+		Pizi:        int32(r.pizi),
+		Touzi:       r.touzi,
+		Zhuang:      uid,
+		Laizi:       int32(r.laizi),
+		UsedMjIndex: r.usedMjIndex,
+		Info:        make([]*pb.PlayerInfo, len(r.Users)),
+	}
 	for i, u := range r.Users {
+		req.Info[i] = &pb.PlayerInfo{
+			Dachu: r.Users[i].mj_history,
+			Cpgs:  make([][]byte, len(r.Users[i].mj_group)),
+		}
+		for j, g := range r.Users[i].mj_group {
+			req.Info[i].Cpgs[j] = g.ToBytes()
+		}
 		if u.uid == uid {
-			u.gateId = gateId
-			u.offline = false
-
-			log.Println(u.uid, u.gateId)
-
-			log.Println("Reconnect", "uid:", uid, "sit", i, "turn", r.turn)
-			if i == r.turn {
-				u.Send(def.Round, &pb.Empty{})
-			}
-			return
+			req.Info[i].Hands = r.Users[i].mj_hands
+		} else {
+			req.Info[i].Hands = make([]byte, len(r.Users[i].mj_hands))
 		}
 	}
-	log.Printf("Reconnect error: not find uid:%d\n", uid)
+	user := r.GetUserByUID(uid)
+	if user == nil {
+		log.Printf("Reconnect error: not find uid:%d\n", uid)
+		return
+	}
+	user.gateId = gateId
+	user.offline = false
+	log.Println(user.uid, user.gateId)
+	log.Println("Reconnect", "uid:", uid, "sit", user.Seat(), "turn", r.turn)
+
+	user.Send(def.Reconnect, req)
+	if user.Seat() == r.turn {
+		user.Send(def.Round, &pb.Empty{})
+	}
 }
 
 func (r *Room) Start() {
@@ -146,7 +176,7 @@ func (r *Room) Start() {
 		// 4个玩家，从庄家开始
 		for i := 0; i < 4; i++ {
 			u := r.Users[(r.turn+i)%4]
-			// 每个玩家发4个马建
+			// 每个玩家发4个麻將
 			for j := 0; j < 4; j++ {
 				mjVal := r.mj[r.mjIndex]
 				faPai = append(faPai, &pb.DeskMj{
@@ -154,6 +184,7 @@ func (r *Room) Start() {
 					Uid:   u.uid,
 					MjVal: int32(mjVal),
 				})
+				r.usedMjIndex = append(r.usedMjIndex, r.mjIndex)
 				r.mjIndex++
 				u.MoMj(mjVal)
 			}
@@ -167,6 +198,7 @@ func (r *Room) Start() {
 			Uid:   u.uid,
 			MjVal: int32(r.mj[r.mjIndex]),
 		})
+		r.usedMjIndex = append(r.usedMjIndex, r.mjIndex)
 		r.mjIndex++
 		u.MoMj(mjVal)
 	}
@@ -428,7 +460,8 @@ func (r *Room) SendAll(msg *codec.Message) {
 		}
 	}
 	for gateId, data := range wraper {
-		if gate := r.l.Poll.GetServer(gateId); gate != nil {
+		svid := network.Svid(def.ST_Gate, uint8(gateId))
+		if gate := r.l.Poll.GetServer(svid); gate != nil {
 			gate.Write(codec.NewMessage(def.MultiBC, data))
 		}
 	}

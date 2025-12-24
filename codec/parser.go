@@ -81,13 +81,15 @@ func WsRead(r io.ReadWriter) (*Message, error) {
 }
 
 // WsWrite WebSocket消息写入
-func WsWrite(r io.ReadWriter, msg *Message) error {
+func WsWrite(r io.Writer, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
 	}
 
 	data := msg.Pack()
-	log.Printf("send ws msg:%s", msg.String())
+	if !msg.IsHeartBeat() {
+		log.Printf("send ws msg:%s", msg.String())
+	}
 	return wsutil.WriteServerBinary(r, data)
 }
 
@@ -152,7 +154,10 @@ func TcpWrite(r io.Writer, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
 	}
-	log.Printf("send tcp msg:%s", msg.String())
+
+	if !msg.IsHeartBeat() {
+		log.Printf("send tcp msg:%s", msg.String())
+	}
 
 	data := msg.Pack()
 	if _, err := r.Write(data); err != nil {

@@ -28,12 +28,19 @@ func (r *Input) Client() *network.Conn {
 	return r.c
 }
 
+func (r *Input) Rpc(msg proto.Message) error {
+	data := codec.NewMessage(r.Cmd, msg)
+	data.Seq = r.Seq
+	return r.c.Write(data)
+}
+
 func (i *Input) Response(uid uint32, cmd uint16, msg proto.Message) error {
 	// 封装消息
 	var data *codec.Message
-	if serverType == def.ST_Gate || serverType == def.ST_WsGate {
+	if serverType == def.ST_Gate {
 		// 网关服务器类型，直接封装为cmd
 		data = codec.NewMessage(cmd, msg)
+		data.Seq = i.Seq
 		log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
 	} else {
 		// 其他服务器类型，封装为PacketOut
@@ -47,7 +54,8 @@ func (i *Input) Response(uid uint32, cmd uint16, msg proto.Message) error {
 			Cmd:     uint32(cmd),
 			Payload: payload,
 		})
-		log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, def.PacketOut, data)
+		data.Seq = i.Seq
+		log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
 	}
 	return i.c.Write(data)
 }

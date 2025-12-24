@@ -293,6 +293,24 @@ message Empty {
     
 }
 
+// 手牌数据
+message playerInfo {
+    uint32 uid = 1;
+    bytes hands = 2;          // 手牌
+    bytes dachu = 3;          // 打出牌
+    repeated bytes cpgs = 4;  // 吃碰杠
+}
+
+// 重连数据
+message DeskSnapshot {
+    int32 pizi = 1;                 // 皮子
+    repeated int32 touzi = 2;       // 骰子
+    uint32 zhuang = 3;              // 庄家
+    int32 laizi = 4;                // 赖子
+    bytes usedMjIndex = 5;    // 牌堆中已经被抓走的牌
+    repeated playerInfo info = 6;  // 各个玩家手中的牌
+}
+
 message GameOverUser{
     uint32 uid = 1;           // 玩家id
     int64 win = 2;            // 赢钱
