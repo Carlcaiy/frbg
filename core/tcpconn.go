@@ -1,4 +1,4 @@
-package network
+package core
 
 import (
 	"fmt"
@@ -17,22 +17,13 @@ type Conn struct {
 	poll       *Poll
 	conn       *net.TCPConn // 连接
 	Fd         int          // 文件描述符
-	ActiveTime int64        // 活跃时间
-	isWs       bool         // 是否为websocket连接
+	activeTime int64        // 活跃时间
 	svid       uint16       // 服务id
-	uid        uint32       // 用户id
+	ctx        interface{}  // user-defined context
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
-}
-
-func (c *Conn) Uid() uint32 {
-	return c.uid
-}
-
-func (c *Conn) SetUid(uid uint32) {
-	c.uid = uid
 }
 
 func (c *Conn) Svid() uint16 {
@@ -43,39 +34,55 @@ func (c *Conn) SetSvid(svid uint16) {
 	c.svid = svid
 }
 
+func (c *Conn) ActiveTime() int64 {
+	return c.activeTime
+}
+
+func (c *Conn) SetActiveTime(t int64) {
+	c.activeTime = t
+}
+
+func (c *Conn) Context() interface{} {
+	return c.ctx
+}
+
+func (c *Conn) SetContext(ctx interface{}) {
+	c.ctx = ctx
+}
+
 func (c *Conn) Read() (*codec.Message, error) {
 	err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
 	if err != nil {
 		log.Printf("SetReadDeadline error: %s", err.Error())
-		c.poll.Del(c.Fd)
 		return nil, err
 	}
-	if c.isWs {
-		return codec.WsRead(c.conn)
+	msg, err := codec.TcpRead(c.conn)
+	if err != nil {
+		log.Printf("Read error: %s", err.Error())
+		return nil, err
 	}
-
-	return codec.TcpRead(c.conn)
+	// 更新活跃时间
+	c.SetActiveTime(time.Now().Unix())
+	return msg, nil
 }
 
 func (c *Conn) Write(msg *codec.Message) error {
-	err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
+	now := time.Now()
+	err := c.conn.SetWriteDeadline(now.Add(time.Second))
 	if err == nil {
-		// 如果是用户连接，只能通过ws发送
-		if c.isWs {
-			err = codec.WsWrite(c.conn, msg)
-		} else {
-			err = codec.TcpWrite(c.conn, msg)
-		}
+		err = codec.TcpWrite(c.conn, msg)
 	}
 	if err != nil {
 		log.Printf("Write error: %s", err.Error())
 		if c.svid == 0 {
 			c.poll.Del(c.Fd)
 		} else {
-			innerServerMgr.DelServe(c.svid)
+			serverMgr.DelServe(c.svid)
 		}
 	}
 
+	// 更新活跃时间
+	c.SetActiveTime(now.Unix())
 	return err
 }
 
@@ -154,7 +161,19 @@ func (c *Conn) Close() error {
 	return c.conn.Close()
 }
 
+func (c *Conn) String() string {
+	return c.conn.RemoteAddr().String()
+}
+
 type IConn interface {
-	Write(msg []byte) error
+	Svid() uint16
+	SetSvid(svid uint16)
+	ActiveTime() int64
+	SetActiveTime(t int64)
+	Context() interface{}
+	SetContext(ctx interface{})
+	String() string
+	Read() (*codec.Message, error)
+	Write(msg *codec.Message) error
 	Close() error
 }

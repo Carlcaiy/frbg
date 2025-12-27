@@ -3,11 +3,11 @@ package route
 import (
 	"fmt"
 	"frbg/codec"
+	"frbg/core"
 	"frbg/def"
 	"frbg/examples/db"
 	"frbg/examples/pb"
 	"frbg/local"
-	"frbg/network"
 	"log"
 )
 
@@ -153,6 +153,6 @@ func (l *Local) packetOut(in *local.Input) error {
 	return cli.Write(in.Message)
 }
 
-func (l *Local) Close(conn *network.Conn) {
+func (l *Local) Close(conn core.IConn) {
 	l.clients.DelClient(conn)
 }

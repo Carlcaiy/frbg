@@ -1,26 +1,12 @@
-package network
+package core
 
 import (
-	"frbg/def"
 	"log"
 	"sync"
 )
 
-func Signal(polls ...*Poll) {
-	for _, poll := range polls {
-		poll.Trigger(def.ET_Close)
-	}
-}
-
-func Wait(polls ...*Poll) {
-	wg.Wait()
-	for _, poll := range polls {
-		poll.Close()
-	}
-}
-
-// innerServerMgr 内部服务器管理
-var innerServerMgr = NewServerMgr()
+// serverMgr 内部服务器管理
+var serverMgr = NewServerMgr()
 
 type ServerMgr struct {
 	lock    sync.Mutex

@@ -3,7 +3,7 @@ package local
 import (
 	"fmt"
 	"frbg/codec"
-	"frbg/network"
+	core "frbg/core"
 	"frbg/timer"
 	"frbg/util"
 	"log"
@@ -16,7 +16,7 @@ type Handle func(*Input) error
 
 type BaseLocal struct {
 	queue *util.ArrayQueue
-	*network.Poll
+	*core.Poll
 	m_route map[uint16]Handle // 路由
 	*timer.TaskCtl
 }
@@ -29,7 +29,7 @@ func NewBase() *BaseLocal {
 	}
 }
 
-func (l *BaseLocal) Attach(poll *network.Poll) {
+func (l *BaseLocal) Attach(poll *core.Poll) {
 	l.Poll = poll
 	serverType = poll.ServerConf.ServerType
 }
@@ -55,21 +55,21 @@ func (l *BaseLocal) Start() {
 }
 
 // 连接成功的回调
-func (l *BaseLocal) OnConnect(conn *network.Conn) {
+func (l *BaseLocal) OnConnect(conn core.IConn) {
 }
 
-func (l *BaseLocal) OnAccept(conn *network.Conn) {
+func (l *BaseLocal) OnAccept(conn core.IConn) {
 
 }
 
-func (l *BaseLocal) Close(conn *network.Conn) {
+func (l *BaseLocal) Close(conn core.IConn) {
 }
 
 func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
-func (l *BaseLocal) Push(conn *network.Conn, msg *codec.Message) error {
+func (l *BaseLocal) Push(conn core.IConn, msg *codec.Message) error {
 	return l.queue.Enqueue(NewInput(conn, msg))
 }
 

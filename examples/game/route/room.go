@@ -2,10 +2,10 @@ package route
 
 import (
 	"frbg/codec"
+	"frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
-	"frbg/network"
 	"log"
 	"math/rand"
 	"time"
@@ -460,7 +460,7 @@ func (r *Room) SendAll(msg *codec.Message) {
 		}
 	}
 	for gateId, data := range wraper {
-		svid := network.Svid(def.ST_Gate, uint8(gateId))
+		svid := core.Svid(def.ST_Gate, uint8(gateId))
 		if gate := r.l.Poll.GetServer(svid); gate != nil {
 			gate.Write(codec.NewMessage(def.MultiBC, data))
 		}

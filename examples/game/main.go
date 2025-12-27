@@ -1,9 +1,9 @@
 package main
 
 import (
+	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/game/route"
-	"frbg/network"
 	"log"
 	"os"
 	"os/signal"
@@ -18,24 +18,24 @@ func init() {
 
 // 创建配置
 func main() {
-	serverConfig := &network.ServerConfig{
+	serverConfig := &core.ServerConfig{
 		Addr:       ":6686",
 		ServerType: def.ST_Game,
 		ServerId:   def.SID_MahjongBanbisan,
 	}
-	pollConfig := &network.PollConfig{
+	pollConfig := &core.PollConfig{
 		Etcd:    true,
 		MaxConn: 10000,
 	}
-	poll := network.NewPoll(serverConfig, pollConfig, route.NewLocal())
+	poll := core.NewPoll(serverConfig, pollConfig, route.NewLocal())
 	poll.Start()
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
 		log.Println("signal kill")
-		network.Signal(poll)
+		core.Signal(poll)
 	}
-	network.Wait(poll)
+	core.Wait(poll)
 	log.Println("free")
 }

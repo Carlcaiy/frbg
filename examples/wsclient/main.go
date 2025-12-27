@@ -6,10 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"frbg/codec"
+	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
-	"frbg/network"
 	"log"
 	"net"
 
@@ -151,7 +151,7 @@ func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
 	} else {
 		bs, _ := proto.Marshal(req)
 		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
-			Svid:    uint32(network.Svid(svid, 1)),
+			Svid:    uint32(core.Svid(svid, 1)),
 			Cmd:     uint32(cmd),
 			Payload: bs,
 		})
@@ -182,7 +182,7 @@ func send(svid uint8, cmd uint16, req proto.Message) error {
 	} else {
 		bs, _ := proto.Marshal(req)
 		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
-			Svid:    uint32(network.Svid(svid, def.SID_MahjongBanbisan)),
+			Svid:    uint32(core.Svid(svid, def.SID_MahjongBanbisan)),
 			Cmd:     uint32(cmd),
 			Payload: bs,
 		})

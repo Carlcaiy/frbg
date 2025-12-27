@@ -3,12 +3,12 @@ package route
 import (
 	"fmt"
 	"frbg/codec"
+	"frbg/core"
 	"frbg/def"
 	"frbg/examples/db"
 	"frbg/examples/hall/slots"
 	"frbg/examples/pb"
 	"frbg/local"
-	"frbg/network"
 	"log"
 	"sync/atomic"
 )
@@ -87,7 +87,7 @@ func (l *Local) enterRoom(in *local.Input) error {
 		return err
 	}
 	log.Println("enterRoom", req.String())
-	svid := network.Svid(def.ST_Game, uint8(req.GameId))
+	svid := core.Svid(def.ST_Game, uint8(req.GameId))
 
 	// 如果用户已经在房间内，直接返回
 	if game := l.userGame[req.Uid]; game != nil && game.RoomId > 0 {
@@ -229,6 +229,6 @@ func (l *Local) leaveSlots(in *local.Input) error {
 	return nil
 }
 
-func (l *Local) Close(conn *network.Conn) {
+func (l *Local) Close(conn core.IConn) {
 	l.BaseLocal.Close(conn)
 }

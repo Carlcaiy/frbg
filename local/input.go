@@ -2,9 +2,9 @@ package local
 
 import (
 	"frbg/codec"
+	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
-	"frbg/network"
 	"log"
 
 	"google.golang.org/protobuf/proto"
@@ -13,18 +13,18 @@ import (
 var serverType uint8
 
 type Input struct {
-	c *network.Conn
+	c core.IConn
 	*codec.Message
 }
 
-func NewInput(conn *network.Conn, msg *codec.Message) *Input {
+func NewInput(conn core.IConn, msg *codec.Message) *Input {
 	return &Input{
 		c:       conn,
 		Message: msg,
 	}
 }
 
-func (r *Input) Client() *network.Conn {
+func (r *Input) Client() core.IConn {
 	return r.c
 }
 

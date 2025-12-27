@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"frbg/util"
 	"log"
 	"time"
 )
@@ -8,12 +9,12 @@ import (
 // 最小堆管理定时事件
 
 type TaskCtl struct {
-	*MinHeap
+	*util.MinHeap
 }
 
 func NewTaskCtl() *TaskCtl {
 	return &TaskCtl{
-		MinHeap: NewMinHeap(),
+		MinHeap: util.NewMinHeap(),
 	}
 }
 

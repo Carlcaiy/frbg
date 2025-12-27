@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/hall/route"
-	"frbg/network"
 	"frbg/timer"
 	"log"
 	"os"
@@ -27,18 +27,18 @@ func main() {
 	flag.IntVar(&sid, "sid", 1, "-sid 1")
 	flag.Parse()
 
-	serverConfig := &network.ServerConfig{
+	serverConfig := &core.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Hall,
 		ServerId:   uint8(sid),
 	}
 
-	pollConfig := &network.PollConfig{
+	pollConfig := &core.PollConfig{
 		MaxConn: 10000,
 		Etcd:    true,
 	}
 
-	poll := network.NewPoll(serverConfig, pollConfig, route.New())
+	poll := core.NewPoll(serverConfig, pollConfig, route.New())
 	poll.Start()
 
 	ch := make(chan os.Signal, 1)
@@ -46,9 +46,9 @@ func main() {
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
 		log.Println("signal kill")
-		network.Signal(poll)
+		core.Signal(poll)
 	}
 
-	network.Wait(poll)
+	core.Wait(poll)
 	log.Println("free")
 }

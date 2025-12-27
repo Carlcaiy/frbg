@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/gate/route"
-	"frbg/network"
 	"frbg/timer"
 	"log"
 	"os"
@@ -26,17 +26,17 @@ func main() {
 	flag.IntVar(&port, "p", 8080, "-p 6666")
 	flag.IntVar(&sid, "sid", 1, "-sid 1")
 	flag.Parse()
-	serverConfig := &network.ServerConfig{
+	serverConfig := &core.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Gate,
 		ServerId:   uint8(sid),
 	}
-	pollConfig := &network.PollConfig{
+	pollConfig := &core.PollConfig{
 		MaxConn: 10000,
 		Etcd:    true,
 	}
 
-	poll := network.NewPoll(serverConfig, pollConfig, route.New())
+	poll := core.NewPoll(serverConfig, pollConfig, route.New())
 	poll.Start()
 
 	ch := make(chan os.Signal, 1)

@@ -1,4 +1,4 @@
-package network
+package core
 
 import (
 	"strconv"
@@ -7,6 +7,7 @@ import (
 
 type ServerConfig struct {
 	Addr       string // 服务地址
+	WsAddr     string // websocket地址
 	ServerType uint8  // 服务类型
 	ServerId   uint8  // 服务ID
 }

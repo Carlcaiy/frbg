@@ -2,10 +2,10 @@ package route
 
 import (
 	"frbg/codec"
+	"frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
-	"frbg/network"
 	"log"
 
 	"google.golang.org/protobuf/proto"
@@ -44,7 +44,7 @@ func (u *User) Send(cmd uint16, data proto.Message) {
 		Cmd:     uint32(cmd),
 		Payload: payload,
 	})
-	svid := network.Svid(def.ST_Gate, uint8(u.gateId))
+	svid := core.Svid(def.ST_Gate, uint8(u.gateId))
 	if conn := u.l.Poll.GetServer(svid); conn != nil {
 		conn.Write(msg)
 	}
