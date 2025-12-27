@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"frbg/codec"
 	"frbg/def"
-	"frbg/register"
+	"frbg/third"
 	"frbg/timer"
+	"frbg/util"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -63,26 +64,20 @@ func NewPollConfig() *PollConfig {
 }
 
 type Poll struct {
-	epollFd     int
-	eventFd     int
-	wsListenFd  int
-	wsListener  *net.TCPListener
-	tcpListenFd int
-	tcpListener *net.TCPListener
-	connMap     map[int]IConn // 所有连接
-	connNum     int64         // 改为 int64 便于原子操作
-	pollConfig  *PollConfig
-	queue       *esqueue
-	handle      Handler
-	ServerConf  *ServerConfig
+	epollFd     int               // epoll fd
+	eventFd     int               // event fd
+	wsListenFd  int               // ws监听fd
+	wsListener  *net.TCPListener  // ws监听
+	tcpListenFd int               // tcp监听fd
+	tcpListener *net.TCPListener  // tcp监听
+	connNum     int64             // 改为 int64 便于原子操作
+	pollConfig  *PollConfig       // 配置
+	queue       *util.Esqueue     // 事件队列
+	handle      Handler           // 处理
+	ServerConf  *ServerConfig     // 服务配置
 	events      []unix.EpollEvent // 重用事件数组
-	mu          sync.RWMutex      // 保护 fdconns 和 connNum
-	ticker      *time.Ticker
-	heartBeat   *time.Ticker
-	// RPC响应管理
-	rpcResponses map[uint16]chan *codec.Message
-	rpcCallbacks map[uint16]RpcCallback
-	rpcMu        sync.RWMutex
+	ticker      *time.Ticker      // 定时器
+	heartBeat   *time.Ticker      // 心跳定时器
 }
 
 func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
@@ -93,16 +88,13 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 	err = unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, eventFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(eventFd)})
 	must(err)
 	poll := &Poll{
-		connMap:      make(map[int]IConn),
-		epollFd:      epollFd,
-		eventFd:      eventFd,
-		pollConfig:   pconf,
-		handle:       handle,
-		ServerConf:   sconf,
-		queue:        new(esqueue),
-		events:       make([]unix.EpollEvent, 64), // 预分配事件数组
-		rpcResponses: make(map[uint16]chan *codec.Message),
-		rpcCallbacks: make(map[uint16]RpcCallback),
+		epollFd:    epollFd,
+		eventFd:    eventFd,
+		pollConfig: pconf,
+		handle:     handle,
+		ServerConf: sconf,
+		queue:      new(util.Esqueue),
+		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
 	}
 	handle.Attach(poll)
 	return poll
@@ -127,7 +119,7 @@ func (p *Poll) Start() {
 
 	// 注册etcd
 	if p.pollConfig.Etcd {
-		register.Put(conf.Svid(), conf.Addr)
+		third.Put(conf.Svid(), conf.Addr)
 	}
 
 	// 监听tcp
@@ -182,19 +174,15 @@ func (p *Poll) Close() error {
 
 	// 注销etcd服务
 	if p.pollConfig.Etcd {
-		if err := register.Del(p.ServerConf.Svid()); err != nil {
+		if err := third.Del(p.ServerConf.Svid()); err != nil {
 			errs = append(errs, fmt.Errorf("etcd del error: %w", err))
 		}
 	}
 
 	// 关闭连接connfd
-	p.mu.Lock()
-	for _, c := range p.connMap {
-		if err := c.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close conn %s error: %w", c.String(), err))
-		}
-	}
-	p.mu.Unlock()
+	connMgr.Range(func(conn IConn) error {
+		return conn.Close()
+	})
 
 	// 关闭epoll监听fd
 	if p.epollFd > 0 {
@@ -334,14 +322,12 @@ func (p *Poll) processAcceptTcp() error {
 	c := &Conn{
 		poll:       p,
 		conn:       conn,
-		Fd:         fd,
+		fd:         fd,
 		activeTime: time.Now().Unix(),
 	}
 
 	// 6. 线程安全地更新连接映射
-	p.mu.Lock()
-	p.connMap[fd] = c
-	p.mu.Unlock()
+	connMgr.AddServe(c)
 
 	// 7. 记录日志
 	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
@@ -394,16 +380,13 @@ func (p *Poll) processAcceptWebSocket() error {
 		Conn: Conn{
 			poll:       p,
 			conn:       conn,
-			Fd:         fd,
+			fd:         fd,
 			activeTime: time.Now().Unix(),
 		},
 	}
 
 	// 6. 线程安全地更新连接映射
-	p.mu.Lock()
-	p.connMap[fd] = c
-	p.incrConnNum()
-	p.mu.Unlock()
+	connMgr.AddServe(c)
 
 	// 7. 记录日志并触发回调
 	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
@@ -413,10 +396,8 @@ func (p *Poll) processAcceptWebSocket() error {
 // 处理客户端数据
 func (p *Poll) processClientData(fd int) error {
 	// 1. 线程安全地查找连接对象
-	p.mu.RLock()
-	conn, ok := p.connMap[fd]
-	p.mu.RUnlock()
-	if !ok {
+	conn := connMgr.GetByFd(fd)
+	if conn == nil {
 		log.Printf("connection not found for fd: %d", fd)
 		return nil
 	}
@@ -437,7 +418,7 @@ func (p *Poll) processClientData(fd int) error {
 
 	log.Printf("processClientData fd:%d msg:%v", fd, msg)
 	// 5. 处理RPC响应
-	if p.HandleRpcResponse(msg) {
+	if rpcMgr.HandleRpcResponse(msg) {
 		return nil
 	}
 
@@ -454,20 +435,11 @@ func (p *Poll) Del(fd int) error {
 		return fmt.Errorf("epoll ctl del error: %w", err)
 	}
 
-	p.mu.Lock()
-	conn, ok := p.connMap[fd]
-	if !ok {
-		p.mu.Unlock()
-		return fmt.Errorf("connection not found for fd: %d", fd)
-	}
-	p.mu.Unlock()
 	p.decrConnNum()
-	if conn.Svid() != 0 {
-		serverMgr.DelServe(conn.Svid())
-	}
+
+	conn := connMgr.DelByFd(fd)
 
 	log.Printf("Del fd:%d addr:%s conn_num=%d", fd, conn.String(), p.getConnNum())
-
 	p.handle.Close(conn)
 	return conn.Close()
 }
@@ -482,15 +454,13 @@ func (p *Poll) CheckTimeout() {
 		timeoutFds := make([]int, 0, 64)
 
 		// 只收集需要删除的FD，不立即删除
-		p.mu.RLock()
-		for fd, conn := range p.connMap {
+		connMgr.Range(func(conn IConn) error {
 			if now-conn.ActiveTime() > timeoutDuration {
-				log.Printf("tcpConns timeout fd:%d active_time:%d timeout_duration:%d now:%d", fd, conn.ActiveTime(), timeoutDuration, now)
-				timeoutFds = append(timeoutFds, fd)
-				conn.Close()
+				log.Printf("tcpConns timeout fd:%d active_time:%d timeout_duration:%d now:%d", conn.Fd(), conn.ActiveTime(), timeoutDuration, now)
+				timeoutFds = append(timeoutFds, conn.Fd())
 			}
-		}
-		p.mu.RUnlock()
+			return nil
+		})
 
 		// 在锁外删除，避免阻塞
 		for _, fd := range timeoutFds {
@@ -504,10 +474,10 @@ func (p *Poll) ConnTick() {
 	p.heartBeat = time.NewTicker(time.Second)
 	for range p.heartBeat.C {
 		// 发送心跳
-		serverMgr.Range(func(cli *Conn) error {
+		connMgr.Range(func(conn IConn) error {
 			msg := codec.AcquireMessage()
 			msg.SetFlags(codec.FlagsHeartBeat)
-			return cli.Write(msg)
+			return conn.Write(msg)
 		})
 	}
 }
@@ -527,16 +497,15 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 	conn := &Conn{
 		poll:       p,
 		conn:       tcpConn,
-		Fd:         fd,
+		fd:         fd,
 		activeTime: time.Now().Unix(),
 		svid:       conf.Svid(),
 	}
 
 	log.Printf("Connect fd:%d addr:%s", fd, tcpConn.RemoteAddr().String())
 
-	p.connMap[fd] = conn
+	connMgr.AddServe(conn)
 	p.incrConnNum()
-	serverMgr.AddServe(conf.Svid(), conn)
 	p.handle.OnConnect(conn)
 	return conn, nil
 }
@@ -610,12 +579,13 @@ func must(err error) {
 	}
 }
 
-func (poll *Poll) GetServer(svid uint16) *Conn {
-	conn := serverMgr.GetServe(svid)
+func (poll *Poll) GetServer(svid uint16) IConn {
+	conn := connMgr.GetBySid(svid)
 	if conn != nil {
 		return conn
 	}
-	addr := register.Get(svid)
+
+	addr := third.Get(svid)
 	if addr == "" {
 		return nil
 	}
@@ -632,54 +602,4 @@ func (poll *Poll) GetServer(svid uint16) *Conn {
 		log.Printf("Connect error: %v", err)
 	}
 	return nil
-}
-
-// RegisterRpc 注册RPC响应等待
-func (p *Poll) RegisterRpc(seq uint16, respChan chan *codec.Message) {
-	p.rpcMu.Lock()
-	defer p.rpcMu.Unlock()
-	p.rpcResponses[seq] = respChan
-}
-
-// UnregisterRpc 取消注册RPC响应等待
-func (p *Poll) UnregisterRpc(seq uint16) {
-	p.rpcMu.Lock()
-	defer p.rpcMu.Unlock()
-	delete(p.rpcResponses, seq)
-}
-
-// RegisterRpcCallback 注册RPC异步回调
-func (p *Poll) RegisterRpcCallback(seq uint16, callback RpcCallback) {
-	p.rpcMu.Lock()
-	defer p.rpcMu.Unlock()
-	p.rpcCallbacks[seq] = callback
-}
-
-// HandleRpcResponse 处理RPC响应
-func (p *Poll) HandleRpcResponse(msg *codec.Message) bool {
-	seq := msg.Seq
-
-	fmt.Println("HandleRpcResponse seq:", seq, p.rpcResponses)
-
-	p.rpcMu.RLock()
-	// 优先处理同步等待
-	if respChan, ok := p.rpcResponses[seq]; ok {
-		p.rpcMu.RUnlock()
-		respChan <- msg
-		// select {
-		// case respChan <- msg:
-		// default:
-		// 通道已关闭或满，丢弃
-		// }
-		return true
-	}
-
-	// 处理异步回调
-	if callback, ok := p.rpcCallbacks[seq]; ok {
-		p.rpcMu.RUnlock()
-		go callback(msg, nil)
-		return true
-	}
-	p.rpcMu.RUnlock()
-	return false
 }

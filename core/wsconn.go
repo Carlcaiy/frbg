@@ -26,17 +26,8 @@ func (c *WsConn) Write(msg *codec.Message) error {
 		err = codec.WsWrite(c.conn, msg)
 	}
 	if err != nil {
+		c.poll.Del(c.Fd())
 		log.Printf("Write error: %s", err.Error())
-		if c.svid == 0 {
-			c.poll.Del(c.Fd)
-		} else {
-			serverMgr.DelServe(c.svid)
-		}
 	}
-
 	return err
-}
-
-func (c *WsConn) Close() error {
-	return c.conn.Close()
 }

@@ -1,13 +1,13 @@
-package core
+package util
 
 import "sync"
 
-type esqueue struct {
+type Esqueue struct {
 	sync.Mutex
 	nodes []interface{}
 }
 
-func (q *esqueue) Add(node interface{}) (one bool) {
+func (q *Esqueue) Add(node interface{}) (one bool) {
 	q.Lock()
 	q.nodes = append(q.nodes, node)
 	n := len(q.nodes)
@@ -15,7 +15,7 @@ func (q *esqueue) Add(node interface{}) (one bool) {
 	return n == 1
 }
 
-func (q *esqueue) ForEach(iter func(note interface{}) error) error {
+func (q *Esqueue) ForEach(iter func(note interface{}) error) error {
 	q.Lock()
 	if len(q.nodes) == 0 {
 		q.Unlock()

@@ -16,14 +16,14 @@ var seq atomic.Uint32
 type Conn struct {
 	poll       *Poll
 	conn       *net.TCPConn // 连接
-	Fd         int          // 文件描述符
+	fd         int          // 文件描述符
 	activeTime int64        // 活跃时间
 	svid       uint16       // 服务id
 	ctx        interface{}  // user-defined context
 }
 
-func (c *Conn) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
+func (c *Conn) Fd() int {
+	return c.fd
 }
 
 func (c *Conn) Svid() uint16 {
@@ -50,6 +50,14 @@ func (c *Conn) SetContext(ctx interface{}) {
 	c.ctx = ctx
 }
 
+func (c *Conn) Close() error {
+	return c.conn.Close()
+}
+
+func (c *Conn) String() string {
+	return c.conn.RemoteAddr().String()
+}
+
 func (c *Conn) Read() (*codec.Message, error) {
 	err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
 	if err != nil {
@@ -74,11 +82,8 @@ func (c *Conn) Write(msg *codec.Message) error {
 	}
 	if err != nil {
 		log.Printf("Write error: %s", err.Error())
-		if c.svid == 0 {
-			c.poll.Del(c.Fd)
-		} else {
-			serverMgr.DelServe(c.svid)
-		}
+		connMgr.DelBySid(c.svid)
+		return err
 	}
 
 	// 更新活跃时间
@@ -108,15 +113,15 @@ func (c *Conn) RpcWrite(reqCmd uint16, reqMsg proto.Message, timeout int) (*code
 
 	// 3. 创建响应等待通道
 	respChan := make(chan *codec.Message, 1)
-	c.poll.RegisterRpc(seq, respChan)
-	defer c.poll.UnregisterRpc(seq)
+	rpcMgr.RegisterRpc(seq, respChan)
+	defer rpcMgr.UnregisterRpc(seq)
 
 	// 4. 发送请求
 	if err := c.Write(req); err != nil {
 		return nil, fmt.Errorf("send request failed: %w", err)
 	}
 
-	log.Printf("RpcWrite seq:%d, req:%v p.rpcResponses:%v", seq, req, c.poll.rpcResponses)
+	log.Printf("RpcWrite seq:%d, req:%v p.rpcResponses:%v", seq, req, rpcMgr.rpcResponses)
 	// 5. 等待响应或超时
 	select {
 	case resp := <-respChan:
@@ -146,26 +151,19 @@ func (c *Conn) RpcWriteAsync(reqCmd uint16, reqMsg proto.Message, callback func(
 	req.Seq = seq
 
 	// 3. 注册异步回调
-	c.poll.RegisterRpcCallback(seq, callback)
+	rpcMgr.RegisterRpcCallback(seq, callback)
 
 	// 4. 发送请求
 	if err := c.Write(req); err != nil {
-		c.poll.UnregisterRpc(seq)
+		rpcMgr.UnregisterRpc(seq)
 		return fmt.Errorf("send request failed: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Conn) Close() error {
-	return c.conn.Close()
-}
-
-func (c *Conn) String() string {
-	return c.conn.RemoteAddr().String()
-}
-
 type IConn interface {
+	Fd() int
 	Svid() uint16
 	SetSvid(svid uint16)
 	ActiveTime() int64
@@ -175,5 +173,7 @@ type IConn interface {
 	String() string
 	Read() (*codec.Message, error)
 	Write(msg *codec.Message) error
+	RpcWrite(reqCmd uint16, reqMsg proto.Message, timeout int) (*codec.Message, error)
+	RpcWriteAsync(reqCmd uint16, reqMsg proto.Message, callback func(*codec.Message, error)) error
 	Close() error
 }

@@ -1,4 +1,4 @@
-package register
+package third
 
 import (
 	"context"
