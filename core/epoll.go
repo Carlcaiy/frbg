@@ -26,12 +26,12 @@ import (
 var wg sync.WaitGroup
 
 type Handler interface {
-	Attach(poll *Poll)                         // 绑定poll
-	Push(conn IConn, msg *codec.Message) error // 消息路由
-	Close(conn IConn)                          // 连接关闭的回调
-	OnConnect(conn IConn)                      // 连接成功的回调
-	OnAccept(conn IConn)                       // 新连接的回调
-	Tick()                                     // 心跳
+	Attach(poll *Poll)                   // 绑定poll
+	Push(conn IConn, msg *codec.Message) // 消息路由
+	Close(conn IConn)                    // 连接关闭的回调
+	OnConnect(conn IConn)                // 连接成功的回调
+	OnAccept(conn IConn)                 // 新连接的回调
+	Tick()                               // 心跳
 }
 
 type PollConfig struct {
@@ -48,7 +48,7 @@ var upgrader = &ws.Upgrader{
 		return
 	},
 	Protocol: func(b []byte) bool {
-		log.Println(string(b))
+		log.Printf("protocol: %q", b)
 		return true
 	},
 }
@@ -97,6 +97,7 @@ func NewPoll(sconf *ServerConfig, pconf *PollConfig, handle Handler) *Poll {
 		events:     make([]unix.EpollEvent, 64), // 预分配事件数组
 	}
 	handle.Attach(poll)
+	log.Printf("AddPoll epollFd:%d eventFd:%d", epollFd, eventFd)
 	return poll
 }
 
@@ -127,6 +128,7 @@ func (p *Poll) Start() {
 	if conf.ServerType == def.ST_Gate {
 		p.wsListener, p.wsListenFd = p.Listen(fmt.Sprintf("%s:%d", conf.IP(), conf.Port()+1))
 	}
+	log.Printf("Start tcpListenFd:%d wsListenFd:%d", p.tcpListenFd, p.wsListenFd)
 
 	// 添加定时事件
 	if conf.ServerType != def.ST_Gate {
@@ -149,6 +151,7 @@ func (p *Poll) Listen(addr string) (*net.TCPListener, int) {
 		log.Printf("listen error: %s", err)
 		must(err)
 	}
+	log.Printf("listen addr:%s success", addr)
 	tcpListener, listenFd, err := GetListenerFd(listener)
 	if err != nil {
 		log.Printf("get listener fd error: %s", err)
@@ -202,6 +205,11 @@ func (p *Poll) Close() error {
 			errs = append(errs, fmt.Errorf("close listen fd error: %w", err))
 		}
 	}
+	if p.wsListenFd > 0 {
+		if err := unix.Close(p.wsListenFd); err != nil {
+			errs = append(errs, fmt.Errorf("close ws listen fd error: %w", err))
+		}
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("close errors: %v", errs)
@@ -245,7 +253,8 @@ func (p *Poll) processQueueEvents() error {
 		case def.EventType:
 			switch t {
 			case def.ET_Timer:
-				p.handle.Tick()
+				// log.Printf("timer tick")
+				// p.handle.Tick()
 			case def.ET_Close:
 				return errors.New("signal close")
 			case def.ET_Error:
@@ -264,7 +273,7 @@ func (p *Poll) processQueueEvents() error {
 func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 	fd := int(event.Fd)
 
-	if fd == p.epollFd {
+	if fd == p.eventFd {
 		return p.processEventFd()
 	}
 
@@ -304,17 +313,20 @@ func (p *Poll) processAcceptTcp() error {
 	// 2. 获取socket文件描述符
 	fd := socketFD(conn)
 	if fd == -1 {
+		log.Printf("failed to get socket fd:%d", fd)
 		return errors.New("failed to get socket fd")
 	}
 
 	// 3. 设置非阻塞模式（关键优化点）
 	if err := syscall.SetNonblock(fd, true); err != nil {
+		log.Printf("failed to set nonblock:%d", fd)
 		return err
 	}
 
 	// 4. 添加到epoll监听
 	event := &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}
 	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, event); err != nil {
+		log.Printf("failed to epoll ctl add:%d", fd)
 		return fmt.Errorf("epoll ctl add error: %w", err)
 	}
 
@@ -327,7 +339,7 @@ func (p *Poll) processAcceptTcp() error {
 	}
 
 	// 6. 线程安全地更新连接映射
-	connMgr.AddServe(c)
+	connMgr.AddConn(c)
 
 	// 7. 记录日志
 	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
@@ -351,7 +363,7 @@ func (p *Poll) processAcceptWebSocket() error {
 
 	// 2.处理websocket升级
 	if _, err = upgrader.Upgrade(conn); err != nil {
-		log.Printf("websocket upgrade error: %s", err)
+		log.Printf("websocket upgrade error: %s fd", err)
 		conn.Close()
 		return nil
 	}
@@ -360,7 +372,7 @@ func (p *Poll) processAcceptWebSocket() error {
 	fd := socketFD(conn)
 	if fd == -1 {
 		conn.Close()
-		return errors.New("failed to get socket fd")
+		return fmt.Errorf("failed to get socket fd:%d", fd)
 	}
 
 	// 3. 设置非阻塞模式（关键优化点）
@@ -372,7 +384,8 @@ func (p *Poll) processAcceptWebSocket() error {
 	// 4. 添加到epoll监听
 	event := &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}
 	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, event); err != nil {
-		return fmt.Errorf("epoll ctl add error: %w", err)
+		conn.Close()
+		return fmt.Errorf("epoll ctl add %d error: %w", fd, err)
 	}
 
 	// 5. 创建连接对象并存储
@@ -386,7 +399,7 @@ func (p *Poll) processAcceptWebSocket() error {
 	}
 
 	// 6. 线程安全地更新连接映射
-	connMgr.AddServe(c)
+	connMgr.AddConn(c)
 
 	// 7. 记录日志并触发回调
 	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
@@ -405,7 +418,7 @@ func (p *Poll) processClientData(fd int) error {
 	// 3. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		log.Println(err.Error())
+		log.Printf("processClientData fd:%d read error: %v", fd, err)
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}
@@ -474,18 +487,14 @@ func (p *Poll) ConnTick() {
 	p.heartBeat = time.NewTicker(time.Second)
 	for range p.heartBeat.C {
 		// 发送心跳
-		connMgr.Range(func(conn IConn) error {
-			msg := codec.AcquireMessage()
-			msg.SetFlags(codec.FlagsHeartBeat)
-			return conn.Write(msg)
-		})
+		connMgr.HeartBeat()
 	}
 }
 
 func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 	tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
-		log.Println(err)
+		log.Printf("Connect error: %v", err)
 		return nil, err
 	}
 	fd := socketFD(tcpConn)
@@ -504,7 +513,7 @@ func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
 
 	log.Printf("Connect fd:%d addr:%s", fd, tcpConn.RemoteAddr().String())
 
-	connMgr.AddServe(conn)
+	connMgr.AddConn(conn)
 	p.incrConnNum()
 	p.handle.OnConnect(conn)
 	return conn, nil

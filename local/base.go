@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"frbg/codec"
 	core "frbg/core"
+	"frbg/def"
+	"frbg/examples/pb"
 	"frbg/timer"
-	"frbg/util"
 	"log"
 	"runtime"
 
@@ -15,7 +16,7 @@ import (
 type Handle func(*Input) error
 
 type BaseLocal struct {
-	queue *util.ArrayQueue
+	queue chan *Input
 	*core.Poll
 	m_route map[uint16]Handle // 路由
 	*timer.TaskCtl
@@ -25,7 +26,7 @@ func NewBase() *BaseLocal {
 	return &BaseLocal{
 		m_route: make(map[uint16]Handle),
 		TaskCtl: timer.NewTaskCtl(),
-		queue:   util.NewArrayQueue(128),
+		queue:   make(chan *Input, 128),
 	}
 }
 
@@ -37,19 +38,14 @@ func (l *BaseLocal) Attach(poll *core.Poll) {
 func (l *BaseLocal) Start() {
 	go func() {
 		for {
-			if !l.queue.IsEmpty() {
-				i, err := l.queue.Dequeue()
-				if err != nil {
-					log.Printf("dequeue error:%s", err.Error())
-					continue
-				}
-				input := i.(*Input)
-				if err := l.Route(input); err != nil {
-					log.Printf("Route error:%s", err.Error())
-				}
-				continue
+			input := <-l.queue
+			if err := l.Route(input); err != nil {
+				input.Response(0, def.Error, &pb.CommonRsp{
+					Code: pb.ErrorCode_Failed,
+					Msg:  err.Error(),
+				})
+				log.Printf("Route error:%s", err.Error())
 			}
-			runtime.Gosched()
 		}
 	}()
 }
@@ -69,8 +65,8 @@ func (l *BaseLocal) Tick() {
 	l.FrameCheck()
 }
 
-func (l *BaseLocal) Push(conn core.IConn, msg *codec.Message) error {
-	return l.queue.Enqueue(NewInput(conn, msg))
+func (l *BaseLocal) Push(conn core.IConn, msg *codec.Message) {
+	l.queue <- NewInput(conn, msg)
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {

@@ -27,11 +27,18 @@ func New() *Local {
 
 func (l *Local) Init() {
 	l.Start()
+	l.AddRoute(def.Echo, l.echo)
 	l.AddRoute(def.Login, l.login)
 	l.AddRoute(def.MultiBC, l.multibc)
 	l.AddRoute(def.Logout, l.logout)
 	l.AddRoute(def.PacketIn, l.packetIn)
 	l.AddRoute(def.PacketOut, l.packetOut)
+}
+
+func (l *Local) echo(in *local.Input) error {
+	test := new(pb.Test)
+	in.Unpack(test)
+	return in.Response(0, in.Cmd, test)
 }
 
 func (l *Local) login(in *local.Input) error {
@@ -117,7 +124,7 @@ func (l *Local) logout(in *local.Input) error {
 		client.Write(codec.NewMessage(in.Cmd, &pb.CommonRsp{
 			Code: pb.ErrorCode_Success,
 		}))
-		l.clients.DelClient(client)
+		l.clients.DelClient(req.Uid)
 		return nil
 	}
 	return fmt.Errorf("reqLeaveGate not find user: %d", req.Uid)
@@ -132,6 +139,7 @@ func (l *Local) packetIn(in *local.Input) error {
 	if cli == nil {
 		return fmt.Errorf("not find server %d", req.Svid)
 	}
+	log.Printf("packetIn cmd:%d, svid:%d", req.Cmd, req.Svid)
 	data := in.Message
 	data.Cmd = uint16(req.Cmd)
 	data.Payload = req.Payload
@@ -154,5 +162,11 @@ func (l *Local) packetOut(in *local.Input) error {
 }
 
 func (l *Local) Close(conn core.IConn) {
-	l.clients.DelClient(conn)
+	uid, ok := conn.Context().(uint32)
+	if !ok {
+		log.Printf("Close conn.Context() not uint32")
+		return
+	}
+	log.Printf("Close uid:%d", uid)
+	l.clients.DelClient(uid)
 }

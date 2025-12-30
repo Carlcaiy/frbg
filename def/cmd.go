@@ -4,6 +4,7 @@ package def
 const (
 	GateBegin    = 1000 // Gate
 	Login        = 1001 // 登录网关
+	Error        = 1002 // 错误
 	GateKick     = 1003 // 网关踢人
 	MultiBC      = 1004 // 多播
 	HeartBeat    = 1005 // 心跳
@@ -11,7 +12,7 @@ const (
 	Logout       = 1007 // 离开网关
 	ResGateLeave = 1008 // 离开网关
 	Offline      = 1009 // 断线
-	Test         = 1010 // 测试
+	Echo         = 1010 // 测试
 	ToClient     = 1011 // 发送给客户端
 	PacketIn     = 1012 // 客户端需要网关转发到内部服务的消息
 	PacketOut    = 1013 // 内部服务需要网关转发给客户端的消息

@@ -12,6 +12,9 @@ import (
 	"frbg/mj"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gobwas/ws"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +25,9 @@ var port int = 6666
 var conn net.Conn
 var err error
 var gameData *pb.StartGameRsp
+var getRoomListRsp = &pb.GetRoomListRsp{}
 var mjs []uint8
+var errch = make(chan error, 1)
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -38,29 +43,62 @@ func main() {
 		log.Println(err)
 		return
 	}
-	defer func() {
-		conn.Close()
-	}()
+	log.Printf("connect to server %d success", port+1)
+	go Loop()
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+	select {
+	case sig := <-ch:
+		if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
+			log.Println("signal kill")
+		}
+	case err := <-errch:
+		log.Println(err)
+	}
+	fmt.Println("close conn", conn.Close())
+}
 
-	must(rpc(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1}, &pb.LoginRsp{}))
-	must(rpc(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)}, &pb.GetGameListRsp{}))
-	getRoomListRsp := &pb.GetRoomListRsp{}
-	must(rpc(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan}, getRoomListRsp))
-	must(send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{
-		Uid:    uint32(uid),
-		GateId: 1,
-		GameId: def.SID_MahjongBanbisan,
-		RoomId: uint32(getRoomListRsp.Rooms[0].RoomId),
-	}))
+func logdata(data proto.Message, msg *codec.Message) {
+	err = msg.Unpack(data)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	bsi, _ := json.MarshalIndent(data, "", "  ")
+	log.Println(string(bsi))
+}
 
+func Loop() {
+	send(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1})
 	for {
 		msg, err := codec.WsRead(conn)
 		if err != nil {
-			log.Println(err)
+			errch <- err
 			break
 		}
-
 		switch msg.Cmd {
+		case def.Error:
+			rsp := new(pb.CommonRsp)
+			logdata(rsp, msg)
+			errch <- fmt.Errorf("error code:%d msg:%s", rsp.Code, rsp.Msg)
+			return
+		case def.Login:
+			rsp := new(pb.LoginRsp)
+			logdata(rsp, msg)
+			send(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)})
+		case def.GetGameList:
+			rsp := new(pb.GetGameListRsp)
+			logdata(rsp, msg)
+			send(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan})
+		case def.GetRoomList:
+			rsp := new(pb.GetRoomListRsp)
+			logdata(rsp, msg)
+			send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{
+				Uid:    uint32(uid),
+				GateId: 1,
+				GameId: def.SID_MahjongBanbisan,
+				RoomId: uint32(getRoomListRsp.Rooms[0].RoomId),
+			})
 		case def.StartGame:
 			rsp := new(pb.StartGameRsp)
 			logdata(rsp, msg)
@@ -128,67 +166,23 @@ func main() {
 	}
 }
 
-func must(e error) {
-	if e != nil {
-		log.Fatalln(e)
-	}
-}
-
-func logdata(data proto.Message, msg *codec.Message) {
-	err = msg.Unpack(data)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	bsi, _ := json.MarshalIndent(data, "", "  ")
-	log.Println(string(bsi))
-}
-
-func rpc(svid uint8, cmd uint16, req proto.Message, rsp proto.Message) error {
+func send(svid uint8, cmd uint16, req proto.Message) {
 	var msg *codec.Message
 	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)
+		log.Printf("send gate cmd:%d", cmd)
 	} else {
 		bs, _ := proto.Marshal(req)
-		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
-			Svid:    uint32(core.Svid(svid, 1)),
-			Cmd:     uint32(cmd),
-			Payload: bs,
-		})
-	}
-	log.Printf("send scmd:%d", cmd)
-	if err = codec.WsWrite(conn, msg); err != nil {
-		return err
-	}
-	log.Printf("start read scmd:%d", cmd)
-	msg, err := codec.WsRead(conn)
-	if err != nil {
-		return err
-	}
-	log.Printf("read success:%s", msg.String())
-	err = msg.Unpack(rsp)
-	if err != nil {
-		return err
-	}
-	bsi, _ := json.MarshalIndent(rsp, "", "  ")
-	log.Println(string(bsi))
-	return nil
-}
-
-func send(svid uint8, cmd uint16, req proto.Message) error {
-	var msg *codec.Message
-	if svid == def.ST_Gate {
-		msg = codec.NewMessage(cmd, req)
-	} else {
-		bs, _ := proto.Marshal(req)
-		msg = codec.NewMessage(def.PacketIn, &pb.PacketIn{
+		packet := &pb.PacketIn{
 			Svid:    uint32(core.Svid(svid, def.SID_MahjongBanbisan)),
 			Cmd:     uint32(cmd),
 			Payload: bs,
-		})
+		}
+		msg = codec.NewMessage(def.PacketIn, packet)
+		log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
 	}
 	if err = codec.WsWrite(conn, msg); err != nil {
-		return err
+		log.Printf("send error:%s", err.Error())
+		errch <- err
 	}
-	return nil
 }

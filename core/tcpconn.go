@@ -47,6 +47,7 @@ func (c *Conn) Context() interface{} {
 }
 
 func (c *Conn) SetContext(ctx interface{}) {
+	log.Printf("SetContext ctx:%v", ctx)
 	c.ctx = ctx
 }
 
@@ -75,6 +76,9 @@ func (c *Conn) Read() (*codec.Message, error) {
 }
 
 func (c *Conn) Write(msg *codec.Message) error {
+	if !msg.IsHeartBeat() {
+		log.Printf("send tcp msg:%s", msg.String())
+	}
 	now := time.Now()
 	err := c.conn.SetWriteDeadline(now.Add(time.Second))
 	if err == nil {

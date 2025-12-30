@@ -50,8 +50,7 @@ func (u *Clients) SetClient(uid uint32, conn core.IConn) {
 	conn.SetContext(uid)
 }
 
-func (u *Clients) DelClient(conn core.IConn) {
-	uid := conn.Context().(uint32)
+func (u *Clients) DelClient(uid uint32) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	delete(u.m_users, uid)

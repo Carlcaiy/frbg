@@ -20,6 +20,9 @@ func (c *WsConn) Read() (*codec.Message, error) {
 }
 
 func (c *WsConn) Write(msg *codec.Message) error {
+	if !msg.IsHeartBeat() {
+		log.Printf("send ws msg:%s", msg.String())
+	}
 	err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		// 如果是用户连接，只能通过ws发送

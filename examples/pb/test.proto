@@ -352,4 +352,5 @@ message Test {
 // 通用回复
 message CommonRsp {
     ErrorCode code = 1;
+    string msg = 2;
 }

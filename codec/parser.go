@@ -3,7 +3,6 @@ package codec
 import (
 	"fmt"
 	"io"
-	"log"
 	"sync/atomic"
 	"time"
 
@@ -85,11 +84,7 @@ func WsWrite(r io.Writer, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
 	}
-
 	data := msg.Pack()
-	if !msg.IsHeartBeat() {
-		log.Printf("send ws msg:%s", msg.String())
-	}
 	return wsutil.WriteServerBinary(r, data)
 }
 
@@ -153,10 +148,6 @@ func TcpRead(r io.Reader) (*Message, error) {
 func TcpWrite(r io.Writer, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
-	}
-
-	if !msg.IsHeartBeat() {
-		log.Printf("send tcp msg:%s", msg.String())
 	}
 
 	data := msg.Pack()

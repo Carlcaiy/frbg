@@ -34,8 +34,8 @@ func main() {
 	sig := <-ch
 	if sig == syscall.SIGQUIT || sig == syscall.SIGTERM || sig == syscall.SIGINT {
 		log.Println("signal kill")
-		core.Signal(poll)
+		poll.Trigger(def.ET_Close)
 	}
-	core.Wait(poll)
+	poll.Close()
 	log.Println("free")
 }

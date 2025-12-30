@@ -36,7 +36,7 @@ func main() {
 			var t time.Duration = 0
 			var c int = 0
 			req := func(servetType def.ServerType) {
-				conn.Write(codec.NewMessage(def.Test, &pb.Test{
+				conn.Write(codec.NewMessage(def.Echo, &pb.Test{
 					Uid:       uid,
 					StartTime: time.Now().UnixNano(),
 				}).Pack())
@@ -47,13 +47,13 @@ func main() {
 				if err != nil {
 					break
 				}
-				log.Println("receive msg:", msg.Cmd)
+				log.Printf("receive msg: %v", msg.Cmd)
 				switch msg.Cmd {
-				case def.Test:
+				case def.Echo:
 					p := new(pb.Test)
 					err := msg.Unpack(p)
 					if err != nil {
-						log.Println(err)
+						log.Printf("unpack error: %v", err)
 						continue
 					}
 					p.EndTime = time.Now().UnixNano()
