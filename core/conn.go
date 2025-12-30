@@ -11,6 +11,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type IConn interface {
+	Fd() int
+	Svid() uint16
+	SetSvid(svid uint16)
+	ActiveTime() int64
+	SetActiveTime(t int64)
+	Context() interface{}
+	SetContext(ctx interface{})
+	String() string
+	Read() (*codec.Message, error)
+	Write(msg *codec.Message) error
+	RpcWrite(reqCmd uint16, reqMsg proto.Message, timeout int) (*codec.Message, error)
+	RpcWriteAsync(reqCmd uint16, reqMsg proto.Message, callback func(*codec.Message, error)) error
+	Close() error
+}
+
 var seq atomic.Uint32
 
 type Conn struct {
@@ -166,18 +182,35 @@ func (c *Conn) RpcWriteAsync(reqCmd uint16, reqMsg proto.Message, callback func(
 	return nil
 }
 
-type IConn interface {
-	Fd() int
-	Svid() uint16
-	SetSvid(svid uint16)
-	ActiveTime() int64
-	SetActiveTime(t int64)
-	Context() interface{}
-	SetContext(ctx interface{})
-	String() string
-	Read() (*codec.Message, error)
-	Write(msg *codec.Message) error
-	RpcWrite(reqCmd uint16, reqMsg proto.Message, timeout int) (*codec.Message, error)
-	RpcWriteAsync(reqCmd uint16, reqMsg proto.Message, callback func(*codec.Message, error)) error
-	Close() error
+type WsConn struct {
+	Conn
+}
+
+func (c *WsConn) Read() (*codec.Message, error) {
+	now := time.Now()
+	// 增加超时时间，给WebSocket连接足够时间处理消息
+	err := c.conn.SetReadDeadline(now.Add(time.Second * 5))
+	if err != nil {
+		log.Printf("SetReadDeadline error: %s", err.Error())
+		return nil, err
+	}
+	return codec.WsRead(c.conn)
+}
+
+func (c *WsConn) Write(msg *codec.Message) error {
+	if !msg.IsHeartBeat() {
+		log.Printf("send ws msg:%s", msg.String())
+	}
+	now := time.Now()
+	err := c.conn.SetWriteDeadline(now.Add(time.Second))
+	if err == nil {
+		// 如果是用户连接，只能通过ws发送
+		err = codec.WsWrite(c.conn, msg)
+	}
+	if err != nil {
+		c.poll.Del(c.Fd())
+		log.Printf("Write error: %s", err.Error())
+	}
+	c.SetActiveTime(now.Unix())
+	return err
 }

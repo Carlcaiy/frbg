@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gobwas/ws"
 	"google.golang.org/protobuf/proto"
@@ -44,6 +45,7 @@ func main() {
 		return
 	}
 	log.Printf("connect to server %d success", port+1)
+	go Tick()
 	go Loop()
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
@@ -66,6 +68,21 @@ func logdata(data proto.Message, msg *codec.Message) {
 	}
 	bsi, _ := json.MarshalIndent(data, "", "  ")
 	log.Println(string(bsi))
+}
+
+func Tick() {
+	for {
+		time.Sleep(5 * time.Second)
+		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		msg := codec.AcquireMessage()
+		msg.Cmd = def.HeartBeat
+		if err := codec.WsWrite(conn, msg); err != nil {
+			log.Printf("send error:%s", err.Error())
+			errch <- err
+			return
+		}
+		codec.ReleaseMessage(msg)
+	}
 }
 
 func Loop() {
@@ -180,6 +197,12 @@ func send(svid uint8, cmd uint16, req proto.Message) {
 		}
 		msg = codec.NewMessage(def.PacketIn, packet)
 		log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
+	}
+
+	if err = conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		log.Printf("set write deadline error:%s", err.Error())
+		errch <- err
+		return
 	}
 	if err = codec.WsWrite(conn, msg); err != nil {
 		log.Printf("send error:%s", err.Error())

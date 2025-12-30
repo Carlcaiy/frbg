@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/gobwas/ws"
-	reuseport "github.com/kavu/go_reuseport"
 	"golang.org/x/sys/unix"
 )
 
@@ -123,11 +122,11 @@ func (p *Poll) Start() {
 		third.Put(conf.Svid(), conf.Addr)
 	}
 
-	// 监听tcp
-	p.tcpListener, p.tcpListenFd = p.Listen(conf.Addr)
 	if conf.ServerType == def.ST_Gate {
 		p.wsListener, p.wsListenFd = p.Listen(fmt.Sprintf("%s:%d", conf.IP(), conf.Port()+1))
 	}
+	// 监听tcp
+	p.tcpListener, p.tcpListenFd = p.Listen(conf.Addr)
 	log.Printf("Start tcpListenFd:%d wsListenFd:%d", p.tcpListenFd, p.wsListenFd)
 
 	// 添加定时事件
@@ -146,7 +145,7 @@ func (p *Poll) Start() {
 
 func (p *Poll) Listen(addr string) (*net.TCPListener, int) {
 	// 监听tcp
-	listener, err := reuseport.Listen("tcp", addr)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Printf("listen error: %s", err)
 		must(err)
@@ -277,15 +276,24 @@ func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 		return p.processEventFd()
 	}
 
+	// 1. 线程安全地查找连接对象，注意顺序，tcpListenFd和wsListenFd会和其他fd冲突
+	conn := connMgr.GetByFd(fd)
+	if conn != nil {
+		log.Printf("connection not found for fd: %d", fd)
+		return p.processClientData(conn)
+	}
+
 	if fd == p.tcpListenFd {
+		log.Printf("accept tcp conn fd:%d, wsListenFd:%d", fd, p.wsListenFd)
 		return p.processAcceptTcp()
 	}
 
 	if fd == p.wsListenFd {
+		log.Printf("accept ws conn fd:%d, tcpListenFd:%d", fd, p.tcpListenFd)
 		return p.processAcceptWebSocket()
 	}
 
-	return p.processClientData(fd)
+	return fmt.Errorf("unknown fd:%d", fd)
 }
 
 // 处理eventfd事件
@@ -312,6 +320,7 @@ func (p *Poll) processAcceptTcp() error {
 
 	// 2. 获取socket文件描述符
 	fd := socketFD(conn)
+	log.Printf("Add tcp fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	if fd == -1 {
 		log.Printf("failed to get socket fd:%d", fd)
 		return errors.New("failed to get socket fd")
@@ -370,6 +379,8 @@ func (p *Poll) processAcceptWebSocket() error {
 
 	// 2. 获取socket文件描述符
 	fd := socketFD(conn)
+	log.Printf("Add ws fd:%d addr:%s conn_num=%d wsListenFd:%d tcpListenFd:%d",
+		fd, conn.RemoteAddr().String(), p.getConnNum(), p.wsListenFd, p.tcpListenFd)
 	if fd == -1 {
 		conn.Close()
 		return fmt.Errorf("failed to get socket fd:%d", fd)
@@ -400,25 +411,46 @@ func (p *Poll) processAcceptWebSocket() error {
 
 	// 6. 线程安全地更新连接映射
 	connMgr.AddConn(c)
+	p.incrConnNum()
 
 	// 7. 记录日志并触发回调
-	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+	log.Printf("Add fd:%d addr:%s conn_num=%d wsListenFd:%d tcpListenFd:%d",
+		fd, conn.RemoteAddr().String(), p.getConnNum(), p.wsListenFd, p.tcpListenFd)
 	return nil
 }
 
-// 处理客户端数据
-func (p *Poll) processClientData(fd int) error {
-	// 1. 线程安全地查找连接对象
-	conn := connMgr.GetByFd(fd)
-	if conn == nil {
-		log.Printf("connection not found for fd: %d", fd)
-		return nil
+// 添加辅助函数，明确标识连接类型
+func (p *Poll) getConnectionType(fd int) string {
+	if fd == p.tcpListenFd {
+		return "TCP_LISTENER"
 	}
+	if fd == p.wsListenFd {
+		return "WS_LISTENER"
+	}
+
+	conn := connMgr.GetByFd(fd)
+	if conn != nil {
+		switch conn.(type) {
+		case *WsConn:
+			return "WS_CONNECTION"
+		case *Conn:
+			return "TCP_CONNECTION"
+		default:
+			return "UNKNOWN_CONNECTION"
+		}
+	}
+	return "UNKNOWN_FD"
+}
+
+// 处理客户端数据
+func (p *Poll) processClientData(conn IConn) error {
+	fd := conn.Fd()
+	log.Printf("processClientData fd:%d connection_type:%s", fd, p.getConnectionType(fd))
 
 	// 3. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		log.Printf("processClientData fd:%d read error: %v", fd, err)
+		log.Printf("processClientData fd:%d read error: %v connection_type:%s", fd, err, p.getConnectionType(fd))
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}
@@ -429,7 +461,7 @@ func (p *Poll) processClientData(fd int) error {
 		return nil
 	}
 
-	log.Printf("processClientData fd:%d msg:%v", fd, msg)
+	log.Printf("processClientData fd:%d msg:%v connection_type:%s", fd, msg, p.getConnectionType(fd))
 	// 5. 处理RPC响应
 	if rpcMgr.HandleRpcResponse(msg) {
 		return nil
