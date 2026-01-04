@@ -279,17 +279,16 @@ func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 	// 1. 线程安全地查找连接对象，注意顺序，tcpListenFd和wsListenFd会和其他fd冲突
 	conn := connMgr.GetByFd(fd)
 	if conn != nil {
-		log.Printf("connection not found for fd: %d", fd)
 		return p.processClientData(conn)
 	}
 
 	if fd == p.tcpListenFd {
-		log.Printf("accept tcp conn fd:%d, wsListenFd:%d", fd, p.wsListenFd)
+		log.Printf("accept tcp conn fd:%d", fd)
 		return p.processAcceptTcp()
 	}
 
 	if fd == p.wsListenFd {
-		log.Printf("accept ws conn fd:%d, tcpListenFd:%d", fd, p.tcpListenFd)
+		log.Printf("accept ws conn fd:%d", fd)
 		return p.processAcceptWebSocket()
 	}
 
@@ -445,12 +444,10 @@ func (p *Poll) getConnectionType(fd int) string {
 // 处理客户端数据
 func (p *Poll) processClientData(conn IConn) error {
 	fd := conn.Fd()
-	log.Printf("processClientData fd:%d connection_type:%s", fd, p.getConnectionType(fd))
 
 	// 3. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		log.Printf("processClientData fd:%d read error: %v connection_type:%s", fd, err, p.getConnectionType(fd))
 		p.Del(fd) // 读取失败则关闭连接
 		return nil
 	}

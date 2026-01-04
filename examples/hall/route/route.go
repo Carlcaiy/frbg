@@ -91,10 +91,10 @@ func (l *Local) enterRoom(in *local.Input) error {
 
 	// 如果用户已经在房间内，直接返回
 	if game := l.userGame[req.Uid]; game != nil && game.RoomId > 0 {
-		rsp.RoomId = game.RoomId
 		reconnect := pb.Reconnect{
 			Uid:    req.Uid,
 			GateId: uint32(req.GateId),
+			RoomId: game.RoomId,
 		}
 		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
 	}

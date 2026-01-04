@@ -25,7 +25,7 @@ var uid int = 100005
 var port int = 6666
 var conn net.Conn
 var err error
-var gameData *pb.StartGameRsp
+var playerData *pb.StartGameRsp
 var getRoomListRsp = &pb.GetRoomListRsp{}
 var mjs []uint8
 var errch = make(chan error, 1)
@@ -75,7 +75,7 @@ func Tick() {
 		time.Sleep(5 * time.Second)
 		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 		msg := codec.AcquireMessage()
-		msg.Cmd = def.HeartBeat
+		msg.SetFlags(codec.FlagsHeartBeat)
 		if err := codec.WsWrite(conn, msg); err != nil {
 			log.Printf("send error:%s", err.Error())
 			errch <- err
@@ -108,8 +108,7 @@ func Loop() {
 			logdata(rsp, msg)
 			send(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan})
 		case def.GetRoomList:
-			rsp := new(pb.GetRoomListRsp)
-			logdata(rsp, msg)
+			logdata(getRoomListRsp, msg)
 			send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{
 				Uid:    uint32(uid),
 				GateId: 1,
@@ -119,34 +118,22 @@ func Loop() {
 		case def.StartGame:
 			rsp := new(pb.StartGameRsp)
 			logdata(rsp, msg)
-			gameData = rsp
-			send(def.ST_Game, def.SyncStatus, &pb.SyncStatus{
-				Uid:    uint32(uid),
-				RoomId: gameData.RoomId,
-				Cmd:    def.StartGame,
-			})
+			playerData = rsp
 		case def.GameFaPai:
-			rsp := new(pb.FaPai)
+			rsp := new(pb.MjFaPai)
 			logdata(rsp, msg)
 			for i := range rsp.Fapai {
 				if rsp.Fapai[i].Uid == uint32(uid) {
 					mjs = append(mjs, uint8(rsp.Fapai[i].MjVal))
 				}
 			}
-			send(def.ST_Game, def.SyncStatus, &pb.SyncStatus{
-				Uid:    uint32(uid),
-				RoomId: gameData.RoomId,
-				Cmd:    def.GameFaPai,
-			})
-		case def.NotifyChuPai:
-			rsp := new(pb.MjOpt)
-			logdata(rsp, msg)
-			send(def.ST_Game, def.OptGame, &pb.MjOpt{
-				Uid:    uint32(uid),
-				RoomId: gameData.RoomId,
-				Op:     mj.ChuPai,
-				Mj:     int32(mjs[0]),
-			})
+			if rsp.CanOp&mj.ChuPai == mj.ChuPai {
+				send(def.ST_Game, def.OptGame, &pb.MjOpt{
+					Uid:    uint32(uid),
+					RoomId: playerData.RoomId,
+					Op:     mj.ChuPai,
+				})
+			}
 		case def.BcOpt:
 			rsp := new(pb.MjOpt)
 			logdata(rsp, msg)
@@ -161,13 +148,13 @@ func Loop() {
 			if rsp.CanOp&mj.GuoPai == mj.GuoPai {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
-					RoomId: gameData.RoomId,
+					RoomId: playerData.RoomId,
 					Op:     mj.GuoPai,
 				})
 			} else if rsp.CanOp&mj.ChuPai == mj.ChuPai {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
-					RoomId: gameData.RoomId,
+					RoomId: playerData.RoomId,
 					Op:     mj.ChuPai,
 				})
 			}

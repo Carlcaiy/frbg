@@ -36,7 +36,6 @@ type Room struct {
 	history     []*mj.MjOp
 	playing     bool
 	endTime     time.Time
-	wait        *Wait
 }
 
 func NewRoom(l *Local, master uint32) *Room {
@@ -45,7 +44,6 @@ func NewRoom(l *Local, master uint32) *Room {
 		mj:     make([]uint8, len(mj.BanBiShanMJ)),
 		touzi:  make([]int32, 2),
 		master: master,
-		wait:   NewWait(4),
 	}
 	copy(room.mj, mj.BanBiShanMJ)
 	return room
@@ -65,6 +63,7 @@ func (r *Room) AddUser(uid uint32, gateId uint16) {
 		l:      r.l,
 		uid:    uid,
 		gateId: gateId,
+		seat:   int(len(r.Users)),
 	})
 }
 
@@ -146,6 +145,7 @@ func (r *Room) Reconnect(uid uint32, gateId uint16) {
 		}
 		if u.uid == uid {
 			req.Info[i].Hands = r.Users[i].mj_hands
+			req.Info[i].CanOp = u.CanOpSelf()
 		} else {
 			req.Info[i].Hands = make([]byte, len(r.Users[i].mj_hands))
 		}
@@ -157,18 +157,13 @@ func (r *Room) Reconnect(uid uint32, gateId uint16) {
 	}
 	user.gateId = gateId
 	user.offline = false
-	log.Println(user.uid, user.gateId)
 	log.Println("Reconnect", "uid:", uid, "sit", user.Seat(), "turn", r.turn)
-
 	user.Send(def.Reconnect, req)
-	if user.Seat() == r.turn {
-		user.Send(def.Round, &pb.Empty{})
-	}
 }
 
-func (r *Room) Start() {
+func (r *Room) MajFaPai() {
 	r.Reset()
-	log.Println("Start", "turn:", r.turn)
+	log.Println("FaPai")
 
 	faPai := make([]*pb.DeskMj, 0, 4*3+4+1)
 	// 每个玩家发3轮
@@ -219,7 +214,6 @@ func (r *Room) Start() {
 		MjVal: int32(r.pizi),
 	}
 
-	r.wait.WaitAll(def.GameFaPai)
 	for _, u := range r.Users {
 		handsMj := make([]*pb.DeskMj, len(faPai))
 		for i := range faPai {
@@ -231,27 +225,18 @@ func (r *Room) Start() {
 				handsMj[i].MjVal = faPai[i].MjVal
 			}
 		}
-		u.Send(def.GameFaPai, &pb.FaPai{
+		data := &pb.MjFaPai{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
 			Touzi:  r.touzi,
 			Pizi:   piziMj,
 			Laizi:  int32(r.laizi),
-		})
+		}
+		if zhuang.uid == u.uid {
+			data.CanOp = u.CanOpSelf()
+		}
+		u.Send(def.GameFaPai, data)
 	}
-}
-
-func (r *Room) NotifyChuPai() {
-	zhuang := r.GetUser(r.turn)
-	if zhuang == nil {
-		log.Printf("NotifyChuPai error: not find uid:%d\n", r.turn)
-		return
-	}
-	canOp := zhuang.CanOpSelf()
-	zhuang.Send(def.NotifyChuPai, &pb.MjOpt{
-		Uid:   zhuang.uid,
-		CanOp: int32(canOp),
-	})
 }
 
 func (r *Room) MoPai() uint8 {

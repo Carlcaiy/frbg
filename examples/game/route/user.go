@@ -77,16 +77,19 @@ func (u *User) remove_mj(val uint8, num int) bool {
 
 // 打麻将
 func (u *User) DaMj(val uint8) bool {
+	u.can_ops_flag = 0
 	return u.remove_mj(val, 1)
 }
 
 // 摸麻将
 func (u *User) MoMj(val ...uint8) {
+	u.can_ops_flag = 0
 	u.mj_hands = append(u.mj_hands, val...)
 }
 
 // 左吃麻将
 func (u *User) LChiMj(val uint8) bool {
+	u.can_ops_flag = 0
 	val1, val2 := val+1, val+2
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -100,6 +103,7 @@ func (u *User) LChiMj(val uint8) bool {
 
 // 中吃麻将
 func (u *User) MChiMj(val uint8) bool {
+	u.can_ops_flag = 0
 	val1, val2 := val-1, val+2
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -113,6 +117,7 @@ func (u *User) MChiMj(val uint8) bool {
 
 // 右吃麻将
 func (u *User) RChiMj(val uint8) bool {
+	u.can_ops_flag = 0
 	val1, val2 := val-1, val-2
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -126,6 +131,7 @@ func (u *User) RChiMj(val uint8) bool {
 
 // 碰牌
 func (u *User) PengMj(val uint8) bool {
+	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -145,6 +151,7 @@ func (u *User) PengMj(val uint8) bool {
 
 // 明杠
 func (u *User) MGangMj(val uint8) bool {
+	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -164,6 +171,7 @@ func (u *User) MGangMj(val uint8) bool {
 
 // 补杠
 func (u *User) BGangMj(val uint8) bool {
+	u.can_ops_flag = 0
 	for _, v := range u.mj_group {
 		if v.Op == mj.Peng && v.Val == val {
 			v.Op = mj.BGang
@@ -174,6 +182,7 @@ func (u *User) BGangMj(val uint8) bool {
 
 // 暗杠
 func (u *User) AGangMj(val uint8) bool {
+	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -205,6 +214,9 @@ func (u *User) Zimo() bool {
 
 // 手牌操作
 func (u *User) CanOpSelf() int32 {
+	if u.can_ops_flag > 0 {
+		return u.can_ops_flag
+	}
 	st := mj.New(u.mj_hands, 0, nil)
 	u.can_ops_group = st.CanOpSelf()
 	u.waiting = len(u.can_ops_group) > 0

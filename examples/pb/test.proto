@@ -241,7 +241,7 @@ message StartGameRsp {
 }
 
 // 同步状态
-message SyncStatus {
+message WaitDone {
     uint32 roomId = 1;
     uint32 cmd = 2;
     uint32 uid = 3;
@@ -262,12 +262,13 @@ message DeskMj {
 }
 
 // 手牌
-message FaPai {
+message MjFaPai {
     repeated DeskMj fapai = 1;      // 发牌
     DeskMj pizi = 2;                // 皮子
     repeated int32 touzi = 3;       // 骰子
     uint32 zhuang = 4;              // 庄家
     int32 laizi = 5;                // 赖子
+    int32 can_op = 6;               // 可操作
 }
 
 // 完成数据
@@ -299,6 +300,7 @@ message playerInfo {
     bytes hands = 2;          // 手牌
     bytes dachu = 3;          // 打出牌
     repeated bytes cpgs = 4;  // 吃碰杠
+    int32 can_op = 5;         // 可操作
 }
 
 // 重连数据
@@ -307,8 +309,8 @@ message DeskSnapshot {
     repeated int32 touzi = 2;       // 骰子
     uint32 zhuang = 3;              // 庄家
     int32 laizi = 4;                // 赖子
-    bytes usedMjIndex = 5;    // 牌堆中已经被抓走的牌
-    repeated playerInfo info = 6;  // 各个玩家手中的牌
+    bytes usedMjIndex = 5;          // 牌堆中已经被抓走的牌
+    repeated playerInfo info = 6;   // 各个玩家手中的牌
 }
 
 message GameOverUser{
@@ -340,6 +342,12 @@ message Reconnect {
     uint32 roomId = 3;
     uint32 hallId = 4;
     uint32 gateId = 5;
+}
+
+// 回合
+message Turn {
+    uint32 process = 1;
+    int32 canOpt = 2;
 }
 
 // 测试

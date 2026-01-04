@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"frbg/codec"
 	core "frbg/core"
-	"frbg/def"
-	"frbg/examples/pb"
 	"frbg/timer"
 	"log"
 	"runtime"
@@ -40,10 +38,6 @@ func (l *BaseLocal) Start() {
 		for {
 			input := <-l.queue
 			if err := l.Route(input); err != nil {
-				input.Response(0, def.Error, &pb.CommonRsp{
-					Code: pb.ErrorCode_Failed,
-					Msg:  err.Error(),
-				})
 				log.Printf("Route error:%s", err.Error())
 			}
 		}
