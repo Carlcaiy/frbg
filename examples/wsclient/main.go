@@ -41,7 +41,7 @@ func main() {
 
 	conn, _, _, err = ws.Dial(context.Background(), fmt.Sprintf("ws://localhost:%d", port+1))
 	if err != nil {
-		log.Println(err)
+		log.Printf("connect error:%s", err.Error())
 		return
 	}
 	log.Printf("connect to server %d success", port+1)
@@ -55,7 +55,7 @@ func main() {
 			log.Println("signal kill")
 		}
 	case err := <-errch:
-		log.Println(err)
+		log.Printf("error:%s", err.Error())
 	}
 	fmt.Println("close conn", conn.Close())
 }
@@ -63,11 +63,11 @@ func main() {
 func logdata(data proto.Message, msg *codec.Message) {
 	err = msg.Unpack(data)
 	if err != nil {
-		log.Println(err)
+		log.Printf("unpack error:%s", err.Error())
 		return
 	}
 	bsi, _ := json.MarshalIndent(data, "", "  ")
-	log.Println(string(bsi))
+	log.Printf("recv:%s", string(bsi))
 }
 
 func Tick() {
@@ -132,18 +132,24 @@ func Loop() {
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
 					Op:     mj.ChuPai,
+					Mj:     int32(mjs[0]),
 				})
 			}
 		case def.BcOpt:
 			rsp := new(pb.MjOpt)
 			logdata(rsp, msg)
-			if rsp.Uid == uint32(uid) && rsp.Op == mj.ChuPai && rsp.Mj > 0 {
-				for i, mj := range mjs {
-					if int32(mj) == rsp.Mj {
-						mjs = append(mjs[:i], mjs[i+1:]...)
-						break
+			if rsp.Uid == uint32(uid) {
+				if rsp.Op == mj.ChuPai && rsp.Mj > 0 {
+					for i, mj := range mjs {
+						if int32(mj) == rsp.Mj {
+							mjs = append(mjs[:i], mjs[i+1:]...)
+							break
+						}
 					}
+				} else if rsp.Op == mj.MoPai && rsp.Mj > 0 {
+					mjs = append(mjs, uint8(rsp.Mj))
 				}
+				log.Printf("mjs:%v pai:%d", mjs, rsp.Mj)
 			}
 			if rsp.CanOp&mj.GuoPai == mj.GuoPai {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
@@ -156,6 +162,7 @@ func Loop() {
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
 					Op:     mj.ChuPai,
+					Mj:     int32(mjs[0]),
 				})
 			}
 		case def.Reconnect:
@@ -166,6 +173,8 @@ func Loop() {
 					mjs = append(mjs, info.Hands...)
 				}
 			}
+		default:
+			log.Printf("recv unknown cmd:%d", msg.Cmd)
 		}
 	}
 }

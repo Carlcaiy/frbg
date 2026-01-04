@@ -106,6 +106,7 @@ func (l *Local) enterRoom(in *local.Input) error {
 	if err := l.RpcCall(svid, def.GameStatus, greq, grsp); err != nil {
 		return err
 	}
+	log.Printf("GameStatus uid:%d rsp:%v", req.Uid, grsp.String())
 
 	// 如果用户已经在房间内，直接返回
 	if grsp.RoomId != 0 {
@@ -149,6 +150,7 @@ func (l *Local) enterRoom(in *local.Input) error {
 
 	// 4人配桌
 	if len(matchUid) < 4 {
+		log.Printf("enterRoom matchUid:%v", matchUid)
 		return nil
 	}
 

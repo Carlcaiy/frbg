@@ -24,13 +24,13 @@ func NewGRPCServer(addr string, method pb.RPCServer) *GRPCServer {
 func (g *GRPCServer) Init() {
 	net, err := net.Listen("tcp", g.addr)
 	if err != nil {
-		log.Println(err)
+		log.Printf("listen error:%s", err.Error())
 		return
 	}
 	g.server = grpc.NewServer()
 	err = g.server.Serve(net)
 	if err != nil {
-		log.Println(err)
+		log.Printf("serve error:%s", err.Error())
 		return
 	}
 }

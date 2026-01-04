@@ -297,7 +297,7 @@ func (m *statlz) CanOpOther(val, op uint8) []*Group {
 				Val: val,
 			})
 		}
-		if m.num[val-2] > 0 && m.num[val-1] > 0 {
+		if val > Tiao2 && m.num[val-2] > 0 && m.num[val-1] > 0 {
 			ret = append(ret, &Group{
 				Op:  RChi,
 				Val: val,

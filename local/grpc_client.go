@@ -23,7 +23,7 @@ func NewGRPC(addr string) *GRPC {
 func (g *GRPC) Init() {
 	client, err := grpc.NewClient("addr", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Println(err)
+		log.Printf("connect error:%s", err.Error())
 		return
 	}
 	g.client = client

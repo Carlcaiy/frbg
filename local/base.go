@@ -5,8 +5,10 @@ import (
 	"frbg/codec"
 	core "frbg/core"
 	"frbg/timer"
+	"frbg/util"
 	"log"
 	"runtime"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -14,7 +16,7 @@ import (
 type Handle func(*Input) error
 
 type BaseLocal struct {
-	queue chan *Input
+	queue *util.ArrayQueue
 	*core.Poll
 	m_route map[uint16]Handle // 路由
 	*timer.TaskCtl
@@ -24,7 +26,7 @@ func NewBase() *BaseLocal {
 	return &BaseLocal{
 		m_route: make(map[uint16]Handle),
 		TaskCtl: timer.NewTaskCtl(),
-		queue:   make(chan *Input, 128),
+		queue:   util.NewArrayQueue(128),
 	}
 }
 
@@ -36,8 +38,16 @@ func (l *BaseLocal) Attach(poll *core.Poll) {
 func (l *BaseLocal) Start() {
 	go func() {
 		for {
-			input := <-l.queue
-			if err := l.Route(input); err != nil {
+			if l.queue.IsEmpty() {
+				time.Sleep(time.Millisecond * 100)
+				continue
+			}
+			input, err := l.queue.Dequeue()
+			if err != nil {
+				log.Printf("Dequeue error:%s", err.Error())
+				continue
+			}
+			if err := l.Route(input.(*Input)); err != nil {
 				log.Printf("Route error:%s", err.Error())
 			}
 		}
@@ -60,7 +70,7 @@ func (l *BaseLocal) Tick() {
 }
 
 func (l *BaseLocal) Push(conn core.IConn, msg *codec.Message) {
-	l.queue <- NewInput(conn, msg)
+	l.queue.Enqueue(NewInput(conn, msg))
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
@@ -74,7 +84,7 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 func (l *BaseLocal) Route(input *Input) error {
 	// 2. 检查消息是否有路由
 	if handle, ok := l.m_route[input.Cmd]; ok {
-		defer l.CatchEx()
+		defer l.CatchEx(input.Cmd)
 		return handle(input)
 	} else {
 		return fmt.Errorf("call: not find cmd %d", input.Cmd)
@@ -113,9 +123,9 @@ func (l *BaseLocal) RpcCallAsync(svid uint16, cmd uint16, req proto.Message, f f
 
 var buf = make([]byte, 1024)
 
-func (l *BaseLocal) CatchEx() {
+func (l *BaseLocal) CatchEx(cmd uint16) {
 	if err := recover(); err != nil {
 		runtime.Stack(buf, false)
-		log.Println(string(buf))
+		log.Printf("catch exception cmd:%d, stack:%s", cmd, string(buf))
 	}
 }

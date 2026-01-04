@@ -47,7 +47,7 @@ func (l *Local) login(in *local.Input) error {
 		log.Printf("login unpack error:%s", err.Error())
 		return err
 	}
-	log.Println(req)
+	log.Printf("login req:%v", req)
 	var info *User
 	if req.Uid == 0 {
 		uid, err := db.GenUserId()
@@ -85,7 +85,7 @@ func (l *Local) login(in *local.Input) error {
 		}
 		info = new(User)
 		if err := db.GetUser(req.Uid, info); err != nil {
-			log.Println(err)
+			log.Printf("db.GetUser(%d) error:%s", req.Uid, err.Error())
 			return err
 		}
 	}

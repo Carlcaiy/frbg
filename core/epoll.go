@@ -122,11 +122,11 @@ func (p *Poll) Start() {
 		third.Put(conf.Svid(), conf.Addr)
 	}
 
+	// 监听tcp
+	p.tcpListener, p.tcpListenFd = p.Listen(conf.Addr)
 	if conf.ServerType == def.ST_Gate {
 		p.wsListener, p.wsListenFd = p.Listen(fmt.Sprintf("%s:%d", conf.IP(), conf.Port()+1))
 	}
-	// 监听tcp
-	p.tcpListener, p.tcpListenFd = p.Listen(conf.Addr)
 	log.Printf("Start tcpListenFd:%d wsListenFd:%d", p.tcpListenFd, p.wsListenFd)
 
 	// 添加定时事件
@@ -378,8 +378,7 @@ func (p *Poll) processAcceptWebSocket() error {
 
 	// 2. 获取socket文件描述符
 	fd := socketFD(conn)
-	log.Printf("Add ws fd:%d addr:%s conn_num=%d wsListenFd:%d tcpListenFd:%d",
-		fd, conn.RemoteAddr().String(), p.getConnNum(), p.wsListenFd, p.tcpListenFd)
+	log.Printf("Add ws fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	if fd == -1 {
 		conn.Close()
 		return fmt.Errorf("failed to get socket fd:%d", fd)
@@ -413,39 +412,15 @@ func (p *Poll) processAcceptWebSocket() error {
 	p.incrConnNum()
 
 	// 7. 记录日志并触发回调
-	log.Printf("Add fd:%d addr:%s conn_num=%d wsListenFd:%d tcpListenFd:%d",
-		fd, conn.RemoteAddr().String(), p.getConnNum(), p.wsListenFd, p.tcpListenFd)
+	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	return nil
-}
-
-// 添加辅助函数，明确标识连接类型
-func (p *Poll) getConnectionType(fd int) string {
-	if fd == p.tcpListenFd {
-		return "TCP_LISTENER"
-	}
-	if fd == p.wsListenFd {
-		return "WS_LISTENER"
-	}
-
-	conn := connMgr.GetByFd(fd)
-	if conn != nil {
-		switch conn.(type) {
-		case *WsConn:
-			return "WS_CONNECTION"
-		case *Conn:
-			return "TCP_CONNECTION"
-		default:
-			return "UNKNOWN_CONNECTION"
-		}
-	}
-	return "UNKNOWN_FD"
 }
 
 // 处理客户端数据
 func (p *Poll) processClientData(conn IConn) error {
 	fd := conn.Fd()
 
-	// 3. 读取并解析网络消息
+	// 2. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
 		p.Del(fd) // 读取失败则关闭连接
@@ -458,7 +433,7 @@ func (p *Poll) processClientData(conn IConn) error {
 		return nil
 	}
 
-	log.Printf("processClientData fd:%d msg:%v connection_type:%s", fd, msg, p.getConnectionType(fd))
+	log.Printf("processClientData fd:%d msg:%v", fd, msg)
 	// 5. 处理RPC响应
 	if rpcMgr.HandleRpcResponse(msg) {
 		return nil

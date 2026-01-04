@@ -8,6 +8,8 @@ import (
 	"frbg/examples/gate/route"
 	"frbg/timer"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -26,6 +28,12 @@ func main() {
 	flag.IntVar(&port, "p", 8080, "-p 6666")
 	flag.IntVar(&sid, "sid", 1, "-sid 1")
 	flag.Parse()
+
+	// 启动pprof HTTP服务，监听6060端口
+	go func() {
+		_ = http.ListenAndServe(fmt.Sprintf(":%d", port+3), nil)
+	}()
+
 	serverConfig := &core.ServerConfig{
 		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Gate,

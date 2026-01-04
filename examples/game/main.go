@@ -1,10 +1,14 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	core "frbg/core"
 	"frbg/def"
 	"frbg/examples/game/route"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,8 +22,14 @@ func init() {
 
 // 创建配置
 func main() {
+	port := 8080
+	sid := 1
+	flag.IntVar(&port, "p", 8080, "-p 6666")
+	flag.IntVar(&sid, "sid", 1, "-sid 1")
+	flag.Parse()
+
 	serverConfig := &core.ServerConfig{
-		Addr:       ":6686",
+		Addr:       fmt.Sprintf(":%d", port),
 		ServerType: def.ST_Game,
 		ServerId:   def.SID_MahjongBanbisan,
 	}
@@ -27,6 +37,11 @@ func main() {
 		Etcd:    true,
 		MaxConn: 10000,
 	}
+
+	// 启动pprof HTTP服务，监听6060端口
+	go func() {
+		_ = http.ListenAndServe(fmt.Sprintf(":%d", port+3), nil)
+	}()
 	poll := core.NewPoll(serverConfig, pollConfig, route.NewLocal())
 	poll.Start()
 	ch := make(chan os.Signal, 1)

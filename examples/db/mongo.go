@@ -21,6 +21,6 @@ func initMG() {
 func SlotsLog(l interface{}) {
 	_, err := mongcli.InsertOne(context.Background(), l)
 	if err != nil {
-		log.Println(err)
+		log.Println("SlotsLog err:", err)
 	}
 }

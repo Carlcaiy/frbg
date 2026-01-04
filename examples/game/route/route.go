@@ -69,6 +69,8 @@ func (l *Local) reconnect(in *local.Input) error {
 		room, ok := l.rooms[req.RoomId]
 		if ok {
 			room.Reconnect(req.Uid, uint16(req.GateId))
+		} else {
+			log.Printf("room %d not found", req.RoomId)
 		}
 	}
 
@@ -129,7 +131,7 @@ func (l *Local) optGame(in *local.Input) error {
 		return err
 	}
 
-	log.Println("tap game")
+	log.Println("tap game opt:", req.String())
 	if room, ok := l.rooms[req.RoomId]; ok {
 		room.MjOp(req.Uid, req)
 	}

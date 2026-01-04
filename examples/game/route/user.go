@@ -45,6 +45,7 @@ func (u *User) Send(cmd uint16, data proto.Message) {
 		Payload: payload,
 	})
 	svid := core.Svid(def.ST_Gate, uint8(u.gateId))
+	log.Printf("Send uid:%d cmd:%d svid:%d", u.uid, cmd, svid)
 	if conn := u.l.Poll.GetServer(svid); conn != nil {
 		conn.Write(msg)
 	}
@@ -219,7 +220,7 @@ func (u *User) CanOpSelf() int32 {
 	}
 	st := mj.New(u.mj_hands, 0, nil)
 	u.can_ops_group = st.CanOpSelf()
-	u.waiting = len(u.can_ops_group) > 0
+	u.waiting = true
 
 	// 可以出牌
 	u.can_ops_flag = int32(mj.ChuPai)

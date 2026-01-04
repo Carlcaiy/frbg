@@ -31,11 +31,11 @@ var seq atomic.Uint32
 
 type Conn struct {
 	poll       *Poll
-	conn       *net.TCPConn // 连接
-	fd         int          // 文件描述符
-	activeTime int64        // 活跃时间
-	svid       uint16       // 服务id
-	ctx        interface{}  // user-defined context
+	conn       net.Conn    // 连接
+	fd         int         // 文件描述符
+	activeTime int64       // 活跃时间
+	svid       uint16      // 服务id
+	ctx        interface{} // user-defined context
 }
 
 func (c *Conn) Fd() int {
@@ -55,6 +55,7 @@ func (c *Conn) ActiveTime() int64 {
 }
 
 func (c *Conn) SetActiveTime(t int64) {
+	log.Printf("SetActiveTime fd:%d t:%d raddr:%s", c.fd, t, c.String())
 	c.activeTime = t
 }
 
@@ -188,8 +189,8 @@ type WsConn struct {
 
 func (c *WsConn) Read() (*codec.Message, error) {
 	now := time.Now()
-	// 增加超时时间，给WebSocket连接足够时间处理消息
-	err := c.conn.SetReadDeadline(now.Add(time.Second * 5))
+	// 设置较短的超时时间，避免阻塞事件循环
+	err := c.conn.SetReadDeadline(now.Add(time.Millisecond * 100))
 	if err != nil {
 		log.Printf("SetReadDeadline error: %s", err.Error())
 		return nil, err

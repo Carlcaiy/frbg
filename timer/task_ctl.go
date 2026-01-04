@@ -32,7 +32,7 @@ func (t *TaskCtl) Len() int {
 
 func (t *TaskCtl) Pop() *Task {
 	if data, err := t.MinHeap.Pop(); err != nil {
-		log.Println(err)
+		log.Printf("Pop() error:%s", err.Error())
 		return nil
 	} else {
 		return data.(*Task)

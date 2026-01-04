@@ -35,15 +35,17 @@ type Room struct {
 	waitOther   bool     // 等待其他玩家操作
 	history     []*mj.MjOp
 	playing     bool
+	huangZhuang int // 黄庄剩余牌数
 	endTime     time.Time
 }
 
 func NewRoom(l *Local, master uint32) *Room {
 	room := &Room{
-		l:      l,
-		mj:     make([]uint8, len(mj.BanBiShanMJ)),
-		touzi:  make([]int32, 2),
-		master: master,
+		l:           l,
+		mj:          make([]uint8, len(mj.BanBiShanMJ)),
+		touzi:       make([]int32, 2),
+		huangZhuang: 10,
+		master:      master,
 	}
 	copy(room.mj, mj.BanBiShanMJ)
 	return room
@@ -344,11 +346,17 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 					opt.CanOp = canOp
 				}
 			}
-			u.Send(def.OptGame, opt)
+			u.Send(def.BcOpt, opt)
 		}
 	}
 	// 如果有其他人可以操作，等待其他玩家操作
 	r.waitOther = !noCanOp
+
+	// 黄庄操作，没有其他玩家可操作，且黄庄牌数大于等于牌数，游戏结束
+	if noCanOp && r.huangZhuang+int(r.mjIndex) >= len(r.mj) {
+		r.gameOver(finalUser)
+		return
+	}
 
 	// 出牌操作，没有人有操作，给下一家发牌，并告知可执行操作
 	if (finalOp == mj.ChuPai && noCanOp) ||
@@ -375,6 +383,10 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 	if finalOp == mj.HuPai {
 		r.gameOver(finalUser)
 	}
+}
+
+func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
+	r.MjOp(uid, opt)
 }
 
 func (r *Room) getLatestOp(Op int32) *mj.MjOp {

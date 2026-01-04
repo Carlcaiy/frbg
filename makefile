@@ -2,6 +2,8 @@
 
 all: redis etcd gate hall game
 
+server: gate hall game
+
 redis:
 	redis-server config/redis.conf &
 
@@ -12,13 +14,13 @@ client:
 	go run ./examples/client/main.go &
 
 gate:
-	cd examples/gate && make run
+	cd examples/gate && make all
 
 hall:
-	cd examples/hall && make run
+	cd examples/hall && make all
 
 game:
-	cd examples/game && make run
+	cd examples/game && make all
 
 proto:
 	cd examples/proto/ && sh proto.sh
