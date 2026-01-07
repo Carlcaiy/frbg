@@ -77,7 +77,7 @@ func (c *Conn) String() string {
 }
 
 func (c *Conn) Read() (*codec.Message, error) {
-	err := c.conn.SetReadDeadline(time.Now().Add(time.Second))
+	err := c.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100))
 	if err != nil {
 		log.Printf("SetReadDeadline error: %s", err.Error())
 		return nil, err
@@ -190,7 +190,7 @@ type WsConn struct {
 func (c *WsConn) Read() (*codec.Message, error) {
 	now := time.Now()
 	// 设置较短的超时时间，避免阻塞事件循环
-	err := c.conn.SetReadDeadline(now.Add(time.Second))
+	err := c.conn.SetReadDeadline(now.Add(time.Millisecond * 100))
 	if err != nil {
 		log.Printf("SetReadDeadline error: %s", err.Error())
 		return nil, err

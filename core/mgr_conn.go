@@ -1,7 +1,6 @@
 package core
 
 import (
-	"frbg/codec"
 	"log"
 	"sync"
 )
@@ -85,27 +84,11 @@ func (s *ConnMgr) Range(f func(conn IConn) error) error {
 	return nil
 }
 
-func (s *ConnMgr) HeartBeat() {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	for _, conn := range s.servers {
-		msg := codec.AcquireMessage()
-		msg.SetFlags(codec.FlagsHeartBeat)
-		if err := conn.Write(msg); err != nil {
-			log.Printf("HeartBeat error: %v", err)
-			delete(s.conns, conn.Fd())
-			delete(s.servers, conn.Svid())
-			conn.Close()
-		}
-		codec.ReleaseMessage(msg)
-	}
-}
-
-func (s *ConnMgr) Clients() []IConn {
+func (s *ConnMgr) Servers() []IConn {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	clients := make([]IConn, 0, len(s.conns))
-	for _, conn := range s.conns {
+	clients := make([]IConn, 0, len(s.servers))
+	for _, conn := range s.servers {
 		clients = append(clients, conn)
 	}
 	return clients

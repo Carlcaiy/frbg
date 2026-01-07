@@ -500,7 +500,16 @@ func (p *Poll) ConnTick() {
 	p.heartBeat = time.NewTicker(time.Second)
 	for range p.heartBeat.C {
 		// 发送心跳
-		connMgr.HeartBeat()
+		servers := connMgr.Servers()
+		for _, conn := range servers {
+			msg := codec.AcquireMessage()
+			msg.SetFlags(codec.FlagsHeartBeat)
+			if err := conn.Write(msg); err != nil {
+				log.Printf("HeartBeat error: %v", err)
+				connMgr.DelByFd(conn.Fd())
+			}
+			codec.ReleaseMessage(msg)
+		}
 	}
 }
 
