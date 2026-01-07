@@ -214,7 +214,7 @@ func (m *stat) CanHu() bool {
 	return m.hu233() || m.huQd() || m.huJys()
 }
 
-func (m *stat) CanOpSelf() []*Group {
+func (m *stat) CanOpSelf(op uint8) []*Group {
 	ret := make([]*Group, 0)
 	for i := range m.num {
 		if m.num[i] == 4 {
@@ -223,6 +223,9 @@ func (m *stat) CanOpSelf() []*Group {
 				Val: m.val[i],
 			})
 		}
+	}
+	if op == LChi || op == MChi || op == RChi || op == Peng {
+		return ret
 	}
 	if m.CanHu() {
 		ret = append(ret, &Group{

@@ -3,6 +3,7 @@ package codec
 import (
 	"fmt"
 	"io"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -25,8 +26,17 @@ var seq uint32
 
 // WsRead WebSocket消息读取
 func WsRead(r io.ReadWriter) (*Message, error) {
-	all, opCode, err := wsutil.ReadData(r, ws.StateClientSide)
+	return WsReadBySide(r, ws.StateServerSide)
+}
+
+func WsReadBySide(r io.ReadWriter, side ws.State) (*Message, error) {
+	all, opCode, err := wsutil.ReadData(r, side)
 	if err != nil {
+		// 检查是否是临时错误（非阻塞模式下没有数据）
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			// 超时错误，返回原始错误，上层会处理
+			return nil, err
+		}
 		return nil, fmt.Errorf("websocket read error: %w", err)
 	}
 
@@ -81,11 +91,15 @@ func WsRead(r io.ReadWriter) (*Message, error) {
 
 // WsWrite WebSocket消息写入
 func WsWrite(r io.Writer, msg *Message) error {
+	return WsWriteBySide(r, ws.StateServerSide, msg)
+}
+
+func WsWriteBySide(r io.Writer, side ws.State, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("nil message")
 	}
 	data := msg.Pack()
-	return wsutil.WriteServerBinary(r, data)
+	return wsutil.WriteMessage(r, side, ws.OpBinary, data)
 }
 
 // TcpRead TCP消息读取

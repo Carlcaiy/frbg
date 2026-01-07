@@ -55,7 +55,7 @@ func (c *Conn) ActiveTime() int64 {
 }
 
 func (c *Conn) SetActiveTime(t int64) {
-	log.Printf("SetActiveTime fd:%d t:%d raddr:%s", c.fd, t, c.String())
+	// log.Printf("SetActiveTime fd:%d t:%d raddr:%s", c.fd, t, c.String())
 	c.activeTime = t
 }
 
@@ -190,7 +190,7 @@ type WsConn struct {
 func (c *WsConn) Read() (*codec.Message, error) {
 	now := time.Now()
 	// 设置较短的超时时间，避免阻塞事件循环
-	err := c.conn.SetReadDeadline(now.Add(time.Millisecond * 100))
+	err := c.conn.SetReadDeadline(now.Add(time.Second))
 	if err != nil {
 		log.Printf("SetReadDeadline error: %s", err.Error())
 		return nil, err

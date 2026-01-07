@@ -76,7 +76,7 @@ func Tick() {
 		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 		msg := codec.AcquireMessage()
 		msg.SetFlags(codec.FlagsHeartBeat)
-		if err := codec.WsWrite(conn, msg); err != nil {
+		if err := codec.WsWriteBySide(conn, ws.StateClientSide, msg); err != nil {
 			log.Printf("send error:%s", err.Error())
 			errch <- err
 			return
@@ -88,7 +88,7 @@ func Tick() {
 func Loop() {
 	send(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1})
 	for {
-		msg, err := codec.WsRead(conn)
+		msg, err := codec.WsReadBySide(conn, ws.StateClientSide)
 		if err != nil {
 			errch <- err
 			break
@@ -200,7 +200,8 @@ func send(svid uint8, cmd uint16, req proto.Message) {
 		errch <- err
 		return
 	}
-	if err = codec.WsWrite(conn, msg); err != nil {
+
+	if err = codec.WsWriteBySide(conn, ws.StateClientSide, msg); err != nil {
 		log.Printf("send error:%s", err.Error())
 		errch <- err
 	}

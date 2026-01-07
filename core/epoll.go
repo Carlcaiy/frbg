@@ -376,12 +376,16 @@ func (p *Poll) processAcceptWebSocket() error {
 		return nil
 	}
 
-	// 2. 获取socket文件描述符
 	fd := socketFD(conn)
-	log.Printf("Add ws fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	if fd == -1 {
 		conn.Close()
 		return fmt.Errorf("failed to get socket fd:%d", fd)
+	}
+
+	// 2. 获取socket文件描述符
+	if connMgr.GetByFd(fd) != nil {
+		conn.Close()
+		return fmt.Errorf("fd:%d already exists", fd)
 	}
 
 	// 3. 设置非阻塞模式（关键优化点）
@@ -412,7 +416,7 @@ func (p *Poll) processAcceptWebSocket() error {
 	p.incrConnNum()
 
 	// 7. 记录日志并触发回调
-	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+	log.Printf("ws Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	return nil
 }
 
@@ -423,13 +427,18 @@ func (p *Poll) processClientData(conn IConn) error {
 	// 2. 读取并解析网络消息
 	msg, err := conn.Read()
 	if err != nil {
-		p.Del(fd) // 读取失败则关闭连接
+		log.Printf("processClientData fd:%d read error: %v", fd, err)
+
+		// 真正的错误，关闭连接
+		p.Del(fd)
 		return nil
 	}
 
+	// 3. 更新活跃时间
+	conn.SetActiveTime(time.Now().Unix())
+
 	// 4. 处理心跳包
 	if msg.IsHeartBeat() {
-		conn.SetActiveTime(time.Now().Unix())
 		return nil
 	}
 

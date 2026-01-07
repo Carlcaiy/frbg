@@ -26,7 +26,8 @@ type User struct {
 	seat          int
 	can_ops_flag  int32
 	hu_type       int32
-	prepare       bool // 准备状态
+	last_op       uint8 // 上一次操作
+	prepare       bool  // 准备状态
 }
 
 func (u *User) Seat() int {
@@ -86,6 +87,11 @@ func (u *User) DaMj(val uint8) bool {
 func (u *User) MoMj(val ...uint8) {
 	u.can_ops_flag = 0
 	u.mj_hands = append(u.mj_hands, val...)
+	pai := []string{}
+	for _, v := range val {
+		pai = append(pai, mj.Pai(v))
+	}
+	log.Printf("uid:%d MoMj %v", u.uid, pai)
 }
 
 // 左吃麻将
@@ -99,13 +105,14 @@ func (u *User) LChiMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.LChi, Val: val})
+	log.Printf("uid:%d LChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val+1), mj.Pai(val+2))
 	return true
 }
 
 // 中吃麻将
 func (u *User) MChiMj(val uint8) bool {
 	u.can_ops_flag = 0
-	val1, val2 := val-1, val+2
+	val1, val2 := val-1, val+1
 	if !u.remove_mj(val1, 1) {
 		return false
 	}
@@ -113,6 +120,7 @@ func (u *User) MChiMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MChi, Val: val})
+	log.Printf("uid:%d MChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val-1), mj.Pai(val+1))
 	return true
 }
 
@@ -127,6 +135,7 @@ func (u *User) RChiMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.RChi, Val: val})
+	log.Printf("uid:%d RChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val-1), mj.Pai(val-2))
 	return true
 }
 
@@ -147,6 +156,7 @@ func (u *User) PengMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.Peng, Val: val})
+	log.Printf("uid:%d PengMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
 
@@ -167,6 +177,7 @@ func (u *User) MGangMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MGang, Val: val})
+	log.Printf("uid:%d MGangMj %v %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
 
@@ -178,7 +189,13 @@ func (u *User) BGangMj(val uint8) bool {
 			v.Op = mj.BGang
 		}
 	}
-	return u.remove_mj(val, 1)
+
+	if !u.remove_mj(val, 1) {
+		return false
+	}
+
+	log.Printf("uid:%d BGangMj %v %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val), mj.Pai(val))
+	return true
 }
 
 // 暗杠
@@ -198,19 +215,51 @@ func (u *User) AGangMj(val uint8) bool {
 		return false
 	}
 	u.mj_group = append(u.mj_group, mj.Group{Op: mj.AGang, Val: val})
+	log.Printf("uid:%d AGangMj %v %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
 
 // 点炮
 func (u *User) DianPao(val uint8) bool {
 	st := mj.New(u.mj_hands, val, u.mj_group)
+	log.Printf("uid:%d DianPao %v", u.uid, mj.Pai(val))
 	return st.CanHu()
 }
 
 // 自摸
 func (u *User) Zimo() bool {
 	st := mj.New(u.mj_hands, 0, u.mj_group)
+	log.Printf("uid:%d Zimo", u.uid)
 	return st.CanHu()
+}
+
+func (u *User) DealMj(op uint8, val uint8) bool {
+	ok := false
+	switch op {
+	case mj.ChuPai:
+		ok = u.DaMj(val)
+	case mj.MGang:
+		ok = u.MGangMj(val)
+	case mj.BGang:
+		ok = u.BGangMj(val)
+	case mj.AGang:
+		ok = u.AGangMj(val)
+	case mj.Peng:
+		ok = u.PengMj(val)
+	case mj.LChi:
+		ok = u.LChiMj(val)
+	case mj.MChi:
+		ok = u.MChiMj(val)
+	case mj.RChi:
+		ok = u.RChiMj(val)
+	case mj.HuPai:
+		return true
+	}
+	if !ok {
+		return ok
+	}
+	u.last_op = op
+	return ok
 }
 
 // 手牌操作
@@ -219,7 +268,7 @@ func (u *User) CanOpSelf() int32 {
 		return u.can_ops_flag
 	}
 	st := mj.New(u.mj_hands, 0, nil)
-	u.can_ops_group = st.CanOpSelf()
+	u.can_ops_group = st.CanOpSelf(u.last_op)
 	u.waiting = true
 
 	// 可以出牌

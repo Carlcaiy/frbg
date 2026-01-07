@@ -314,6 +314,12 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 		log.Printf("tap err, uid:%d cant op:%d\n", uid, opt.Op)
 		return
 	}
+	// 执行操作
+	if !currUser.DealMj(uint8(opt.Op), uint8(opt.Mj)) {
+		log.Printf("tap err, uid:%d opt:%d mj:%d\n", uid, opt.Op, opt.Mj)
+		return
+	}
+
 	r.history = append(r.history, &mj.MjOp{
 		Uid: opt.Uid,
 		Op:  opt.Op,
@@ -329,47 +335,140 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 		return
 	}
 
+	if !r.waitOther {
+		r.MjOpSelf(uid, opt)
+	} else {
+		r.MjOpOther(uid, opt)
+	}
+}
+
+func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
+	currUser := r.GetUserByUID(uid)
 	// 获取最佳操作玩家
 	finalUser := r.getOpUser(currUser)
 	finalOp := int32(finalUser.wait_op)
-	pai := opt.Mj
-
-	// 广播操作
-	noCanOp := true
-	if finalOp != mj.GuoPai {
-		for _, u := range r.Users {
-			// 如果是出牌操作，告知其他玩家可执行的操作
-			if finalOp == mj.ChuPai || finalOp == mj.BGang {
-				canOp := u.CanOpOther(uint8(pai), uint8(finalOp), r.laizi)
-				if canOp > 0 {
-					noCanOp = false
-					opt.CanOp = canOp
-				}
-			}
-			u.Send(def.BcOpt, opt)
-		}
-	}
-	// 如果有其他人可以操作，等待其他玩家操作
-	r.waitOther = !noCanOp
-
-	// 黄庄操作，没有其他玩家可操作，且黄庄牌数大于等于牌数，游戏结束
-	if noCanOp && r.huangZhuang+int(r.mjIndex) >= len(r.mj) {
-		r.gameOver(finalUser)
-		return
-	}
 
 	// 出牌操作，没有人有操作，给下一家发牌，并告知可执行操作
-	if (finalOp == mj.ChuPai && noCanOp) ||
-		finalOp == mj.GuoPai || finalOp == mj.AGang || finalOp == mj.MGang {
+	switch finalOp {
+	case mj.GuoPai:
+		// 黄庄操作，没有其他玩家可操作，且黄庄牌数大于等于牌数，游戏结束
+		if r.haiDiLao() {
+			return
+		}
 		r.turn = (r.turn + 1) % len(r.Users)
 		turnUser := r.Users[r.turn]
 		moPai := r.MoPai()
 		turnUser.MoMj(moPai)
+		for _, u := range r.Users {
+			nextOpt := &pb.MjOpt{
+				Op:  mj.MoPai,
+				Uid: uid,
+			}
+			if u == turnUser {
+				nextOpt.Mj = int32(moPai)
+				nextOpt.CanOp = u.CanOpSelf()
+			}
+			u.Send(def.BcOpt, nextOpt)
+		}
+	case mj.MGang:
+		// 杠牌操作，通知其他玩家当前玩家杠牌
+		for _, u := range r.Users {
+			u.Send(def.BcOpt, opt)
+		}
 
+		// 当前玩家摸牌
+		r.turn = finalUser.seat
+		turnUser := r.Users[r.turn]
+		moPai := r.MoPai()
+		turnUser.MoMj(moPai)
+		for _, u := range r.Users {
+			nextOpt := &pb.MjOpt{
+				Op:  opt.Op,
+				Uid: opt.Uid,
+			}
+			if u == turnUser {
+				nextOpt.Mj = int32(moPai)
+				nextOpt.CanOp = u.CanOpSelf()
+			}
+			u.Send(def.BcOpt, nextOpt)
+		}
+	case mj.Peng, mj.LChi, mj.MChi, mj.RChi: // 吃碰操作
+		r.turn = finalUser.seat
+		turnUser := r.Users[r.turn]
+		for _, u := range r.Users {
+			nextOpt := &pb.MjOpt{
+				Op:  finalOp,
+				Uid: finalUser.uid,
+				Mj:  opt.Mj,
+			}
+			if u == turnUser {
+				nextOpt.CanOp = u.CanOpSelf()
+			}
+			u.Send(def.BcOpt, nextOpt)
+		}
+	case mj.HuPai: // 胡牌操作
+		r.huPai(finalUser)
+	}
+}
+
+func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
+	// 如果是出牌操作，告知其他玩家可执行的操作
+	switch opt.Op {
+	case mj.ChuPai, mj.BGang:
+		// 检查是否有玩家可操作
+		noCanOp := true
+		for _, u := range r.Users {
+			// 如果是出牌操作，告知其他玩家可执行的操作
+			opt.CanOp = u.CanOpOther(uint8(opt.Mj), uint8(opt.Op), r.laizi)
+			if opt.CanOp > 0 {
+				// 其他玩家可操作，继续等待
+				noCanOp = false
+				r.waitOther = true
+			}
+			u.Send(def.BcOpt, opt)
+		}
+		if noCanOp {
+			// 没有可操作的玩家，给下一家发牌，并告知可执行操作
+			if opt.Op == mj.ChuPai {
+				r.turn = (r.turn + 1) % len(r.Users)
+			}
+			// 如果是补杠操作，给当前玩家发牌，并告知可执行操作
+			turnUser := r.Users[r.turn]
+
+			// 给当前玩家发牌
+			moPai := r.MoPai()
+			turnUser.MoMj(moPai)
+
+			// 通知其他玩家当前玩家出牌
+			for _, u := range r.Users {
+				opt := &pb.MjOpt{
+					Op:  mj.MoPai,
+					Uid: turnUser.uid,
+				}
+				if u == turnUser {
+					opt.Mj = int32(moPai)
+					opt.CanOp = u.CanOpSelf()
+				}
+				u.Send(def.BcOpt, opt)
+			}
+		}
+		return
+	case mj.AGang:
+		// 暗杆操作，通知其他玩家当前玩家暗杆
+		for _, u := range r.Users {
+			u.Send(def.BcOpt, opt)
+		}
+
+		// 给当前玩家发牌
+		turnUser := r.Users[r.turn]
+		moPai := r.MoPai()
+		turnUser.MoMj(moPai)
+
+		// 通知其他玩家当前玩家出牌
 		for _, u := range r.Users {
 			opt := &pb.MjOpt{
 				Op:  mj.MoPai,
-				Uid: uid,
+				Uid: turnUser.uid,
 			}
 			if u == turnUser {
 				opt.Mj = int32(moPai)
@@ -377,16 +476,17 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 			}
 			u.Send(def.BcOpt, opt)
 		}
+	case mj.HuPai:
+		turnUser := r.Users[r.turn]
+		// 胡牌操作，通知其他玩家当前玩家胡牌
+		if turnUser.Zimo() {
+			for _, u := range r.Users {
+				u.Send(def.BcOpt, opt)
+			}
+		} else {
+			log.Printf("tap err, uid:%d not zimo\n", uid)
+		}
 	}
-
-	// 胡牌操作
-	if finalOp == mj.HuPai {
-		r.gameOver(finalUser)
-	}
-}
-
-func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
-	r.MjOp(uid, opt)
 }
 
 func (r *Room) getLatestOp(Op int32) *mj.MjOp {
@@ -398,7 +498,23 @@ func (r *Room) getLatestOp(Op int32) *mj.MjOp {
 	return nil
 }
 
-func (r *Room) gameOver(huUser *User) {
+func (r *Room) haiDiLao() bool {
+	if r.huangZhuang+int(r.mjIndex) >= len(r.mj) {
+		settle := &pb.GameOver{}
+		for _, u := range r.Users {
+			userSettle := pb.GameOverUser{
+				Uid:   u.uid,
+				Hands: u.Mj(),
+			}
+			settle.Users = append(settle.Users, &userSettle)
+		}
+		r.SendAll(def.GameOver, settle)
+		return true
+	}
+	return false
+}
+
+func (r *Room) huPai(huUser *User) {
 	log.Println("game over")
 	pai := uint8(0)
 	if r.waitOther {
@@ -429,8 +545,7 @@ func (r *Room) gameOver(huUser *User) {
 		Hands:  huUser.Mj(),
 		HuType: ht,
 	})
-	msg := codec.NewMessage(def.GameOver, settle)
-	r.SendAll(msg)
+	r.SendAll(def.GameOver, settle)
 	r.playing = false
 }
 
@@ -442,7 +557,8 @@ func (r *Room) SendOther(uid uint32, cmd uint16, data proto.Message) {
 	}
 }
 
-func (r *Room) SendAll(msg *codec.Message) {
+func (r *Room) SendAll(cmd uint16, data proto.Message) {
+	msg := codec.NewMessage(cmd, data)
 	wraper := make(map[uint16]*pb.MultiBroadcast)
 	for _, u := range r.Users {
 		data := wraper[u.gateId]
