@@ -62,7 +62,7 @@ func (u *User) Reset() {
 }
 
 func (u *User) remove_mj(val uint8, num int) bool {
-	tail := len(u.mj_hands)
+	tail := len(u.mj_hands) - 1
 	for i, v := range u.mj_hands {
 		if v == val {
 			u.mj_hands[i], u.mj_hands[tail] = u.mj_hands[tail], u.mj_hands[i]
