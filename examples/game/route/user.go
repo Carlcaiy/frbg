@@ -74,6 +74,7 @@ func (u *User) remove_mj(val uint8, num int) bool {
 			}
 		}
 	}
+	log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), num)
 	return false
 }
 
@@ -91,7 +92,9 @@ func (u *User) MoMj(val ...uint8) {
 	for _, v := range val {
 		pai = append(pai, mj.Pai(v))
 	}
-	log.Printf("uid:%d MoMj %v", u.uid, pai)
+	if len(val) == 1 {
+		log.Printf("uid:%d MoMj %v", u.uid, pai)
+	}
 }
 
 // 左吃麻将
@@ -252,7 +255,7 @@ func (u *User) DealMj(op uint8, val uint8) bool {
 		ok = u.MChiMj(val)
 	case mj.RChi:
 		ok = u.RChiMj(val)
-	case mj.HuPai:
+	case mj.HuPai, mj.GuoPai:
 		return true
 	}
 	if !ok {
@@ -272,17 +275,21 @@ func (u *User) CanOpSelf() int32 {
 	u.waiting = true
 
 	// 可以出牌
-	u.can_ops_flag = int32(mj.ChuPai)
+	mj.AddOp(&u.can_ops_flag, mj.ChuPai)
 	// 其他操作
 	for i := range u.can_ops_group {
-		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)
+		mj.AddOp(&u.can_ops_flag, u.can_ops_group[i].Op)
 	}
 
 	return u.can_ops_flag
 }
 
-func (u *User) CanOp(op int32) bool {
-	return u.can_ops_flag&op > 0
+func (u *User) IsCanOp(op int32) bool {
+	return mj.HasOp(u.can_ops_flag, uint8(op))
+}
+
+func (u *User) CanOp() int32 {
+	return u.can_ops_flag
 }
 
 // 可操作其他玩家的牌
@@ -293,10 +300,11 @@ func (u *User) CanOpOther(val uint8, op uint8, lz uint8) int32 {
 
 	u.can_ops_flag = int32(0)
 	if u.waiting {
-		u.can_ops_flag |= mj.OpBit(mj.GuoPai)
+		mj.AddOp(&u.can_ops_flag, mj.GuoPai)
 	}
 	for i := range u.can_ops_group {
-		u.can_ops_flag |= mj.OpBit(u.can_ops_group[i].Op)
+		log.Printf("uid:%d CanOpOther %v %v %v", u.uid, mj.Pai(val), mj.Pai(lz), mj.Pai(u.can_ops_group[i].Val))
+		mj.AddOp(&u.can_ops_flag, u.can_ops_group[i].Op)
 	}
 
 	return u.can_ops_flag

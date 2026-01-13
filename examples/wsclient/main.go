@@ -103,6 +103,7 @@ func Loop() {
 			rsp := new(pb.LoginRsp)
 			logdata(rsp, msg)
 			send(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)})
+			// send(def.ST_Gate, def.Logout, &pb.LogoutReq{Uid: uint32(uid)})
 		case def.GetGameList:
 			rsp := new(pb.GetGameListRsp)
 			logdata(rsp, msg)
@@ -127,7 +128,7 @@ func Loop() {
 					mjs = append(mjs, uint8(rsp.Fapai[i].MjVal))
 				}
 			}
-			if rsp.CanOp&mj.ChuPai == mj.ChuPai {
+			if mj.HasOp(rsp.CanOp, mj.ChuPai) {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
@@ -151,13 +152,13 @@ func Loop() {
 				}
 				log.Printf("mjs:%v pai:%d", mjs, rsp.Mj)
 			}
-			if rsp.CanOp&mj.GuoPai == mj.GuoPai {
+			if mj.HasOp(rsp.CanOp, mj.GuoPai) {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
 					Op:     mj.GuoPai,
 				})
-			} else if rsp.CanOp&mj.ChuPai == mj.ChuPai {
+			} else if mj.HasOp(rsp.CanOp, mj.ChuPai) {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
@@ -168,11 +169,31 @@ func Loop() {
 		case def.Reconnect:
 			rsp := new(pb.DeskSnapshot)
 			logdata(rsp, msg)
+			playerData = &pb.StartGameRsp{
+				RoomId: rsp.RoomId,
+			}
 			for _, info := range rsp.Info {
 				if info.Uid == uint32(uid) {
 					mjs = append(mjs, info.Hands...)
 				}
+				if mj.HasOp(info.CanOp, mj.ChuPai) {
+					send(def.ST_Game, def.OptGame, &pb.MjOpt{
+						Uid:    uint32(uid),
+						RoomId: playerData.RoomId,
+						Op:     mj.ChuPai,
+						Mj:     int32(mjs[0]),
+					})
+				} else if mj.HasOp(info.CanOp, mj.GuoPai) {
+					send(def.ST_Game, def.OptGame, &pb.MjOpt{
+						Uid:    uint32(uid),
+						RoomId: playerData.RoomId,
+						Op:     mj.GuoPai,
+					})
+				}
 			}
+		case def.Logout:
+			log.Printf("logout uid:%d", uid)
+			send(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1})
 		default:
 			log.Printf("recv unknown cmd:%d", msg.Cmd)
 		}
@@ -180,6 +201,8 @@ func Loop() {
 }
 
 func send(svid uint8, cmd uint16, req proto.Message) {
+	bsi, _ := json.MarshalIndent(req, "", "  ")
+	log.Printf("send:%s", string(bsi))
 	var msg *codec.Message
 	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)

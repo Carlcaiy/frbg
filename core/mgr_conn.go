@@ -73,15 +73,12 @@ func (s *ConnMgr) DelByFd(fd int) IConn {
 	return conn
 }
 
-func (s *ConnMgr) Range(f func(conn IConn) error) error {
+func (s *ConnMgr) Range(f func(conn IConn)) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	for _, conn := range s.conns {
-		if err := f(conn); err != nil {
-			return err
-		}
+		f(conn)
 	}
-	return nil
 }
 
 func (s *ConnMgr) Servers() []IConn {

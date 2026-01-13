@@ -311,6 +311,7 @@ message DeskSnapshot {
     int32 laizi = 4;                // 赖子
     bytes usedMjIndex = 5;          // 牌堆中已经被抓走的牌
     repeated playerInfo info = 6;   // 各个玩家手中的牌
+    uint32 roomId = 7;               // 房间ID
 }
 
 message GameOverUser{

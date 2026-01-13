@@ -182,8 +182,8 @@ func (p *Poll) Close() error {
 	}
 
 	// 关闭连接connfd
-	connMgr.Range(func(conn IConn) error {
-		return conn.Close()
+	connMgr.Range(func(conn IConn) {
+		conn.Close()
 	})
 
 	// 关闭epoll监听fd
@@ -363,45 +363,51 @@ func (p *Poll) processAcceptWebSocket() error {
 		return nil // 临时错误不返回错误，继续循环
 	}
 
-	// 1. 检查连接数限制
+	// 1.检查连接数限制
 	if p.getConnNum() >= p.pollConfig.MaxConn {
 		conn.Close()
 		return fmt.Errorf("connection limit exceeded: %d", p.pollConfig.MaxConn)
 	}
 
-	// 2.处理websocket升级
-	if _, err = upgrader.Upgrade(conn); err != nil {
-		log.Printf("websocket upgrade error: %s fd", err)
-		conn.Close()
-		return nil
-	}
-
+	// 2.获取fd
 	fd := socketFD(conn)
 	if fd == -1 {
 		conn.Close()
 		return fmt.Errorf("failed to get socket fd:%d", fd)
 	}
 
-	// 2. 获取socket文件描述符
+	// 3.处理websocket升级
+	if _, err = upgrader.Upgrade(conn); err != nil {
+		log.Printf("websocket upgrade error: %s fd", err)
+		conn.Close()
+		return nil
+	}
+
+	upfd := socketFD(conn)
+	if fd != upfd {
+		log.Printf("diff fd:%d upfd:%d", fd, upfd)
+	}
+
+	// 4. 检查fd是否已存在
 	if connMgr.GetByFd(fd) != nil {
 		conn.Close()
 		return fmt.Errorf("fd:%d already exists", fd)
 	}
 
-	// 3. 设置非阻塞模式（关键优化点）
+	// 5. 设置非阻塞模式（关键优化点）
 	if err := syscall.SetNonblock(fd, true); err != nil {
 		conn.Close()
 		return err
 	}
 
-	// 4. 添加到epoll监听
+	// 6. 添加到epoll监听
 	event := &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}
 	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, event); err != nil {
 		conn.Close()
 		return fmt.Errorf("epoll ctl add %d error: %w", fd, err)
 	}
 
-	// 5. 创建连接对象并存储
+	// 7. 创建连接对象并存储
 	c := &WsConn{
 		Conn: Conn{
 			poll:       p,
@@ -411,11 +417,11 @@ func (p *Poll) processAcceptWebSocket() error {
 		},
 	}
 
-	// 6. 线程安全地更新连接映射
+	// 8. 线程安全地更新连接映射
 	connMgr.AddConn(c)
 	p.incrConnNum()
 
-	// 7. 记录日志并触发回调
+	// 9. 记录日志并触发回调
 	log.Printf("ws Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	return nil
 }
@@ -442,7 +448,7 @@ func (p *Poll) processClientData(conn IConn) error {
 		return nil
 	}
 
-	log.Printf("processClientData fd:%d msg:%v", fd, msg)
+	// log.Printf("processClientData fd:%d msg:%v", fd, msg)
 	// 5. 处理RPC响应
 	if rpcMgr.HandleRpcResponse(msg) {
 		return nil
@@ -480,12 +486,11 @@ func (p *Poll) CheckTimeout() {
 		timeoutFds := make([]int, 0, 64)
 
 		// 只收集需要删除的FD，不立即删除
-		connMgr.Range(func(conn IConn) error {
+		connMgr.Range(func(conn IConn) {
 			if now-conn.ActiveTime() > timeoutDuration {
 				log.Printf("tcpConns timeout fd:%d active_time:%d timeout_duration:%d now:%d", conn.Fd(), conn.ActiveTime(), timeoutDuration, now)
 				timeoutFds = append(timeoutFds, conn.Fd())
 			}
-			return nil
 		})
 
 		// 在锁外删除，避免阻塞
@@ -504,10 +509,7 @@ func (p *Poll) ConnTick() {
 		for _, conn := range servers {
 			msg := codec.AcquireMessage()
 			msg.SetFlags(codec.FlagsHeartBeat)
-			if err := conn.Write(msg); err != nil {
-				log.Printf("HeartBeat error: %v", err)
-				connMgr.DelByFd(conn.Fd())
-			}
+			conn.Write(msg)
 			codec.ReleaseMessage(msg)
 		}
 	}

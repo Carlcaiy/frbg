@@ -47,8 +47,16 @@ const (
 	Jiang, Shun, Ke       = 12, 13, 14
 )
 
-func OpBit(op uint8) int32 {
-	return 1 << (MoPai)
+func opBit(op uint8) int32 {
+	return 1 << op
+}
+
+func HasOp(ops int32, op uint8) bool {
+	return ops&opBit(op) > 0
+}
+
+func AddOp(ops *int32, op uint8) {
+	*ops |= opBit(op)
 }
 
 type Group struct {
@@ -178,10 +186,9 @@ func GetLaizi(pizi uint8) uint8 {
 }
 
 type MjOp struct {
-	Uid    uint32
-	Op     int32
-	Mj     int32
-	CanOpt int32
+	Uid uint32
+	Op  int32
+	Mj  int32
 }
 
 type Mj struct {

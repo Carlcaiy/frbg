@@ -66,6 +66,7 @@ func (l *Local) reconnect(in *local.Input) error {
 	}
 	log.Println("reconnect", req.String())
 	if req.RoomId > 0 {
+		log.Printf("rooms:%v roomId:%d", l.rooms, req.RoomId)
 		room, ok := l.rooms[req.RoomId]
 		if ok {
 			room.Reconnect(req.Uid, uint16(req.GateId))
@@ -86,8 +87,9 @@ func (l *Local) startGame(in *local.Input) error {
 	room := l.rooms[req.RoomId]
 	if room == nil {
 		room = NewRoom(l, req.RoomId)
-		l.rooms[room.roomId] = room
+		l.rooms[req.RoomId] = room
 	}
+	log.Printf("rooms:%v", l.rooms)
 	for uid, gateId := range req.Users {
 		room.AddUser(uid, uint16(gateId))
 		l.users[uid] = room
@@ -131,7 +133,6 @@ func (l *Local) optGame(in *local.Input) error {
 		return err
 	}
 
-	log.Println("tap game opt:", req.String())
 	if room, ok := l.rooms[req.RoomId]; ok {
 		room.MjOp(req.Uid, req)
 	}

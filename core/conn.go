@@ -93,9 +93,9 @@ func (c *Conn) Read() (*codec.Message, error) {
 }
 
 func (c *Conn) Write(msg *codec.Message) error {
-	if !msg.IsHeartBeat() {
-		log.Printf("send tcp msg:%s", msg.String())
-	}
+	// if !msg.IsHeartBeat() {
+	// 	log.Printf("send tcp msg:%s", msg.String())
+	// }
 	now := time.Now()
 	err := c.conn.SetWriteDeadline(now.Add(time.Second))
 	if err == nil {
@@ -103,7 +103,7 @@ func (c *Conn) Write(msg *codec.Message) error {
 	}
 	if err != nil {
 		log.Printf("Write error: %s", err.Error())
-		connMgr.DelBySid(c.svid)
+		c.poll.Del(c.Fd())
 		return err
 	}
 

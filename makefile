@@ -1,8 +1,8 @@
 .PHONY: game
 
-all: redis etcd gate hall game
+all: gate hall game
 
-server: gate hall game
+data: redis etcd
 
 redis:
 	redis-server config/redis.conf &
