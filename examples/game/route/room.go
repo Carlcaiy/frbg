@@ -1,8 +1,6 @@
 package route
 
 import (
-	"frbg/codec"
-	"frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
@@ -220,6 +218,7 @@ func (r *Room) MajFaPai() {
 
 	r.waitOther = false
 	for _, u := range r.Users {
+		log.Printf("mj:%v", u.Mj())
 		handsMj := make([]*pb.DeskMj, len(faPai))
 		for i := range faPai {
 			handsMj[i] = &pb.DeskMj{
@@ -247,6 +246,7 @@ func (r *Room) MajFaPai() {
 func (r *Room) MoPai() uint8 {
 	pai := r.mj[r.mjIndex]
 	r.mjIndex++
+	log.Printf("MoPai index:%d val:%d\n", r.mjIndex-1, pai)
 	return pai
 }
 
@@ -577,24 +577,7 @@ func (r *Room) SendOther(uid uint32, cmd uint16, data proto.Message) {
 }
 
 func (r *Room) SendAll(cmd uint16, data proto.Message) {
-	msg := codec.NewMessage(cmd, data)
-	wraper := make(map[uint16]*pb.MultiBroadcast)
 	for _, u := range r.Users {
-		data := wraper[u.gateId]
-		if data == nil {
-			data = &pb.MultiBroadcast{
-				Uids: []uint32{u.uid},
-				Data: msg.Pack(),
-			}
-			wraper[u.gateId] = data
-		} else {
-			data.Uids = append(data.Uids, u.uid)
-		}
-	}
-	for gateId, data := range wraper {
-		svid := core.Svid(def.ST_Gate, uint8(gateId))
-		if gate := r.l.Poll.GetServer(svid); gate != nil {
-			gate.Write(codec.NewMessage(def.MultiBC, data))
-		}
+		u.Send(cmd, data)
 	}
 }

@@ -29,7 +29,6 @@ func (l *Local) Init() {
 	l.Start()
 	l.AddRoute(def.Echo, l.echo)
 	l.AddRoute(def.Login, l.login)
-	l.AddRoute(def.MultiBC, l.multibc)
 	l.AddRoute(def.Logout, l.logout)
 	l.AddRoute(def.PacketIn, l.packetIn)
 	l.AddRoute(def.PacketOut, l.packetOut)
@@ -100,19 +99,6 @@ func (l *Local) login(in *local.Input) error {
 	})
 }
 
-func (l *Local) multibc(in *local.Input) error {
-	req := new(pb.MultiBroadcast)
-	if err := in.Unpack(req); err != nil {
-		return err
-	}
-	for _, uid := range req.Uids {
-		if client := l.clients.GetClient(uid); client != nil {
-			client.Write(in.Message)
-		}
-	}
-	return nil
-}
-
 // 离开网关
 func (l *Local) logout(in *local.Input) error {
 	req := new(pb.LogoutReq)
@@ -152,13 +138,16 @@ func (l *Local) packetOut(in *local.Input) error {
 		return err
 	}
 	log.Printf("packetOut uid:%d, cmd:%d", req.Uid, req.Cmd)
-	cli := l.clients.GetClient(req.Uid)
-	if cli == nil {
-		return fmt.Errorf("not find user %d", req.Uid)
+	for _, uid := range req.Uid {
+		cli := l.clients.GetClient(uid)
+		if cli == nil {
+			return fmt.Errorf("not find user %d", uid)
+		}
+		in.Message.Cmd = uint16(req.Cmd)
+		in.Message.Payload = req.Payload
+		cli.Write(in.Message)
 	}
-	in.Message.Cmd = uint16(req.Cmd)
-	in.Message.Payload = req.Payload
-	return cli.Write(in.Message)
+	return nil
 }
 
 func (l *Local) Close(conn core.IConn) {

@@ -6,7 +6,6 @@ const (
 	Login        = 1001 // 登录网关
 	Error        = 1002 // 错误
 	GateKick     = 1003 // 网关踢人
-	MultiBC      = 1004 // 多播
 	HeartBeat    = 1005 // 心跳
 	Regist       = 1006 // 注册
 	Logout       = 1007 // 离开网关

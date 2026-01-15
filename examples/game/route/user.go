@@ -41,7 +41,7 @@ func (u *User) Send(cmd uint16, data proto.Message) {
 		return
 	}
 	msg := codec.NewMessage(def.PacketOut, &pb.PacketOut{
-		Uid:     u.uid,
+		Uid:     []uint32{u.uid},
 		Cmd:     uint32(cmd),
 		Payload: payload,
 	})
@@ -63,24 +63,24 @@ func (u *User) Reset() {
 
 func (u *User) remove_mj(val uint8, num int) bool {
 	tail := len(u.mj_hands) - 1
-	for i, v := range u.mj_hands {
-		if v == val {
+	for i := 0; i <= tail; i++ {
+		if u.mj_hands[i] == val {
 			u.mj_hands[i], u.mj_hands[tail] = u.mj_hands[tail], u.mj_hands[i]
-			tail--
 			num--
 			if num == 0 {
-				u.mj_hands = u.mj_hands[:tail-num]
+				u.mj_hands = u.mj_hands[:tail]
+				log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), val)
 				return true
 			}
+			tail--
 		}
 	}
-	log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), num)
+	log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), val)
 	return false
 }
 
 // 打麻将
 func (u *User) DaMj(val uint8) bool {
-	u.can_ops_flag = 0
 	return u.remove_mj(val, 1)
 }
 
@@ -89,17 +89,11 @@ func (u *User) MoMj(val ...uint8) {
 	u.can_ops_flag = 0
 	u.mj_hands = append(u.mj_hands, val...)
 	pai := []string{}
-	for _, v := range val {
-		pai = append(pai, mj.Pai(v))
-	}
-	if len(val) == 1 {
-		log.Printf("uid:%d MoMj %v", u.uid, pai)
-	}
+	log.Printf("uid:%d MoMj %v", u.uid, pai)
 }
 
 // 左吃麻将
 func (u *User) LChiMj(val uint8) bool {
-	u.can_ops_flag = 0
 	val1, val2 := val+1, val+2
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -114,7 +108,6 @@ func (u *User) LChiMj(val uint8) bool {
 
 // 中吃麻将
 func (u *User) MChiMj(val uint8) bool {
-	u.can_ops_flag = 0
 	val1, val2 := val-1, val+1
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -129,7 +122,6 @@ func (u *User) MChiMj(val uint8) bool {
 
 // 右吃麻将
 func (u *User) RChiMj(val uint8) bool {
-	u.can_ops_flag = 0
 	val1, val2 := val-1, val-2
 	if !u.remove_mj(val1, 1) {
 		return false
@@ -144,7 +136,6 @@ func (u *User) RChiMj(val uint8) bool {
 
 // 碰牌
 func (u *User) PengMj(val uint8) bool {
-	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -165,7 +156,6 @@ func (u *User) PengMj(val uint8) bool {
 
 // 明杠
 func (u *User) MGangMj(val uint8) bool {
-	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -186,7 +176,6 @@ func (u *User) MGangMj(val uint8) bool {
 
 // 补杠
 func (u *User) BGangMj(val uint8) bool {
-	u.can_ops_flag = 0
 	for _, v := range u.mj_group {
 		if v.Op == mj.Peng && v.Val == val {
 			v.Op = mj.BGang
@@ -203,7 +192,6 @@ func (u *User) BGangMj(val uint8) bool {
 
 // 暗杠
 func (u *User) AGangMj(val uint8) bool {
-	u.can_ops_flag = 0
 	cnt := 0
 	for _, v := range u.mj_hands {
 		if v == val {
@@ -256,11 +244,12 @@ func (u *User) DealMj(op uint8, val uint8) bool {
 	case mj.RChi:
 		ok = u.RChiMj(val)
 	case mj.HuPai, mj.GuoPai:
-		return true
+		ok = true
 	}
 	if !ok {
 		return ok
 	}
+	u.can_ops_flag = 0
 	u.last_op = op
 	return ok
 }

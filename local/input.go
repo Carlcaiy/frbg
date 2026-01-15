@@ -50,7 +50,7 @@ func (i *Input) Response(uid uint32, cmd uint16, msg proto.Message) error {
 			return err
 		}
 		data = codec.NewMessage(def.PacketOut, &pb.PacketOut{
-			Uid:     uid,
+			Uid:     []uint32{uid},
 			Cmd:     uint32(cmd),
 			Payload: payload,
 		})

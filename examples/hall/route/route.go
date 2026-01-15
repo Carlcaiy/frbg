@@ -100,34 +100,34 @@ func (l *Local) enterRoom(in *local.Input) error {
 	}
 
 	// 查询用户状态
-	greq, grsp := &pb.GameStatusReq{
-		Uid: req.Uid,
-	}, new(pb.GameStatusRsp)
-	if err := l.RpcCall(svid, def.GameStatus, greq, grsp); err != nil {
-		return err
-	}
-	log.Printf("GameStatus uid:%d rsp:%v", req.Uid, grsp.String())
+	// greq, grsp := &pb.GameStatusReq{
+	// 	Uid: req.Uid,
+	// }, new(pb.GameStatusRsp)
+	// if err := l.RpcCall(svid, def.GameStatus, greq, grsp); err != nil {
+	// 	return err
+	// }
+	// log.Printf("GameStatus uid:%d rsp:%v", req.Uid, grsp.String())
 
 	// 如果用户已经在房间内，直接返回
-	if grsp.RoomId != 0 {
-		rsp.RoomId = grsp.RoomId
-		if game := l.userGame[req.Uid]; game == nil {
-			game = &User{
-				Uid:    req.Uid,
-				GateId: uint16(req.GateId),
-				GameId: req.GameId,
-				RoomId: req.RoomId,
-			}
-			l.userGame[req.Uid] = game
-		} else {
-			game.RoomId = grsp.RoomId
-		}
-		reconnect := pb.Reconnect{
-			Uid:    req.Uid,
-			GateId: uint32(req.GateId),
-		}
-		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
-	}
+	// if grsp.RoomId != 0 {
+	// 	rsp.RoomId = grsp.RoomId
+	// 	if game := l.userGame[req.Uid]; game == nil {
+	// 		game = &User{
+	// 			Uid:    req.Uid,
+	// 			GateId: uint16(req.GateId),
+	// 			GameId: req.GameId,
+	// 			RoomId: req.RoomId,
+	// 		}
+	// 		l.userGame[req.Uid] = game
+	// 	} else {
+	// 		game.RoomId = grsp.RoomId
+	// 	}
+	// 	reconnect := pb.Reconnect{
+	// 		Uid:    req.Uid,
+	// 		GateId: uint32(req.GateId),
+	// 	}
+	// 	return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
+	// }
 
 	l.userGame[req.Uid] = &User{
 		Uid:    req.Uid,

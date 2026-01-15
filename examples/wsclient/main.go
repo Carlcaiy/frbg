@@ -128,6 +128,7 @@ func Loop() {
 					mjs = append(mjs, uint8(rsp.Fapai[i].MjVal))
 				}
 			}
+			log.Printf("uid:%d pai:%v", uid, mjs)
 			if mj.HasOp(rsp.CanOp, mj.ChuPai) {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
@@ -175,20 +176,21 @@ func Loop() {
 			for _, info := range rsp.Info {
 				if info.Uid == uint32(uid) {
 					mjs = append(mjs, info.Hands...)
-				}
-				if mj.HasOp(info.CanOp, mj.ChuPai) {
-					send(def.ST_Game, def.OptGame, &pb.MjOpt{
-						Uid:    uint32(uid),
-						RoomId: playerData.RoomId,
-						Op:     mj.ChuPai,
-						Mj:     int32(mjs[0]),
-					})
-				} else if mj.HasOp(info.CanOp, mj.GuoPai) {
-					send(def.ST_Game, def.OptGame, &pb.MjOpt{
-						Uid:    uint32(uid),
-						RoomId: playerData.RoomId,
-						Op:     mj.GuoPai,
-					})
+					log.Printf("mjs:%v", mjs)
+					if mj.HasOp(info.CanOp, mj.ChuPai) {
+						send(def.ST_Game, def.OptGame, &pb.MjOpt{
+							Uid:    uint32(uid),
+							RoomId: playerData.RoomId,
+							Op:     mj.ChuPai,
+							Mj:     int32(mjs[0]),
+						})
+					} else if mj.HasOp(info.CanOp, mj.GuoPai) {
+						send(def.ST_Game, def.OptGame, &pb.MjOpt{
+							Uid:    uint32(uid),
+							RoomId: playerData.RoomId,
+							Op:     mj.GuoPai,
+						})
+					}
 				}
 			}
 		case def.Logout:
