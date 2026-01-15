@@ -77,11 +77,6 @@ func (c *Conn) String() string {
 }
 
 func (c *Conn) Read() (*codec.Message, error) {
-	err := c.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100))
-	if err != nil {
-		log.Printf("SetReadDeadline error: %s", err.Error())
-		return nil, err
-	}
 	msg, err := codec.TcpRead(c.conn)
 	if err != nil {
 		log.Printf("Read error: %s", err.Error())
@@ -188,13 +183,6 @@ type WsConn struct {
 }
 
 func (c *WsConn) Read() (*codec.Message, error) {
-	now := time.Now()
-	// 设置较短的超时时间，避免阻塞事件循环
-	err := c.conn.SetReadDeadline(now.Add(time.Millisecond * 100))
-	if err != nil {
-		log.Printf("SetReadDeadline error: %s", err.Error())
-		return nil, err
-	}
 	return codec.WsRead(c.conn)
 }
 
@@ -211,6 +199,7 @@ func (c *WsConn) Write(msg *codec.Message) error {
 	if err != nil {
 		c.poll.Del(c.Fd())
 		log.Printf("Write error: %s", err.Error())
+		return err
 	}
 	c.SetActiveTime(now.Unix())
 	return err
