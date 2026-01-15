@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"frbg/codec"
@@ -66,8 +65,8 @@ func logdata(data proto.Message, msg *codec.Message) {
 		log.Printf("unpack error:%s", err.Error())
 		return
 	}
-	bsi, _ := json.MarshalIndent(data, "", "  ")
-	log.Printf("recv:%s", string(bsi))
+	// bsi, _ := json.MarshalIndent(data, "", "  ")
+	// log.Printf("recv:%s", string(bsi))
 }
 
 func Tick() {
@@ -145,13 +144,14 @@ func Loop() {
 					for i, mj := range mjs {
 						if int32(mj) == rsp.Mj {
 							mjs = append(mjs[:i], mjs[i+1:]...)
+							log.Printf("chupai mjs:%v pai:%d", mjs, rsp.Mj)
 							break
 						}
 					}
 				} else if rsp.Op == mj.MoPai && rsp.Mj > 0 {
 					mjs = append(mjs, uint8(rsp.Mj))
+					log.Printf("mopai mjs:%v pai:%d", mjs, rsp.Mj)
 				}
-				log.Printf("mjs:%v pai:%d", mjs, rsp.Mj)
 			}
 			if mj.HasOp(rsp.CanOp, mj.GuoPai) {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
@@ -166,6 +166,7 @@ func Loop() {
 					Op:     mj.ChuPai,
 					Mj:     int32(mjs[0]),
 				})
+				log.Printf("send chupai pai:%d", mjs[0])
 			}
 		case def.Reconnect:
 			rsp := new(pb.DeskSnapshot)
@@ -193,6 +194,9 @@ func Loop() {
 					}
 				}
 			}
+		case def.GameOver:
+			rsp := new(pb.GameOver)
+			logdata(rsp, msg)
 		case def.Logout:
 			log.Printf("logout uid:%d", uid)
 			send(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1})
@@ -203,8 +207,8 @@ func Loop() {
 }
 
 func send(svid uint8, cmd uint16, req proto.Message) {
-	bsi, _ := json.MarshalIndent(req, "", "  ")
-	log.Printf("send:%s", string(bsi))
+	// bsi, _ := json.MarshalIndent(req, "", "  ")
+	// log.Printf("send:%s", string(bsi))
 	var msg *codec.Message
 	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)
@@ -217,7 +221,7 @@ func send(svid uint8, cmd uint16, req proto.Message) {
 			Payload: bs,
 		}
 		msg = codec.NewMessage(def.PacketIn, packet)
-		log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
+		// log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
 	}
 
 	if err = conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {

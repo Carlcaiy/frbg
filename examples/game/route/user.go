@@ -46,7 +46,7 @@ func (u *User) Send(cmd uint16, data proto.Message) {
 		Payload: payload,
 	})
 	svid := core.Svid(def.ST_Gate, uint8(u.gateId))
-	log.Printf("Send uid:%d cmd:%d svid:%d", u.uid, cmd, svid)
+	// log.Printf("Send uid:%d cmd:%d svid:%d", u.uid, cmd, svid)
 	if conn := u.l.Poll.GetServer(svid); conn != nil {
 		conn.Write(msg)
 	}
@@ -88,8 +88,7 @@ func (u *User) DaMj(val uint8) bool {
 func (u *User) MoMj(val ...uint8) {
 	u.can_ops_flag = 0
 	u.mj_hands = append(u.mj_hands, val...)
-	pai := []string{}
-	log.Printf("uid:%d MoMj %v", u.uid, pai)
+	log.Printf("uid:%d MoMj %v", u.uid, val)
 }
 
 // 左吃麻将

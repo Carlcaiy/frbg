@@ -371,7 +371,7 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 		for _, u := range r.Users {
 			nextOpt := &pb.MjOpt{
 				Op:  mj.MoPai,
-				Uid: uid,
+				Uid: turnUser.uid,
 			}
 			if u == turnUser {
 				nextOpt.Mj = int32(moPai)
@@ -393,8 +393,8 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 		r.waitOther = false
 		for _, u := range r.Users {
 			nextOpt := &pb.MjOpt{
-				Op:  opt.Op,
-				Uid: opt.Uid,
+				Op:  mj.MoPai,
+				Uid: finalUser.uid,
 			}
 			if u == turnUser {
 				nextOpt.Mj = int32(moPai)
