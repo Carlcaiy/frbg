@@ -183,7 +183,13 @@ type WsConn struct {
 }
 
 func (c *WsConn) Read() (*codec.Message, error) {
-	return codec.WsRead(c.conn)
+	if msg, err := codec.WsRead(c.conn); err == nil {
+		c.SetActiveTime(time.Now().Unix())
+		return msg, nil
+	} else {
+		log.Printf("WsRead error: %s", err.Error())
+		return nil, err
+	}
 }
 
 func (c *WsConn) Write(msg *codec.Message) error {
