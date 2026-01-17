@@ -1,77 +1,147 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"frbg/codec"
+	"frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
-	"log"
+	"io"
 	"net"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
-var num int = 100
-var gateid int = 6666
-var close bool = false
+var wg sync.WaitGroup
 
 func main() {
-	flag.IntVar(&num, "n", 100, "-n 100")
-	flag.IntVar(&gateid, "p", 6666, "-p 6666")
-	flag.Parse()
-
-	wg := &sync.WaitGroup{}
-	for u := 100; u < num+100; u++ {
+	for i := 100; i < 5000; i++ {
 		wg.Add(1)
-		go func(uid uint32) {
-			log.Println("新增连接", uid)
-			conn, err := net.Dial("tcp", fmt.Sprintf(":%d", gateid))
-			if err != nil {
-				panic(err)
-			}
-			var t time.Duration = 0
-			var c int = 0
-			req := func(servetType def.ServerType) {
-				conn.Write(codec.NewMessage(def.Echo, &pb.Test{
-					Uid:       uid,
-					StartTime: time.Now().UnixNano(),
-				}).Pack())
-			}
-			req(def.ST_Gate)
-			for !close {
-				msg, err := codec.TcpRead(conn)
-				if err != nil {
-					break
-				}
-				log.Printf("receive msg: %v", msg.Cmd)
-				switch msg.Cmd {
-				case def.Echo:
-					p := new(pb.Test)
-					err := msg.Unpack(p)
-					if err != nil {
-						log.Printf("unpack error: %v", err)
-						continue
-					}
-					p.EndTime = time.Now().UnixNano()
-					t += time.Duration(p.EndTime - p.StartTime)
-					c++
-					req(def.ST_Hall)
-				}
-			}
-			conn.Close()
-			log.Printf("total=%v count=%v single=%v\n", t, c, time.Duration(int(t)/c))
-			wg.Done()
-		}(uint32(u))
-		time.Sleep(time.Millisecond)
+		go gate(i)
 	}
-
-	sig := make(chan os.Signal, 10)
-	signal.Notify(sig, syscall.SIGTERM, os.Interrupt)
-	<-sig
-	close = true
 	wg.Wait()
+}
+
+func gate(uid int) {
+	defer wg.Done()
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 6666})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer conn.Close()
+	for i := 0; i < 1000; i++ {
+		err = codec.TcpWrite(conn, codec.NewMessage(def.Login, &pb.LoginReq{
+			Uid:    uint32(uid),
+			GateId: 1,
+		}))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		codec.TcpRead(conn)
+		err = Write(conn, def.ST_Hall, def.GetGameList, &pb.GetGameListReq{
+			Uid:      uint32(uid),
+			GateId:   1,
+			ServerId: 1,
+		})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		msg, err := codec.TcpRead(conn)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		rsp := new(pb.GetGameListRsp)
+		if err = msg.Unpack(rsp); err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(uid, rsp.String())
+	}
+}
+
+func hall() {
+	defer wg.Done()
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 6676})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("1")
+	time.Sleep(time.Second * 1)
+	defer conn.Close()
+	err = codec.TcpWrite(conn, codec.NewMessage(def.GetGameList, &pb.GetGameListReq{
+		Uid:      10001,
+		GateId:   1,
+		ServerId: 1,
+	}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	msg, err := codec.TcpRead(conn)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// 解析rsp
+	rspMsg := new(pb.GetGameListRsp)
+	Read(rspMsg, msg)
+	fmt.Println(rspMsg.String())
+}
+
+func game() {
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer conn.Close()
+	err = codec.TcpWrite(conn, codec.NewMessage(def.GameStatus, &pb.GameStatusReq{
+		Uid: 10001,
+	}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	msg, err := codec.TcpRead(conn)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	rsp := new(pb.GameStatusRsp)
+	Read(rsp, msg)
+	fmt.Println(rsp.String())
+}
+
+func Write(r io.Writer, st uint8, cmd uint16, pro proto.Message) error {
+	bs, _ := proto.Marshal(pro)
+	req := &pb.PacketIn{
+		Svid:    uint32(core.Svid(st, def.SID_MahjongBanbisan)),
+		Cmd:     uint32(cmd),
+		Payload: bs,
+	}
+	if err := codec.TcpWrite(r, codec.NewMessage(def.PacketIn, req)); err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
+
+func Read(pro proto.Message, msg *codec.Message) {
+	rsp := new(pb.PacketOut)
+	if err := msg.Unpack(rsp); err != nil {
+		fmt.Println(err)
+		return
+	}
+	// 解析rsp
+	if err := proto.Unmarshal(rsp.Payload, pro); err != nil {
+		fmt.Println(err)
+		return
+	}
 }
