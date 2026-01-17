@@ -352,6 +352,9 @@ func (p *Poll) processAcceptTcp() error {
 
 	// 7. 记录日志
 	log.Printf("TCPAdd fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(time.Second * 30)
 	return nil
 }
 
@@ -424,6 +427,9 @@ func (p *Poll) processAcceptWebSocket() error {
 
 	// 9. 记录日志并触发回调
 	log.Printf("WSAdd fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(time.Second * 30)
 	return nil
 }
 
@@ -517,31 +523,34 @@ func (p *Poll) ConnTick() {
 }
 
 func (p *Poll) Connect(conf *ServerConfig) (*Conn, error) {
-	tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: conf.IP(), Port: conf.Port()})
 	if err != nil {
 		log.Printf("Connect error: %v", err)
 		return nil, err
 	}
-	fd := socketFD(tcpConn)
+	fd := socketFD(conn)
 	log.Printf("AddConnector fd:%d conf:%+v\n", fd, conf)
 	if err := unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(fd)}); err != nil {
-		tcpConn.Close()
+		conn.Close()
 		return nil, err
 	}
-	conn := &Conn{
+	c := &Conn{
 		poll:       p,
-		conn:       tcpConn,
+		conn:       conn,
 		fd:         fd,
 		activeTime: time.Now().Unix(),
 		svid:       conf.Svid(),
 	}
 
-	log.Printf("Connect fd:%d addr:%s", fd, tcpConn.RemoteAddr().String())
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(time.Second * 30)
 
-	connMgr.AddConn(conn)
+	log.Printf("Connect fd:%d addr:%s", fd, conn.RemoteAddr().String())
+
+	connMgr.AddConn(c)
 	p.incrConnNum()
-	p.handle.OnConnect(conn)
-	return conn, nil
+	p.handle.OnConnect(c)
+	return c, nil
 }
 
 func (p *Poll) Trigger(tri interface{}) {
