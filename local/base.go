@@ -5,10 +5,8 @@ import (
 	"frbg/codec"
 	core "frbg/core"
 	"frbg/timer"
-	"frbg/util"
 	"log"
 	"runtime"
-	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -16,7 +14,7 @@ import (
 type Handle func(*Input) error
 
 type BaseLocal struct {
-	queue *util.ArrayQueue
+	queue chan *Input
 	*core.Poll
 	m_route map[uint16]Handle // 路由
 	*timer.TaskCtl
@@ -26,7 +24,7 @@ func NewBase() *BaseLocal {
 	return &BaseLocal{
 		m_route: make(map[uint16]Handle),
 		TaskCtl: timer.NewTaskCtl(),
-		queue:   util.NewArrayQueue(128),
+		queue:   make(chan *Input, 20),
 	}
 }
 
@@ -38,16 +36,8 @@ func (l *BaseLocal) Attach(poll *core.Poll) {
 func (l *BaseLocal) Start() {
 	go func() {
 		for {
-			if l.queue.IsEmpty() {
-				time.Sleep(time.Millisecond * 100)
-				continue
-			}
-			input, err := l.queue.Dequeue()
-			if err != nil {
-				log.Printf("Dequeue error:%s", err.Error())
-				continue
-			}
-			if err := l.Route(input.(*Input)); err != nil {
+			input := <-l.queue
+			if err := l.Route(input); err != nil {
 				log.Printf("Route error:%s", err.Error())
 			}
 		}
@@ -70,7 +60,7 @@ func (l *BaseLocal) Tick() {
 }
 
 func (l *BaseLocal) Push(conn core.IConn, msg *codec.Message) {
-	l.queue.Enqueue(NewInput(conn, msg))
+	l.queue <- NewInput(conn, msg)
 }
 
 func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
