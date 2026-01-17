@@ -77,13 +77,15 @@ func (c *Conn) String() string {
 }
 
 func (c *Conn) Read() (*codec.Message, error) {
+	now := time.Now()
+	c.conn.SetReadDeadline(now.Add(time.Second))
 	msg, err := codec.TcpRead(c.conn)
 	if err != nil {
 		log.Printf("Read error: %s", err.Error())
 		return nil, err
 	}
 	// 更新活跃时间
-	c.SetActiveTime(time.Now().Unix())
+	c.SetActiveTime(now.Unix())
 	return msg, nil
 }
 
@@ -183,8 +185,10 @@ type WsConn struct {
 }
 
 func (c *WsConn) Read() (*codec.Message, error) {
+	now := time.Now()
+	c.conn.SetReadDeadline(now.Add(time.Second))
 	if msg, err := codec.WsRead(c.conn); err == nil {
-		c.SetActiveTime(time.Now().Unix())
+		c.SetActiveTime(now.Unix())
 		return msg, nil
 	} else {
 		log.Printf("WsRead error: %s", err.Error())
