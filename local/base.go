@@ -95,11 +95,7 @@ func (l *BaseLocal) RpcCall(svid uint16, cmd uint16, req proto.Message, rsp prot
 		return fmt.Errorf("error not find server %d", svid)
 	}
 
-	msg, err := conn.RpcWrite(cmd, req, 10000)
-	if err != nil {
-		return err
-	}
-	return msg.Unpack(rsp)
+	return conn.RpcWrite(cmd, req, rsp, 10000)
 }
 
 func (l *BaseLocal) RpcCallAsync(svid uint16, cmd uint16, req proto.Message, f func(msg *codec.Message, err error)) error {

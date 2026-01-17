@@ -42,6 +42,12 @@ func (p *RpcMgr) RegisterRpcCallback(seq uint16, callback RpcCallback) {
 	p.rpcCallbacks[seq] = callback
 }
 
+func (p *RpcMgr) UnregisterRpcCallback(seq uint16) {
+	p.rpcMu.Lock()
+	defer p.rpcMu.Unlock()
+	delete(p.rpcCallbacks, seq)
+}
+
 // HandleRpcResponse 处理RPC响应
 func (p *RpcMgr) HandleRpcResponse(msg *codec.Message) bool {
 	seq := msg.Seq
