@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"google.golang.org/protobuf/proto"
 )
 
 // 协议相关常量
@@ -20,9 +18,6 @@ const (
 	// 默认心跳间隔
 	DefaultHeartBeatInterval = 30 * time.Second
 )
-
-// Parser 消息解析器
-var seq uint32
 
 // WsRead WebSocket消息读取
 func WsRead(r io.ReadWriter) (*Message, error) {
@@ -165,55 +160,10 @@ func TcpWrite(r io.Writer, msg *Message) error {
 	}
 
 	data := msg.Pack()
+	ReleaseMessage(msg)
 	if _, err := r.Write(data); err != nil {
 		return fmt.Errorf("tcp write failed: %w", err)
 	}
 
 	return nil
-}
-
-// Pack 快速打包消息
-func Pack(cmd uint16, pro proto.Message) ([]byte, error) {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return nil, fmt.Errorf("protobuf marshal failed: %w", err)
-	}
-
-	msg := AcquireMessage()
-	defer ReleaseMessage(msg)
-
-	msg.MagicNumber = magicNumber
-	msg.Version = 1
-	msg.Seq = nextSeq()
-	msg.Timestamp = uint32(time.Now().Unix())
-	msg.Cmd = cmd
-	msg.Payload = body
-
-	return msg.Pack(), nil
-}
-
-// PackFast 使用对象池快速打包
-func PackFast(dest uint8, cmd uint16, pro proto.Message) ([]byte, error) {
-	body, err := proto.Marshal(pro)
-	if err != nil {
-		return nil, fmt.Errorf("protobuf marshal failed: %w", err)
-	}
-
-	msg := AcquireMessage()
-	msg.MagicNumber = magicNumber
-	msg.Version = 1
-	msg.Seq = nextSeq()
-	msg.Timestamp = uint32(time.Now().Unix())
-	msg.Cmd = cmd
-	msg.Payload = body
-
-	data := msg.Pack()
-	ReleaseMessage(msg)
-
-	return data, nil
-}
-
-// nextSeq 生成下一个序列号
-func nextSeq() uint16 {
-	return uint16(atomic.AddUint32(&seq, 1))
 }
