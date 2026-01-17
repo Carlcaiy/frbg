@@ -157,7 +157,7 @@ func (p *Poll) Listen(addr string) (*net.TCPListener, int) {
 		must(err)
 	}
 	log.Printf("AddListener fd:%d conf:%+v\n", listenFd, addr)
-	err = unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(listenFd)})
+	err = unix.EpollCtl(p.epollFd, syscall.EPOLL_CTL_ADD, listenFd, &unix.EpollEvent{Events: unix.EPOLLIN, Fd: int32(listenFd), Pad: 1})
 	if err != nil {
 		log.Printf("add epoll error: %s", err)
 		must(err)
@@ -276,20 +276,23 @@ func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 		return p.processEventFd()
 	}
 
+	if event.Pad > 0 {
+		switch fd {
+		case p.tcpListenFd:
+			log.Printf("accept tcp conn fd:%d", fd)
+			return p.processAcceptTcp()
+		case p.wsListenFd:
+			log.Printf("accept ws conn fd:%d", fd)
+			return p.processAcceptWebSocket()
+		default:
+			return fmt.Errorf("unknown fd:%d", fd)
+		}
+	}
+
 	// 1. 线程安全地查找连接对象，注意顺序，tcpListenFd和wsListenFd会和其他fd冲突
 	conn := connMgr.GetByFd(fd)
 	if conn != nil {
 		return p.processClientData(conn)
-	}
-
-	if fd == p.tcpListenFd {
-		log.Printf("accept tcp conn fd:%d", fd)
-		return p.processAcceptTcp()
-	}
-
-	if fd == p.wsListenFd {
-		log.Printf("accept ws conn fd:%d", fd)
-		return p.processAcceptWebSocket()
 	}
 
 	return fmt.Errorf("unknown fd:%d", fd)
