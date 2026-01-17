@@ -1,7 +1,6 @@
 package core
 
 import (
-	"log"
 	"sync"
 )
 
@@ -45,7 +44,6 @@ func (s *ConnMgr) AddConn(conn IConn) {
 	if conn.Svid() > 0 {
 		s.servers[conn.Svid()] = conn
 	}
-	log.Printf("AddConn svid:%d fd:%d conn:%v", conn.Svid(), conn.Fd(), conn.String())
 }
 
 func (s *ConnMgr) DelBySid(svid uint16) {

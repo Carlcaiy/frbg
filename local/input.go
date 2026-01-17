@@ -41,7 +41,7 @@ func (i *Input) Response(uid uint32, cmd uint16, msg proto.Message) error {
 		// 网关服务器类型，直接封装为cmd
 		data = codec.NewMessage(cmd, msg)
 		data.Seq = i.Seq
-		log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
+		// log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
 	} else {
 		// 其他服务器类型，封装为PacketOut
 		payload, err := proto.Marshal(msg)
@@ -55,7 +55,7 @@ func (i *Input) Response(uid uint32, cmd uint16, msg proto.Message) error {
 			Payload: payload,
 		})
 		data.Seq = i.Seq
-		log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
+		// log.Printf("Response uid:%d, cmd:%d, msg:%v", uid, cmd, data)
 	}
 	return i.c.Write(data)
 }

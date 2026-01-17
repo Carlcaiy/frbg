@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"frbg/codec"
 	"sync"
 )
@@ -47,7 +46,7 @@ func (p *RpcMgr) RegisterRpcCallback(seq uint16, callback RpcCallback) {
 func (p *RpcMgr) HandleRpcResponse(msg *codec.Message) bool {
 	seq := msg.Seq
 
-	fmt.Println("HandleRpcResponse seq:", seq, p.rpcResponses)
+	// fmt.Println("HandleRpcResponse seq:", seq, p.rpcResponses)
 
 	p.rpcMu.RLock()
 	// 优先处理同步等待

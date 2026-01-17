@@ -125,7 +125,7 @@ func (l *Local) packetIn(in *local.Input) error {
 	if cli == nil {
 		return fmt.Errorf("not find server %d", req.Svid)
 	}
-	log.Printf("packetIn cmd:%d, svid:%d", req.Cmd, req.Svid)
+	// log.Printf("packetIn cmd:%d, svid:%d", req.Cmd, req.Svid)
 	data := in.Message
 	data.Cmd = uint16(req.Cmd)
 	data.Payload = req.Payload
@@ -137,7 +137,7 @@ func (l *Local) packetOut(in *local.Input) error {
 	if err := in.Unpack(req); err != nil {
 		return err
 	}
-	log.Printf("packetOut uid:%d, cmd:%d", req.Uid, req.Cmd)
+	// log.Printf("packetOut uid:%d, cmd:%d", req.Uid, req.Cmd)
 	for _, uid := range req.Uid {
 		cli := l.clients.GetClient(uid)
 		if cli == nil {

@@ -279,10 +279,8 @@ func (p *Poll) processNetworkEvent(event *unix.EpollEvent) error {
 	if event.Pad > 0 {
 		switch fd {
 		case p.tcpListenFd:
-			log.Printf("accept tcp conn fd:%d", fd)
 			return p.processAcceptTcp()
 		case p.wsListenFd:
-			log.Printf("accept ws conn fd:%d", fd)
 			return p.processAcceptWebSocket()
 		default:
 			return fmt.Errorf("unknown fd:%d", fd)
@@ -353,7 +351,7 @@ func (p *Poll) processAcceptTcp() error {
 	connMgr.AddConn(c)
 
 	// 7. 记录日志
-	log.Printf("Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+	log.Printf("TCPAdd fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	return nil
 }
 
@@ -425,7 +423,7 @@ func (p *Poll) processAcceptWebSocket() error {
 	p.incrConnNum()
 
 	// 9. 记录日志并触发回调
-	log.Printf("ws Add fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
+	log.Printf("WSAdd fd:%d addr:%s conn_num=%d", fd, conn.RemoteAddr().String(), p.getConnNum())
 	return nil
 }
 

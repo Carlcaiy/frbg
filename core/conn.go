@@ -187,9 +187,9 @@ func (c *WsConn) Read() (*codec.Message, error) {
 }
 
 func (c *WsConn) Write(msg *codec.Message) error {
-	if !msg.IsHeartBeat() {
-		log.Printf("send ws msg:%s", msg.String())
-	}
+	// if !msg.IsHeartBeat() {
+	// 	log.Printf("send ws msg:%s", msg.String())
+	// }
 	now := time.Now()
 	err := c.conn.SetWriteDeadline(now.Add(time.Second))
 	if err == nil {
