@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"frbg/codec"
@@ -13,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -59,28 +61,29 @@ func main() {
 	fmt.Println("close conn", conn.Close())
 }
 
-func logdata(data proto.Message, msg *codec.Message) {
+func logdata(cmd uint16, data proto.Message, msg *codec.Message, debug ...bool) {
 	err = msg.Unpack(data)
 	if err != nil {
 		log.Printf("unpack error:%s", err.Error())
 		return
 	}
-	// bsi, _ := json.MarshalIndent(data, "", "  ")
-	// log.Printf("recv:%s", string(bsi))
+	if len(debug) == 0 || debug[0] {
+		bsi, _ := json.MarshalIndent(data, "", "  ")
+		log.Printf("cmd:%d recv:%s", cmd, string(bsi))
+	}
 }
 
 func Tick() {
 	for {
 		time.Sleep(5 * time.Second)
 		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-		msg := codec.AcquireMessage()
+		msg := codec.NewMessage(0, nil)
 		msg.SetFlags(codec.FlagsHeartBeat)
 		if err := codec.WsWriteBySide(conn, ws.StateClientSide, msg); err != nil {
 			log.Printf("send error:%s", err.Error())
 			errch <- err
 			return
 		}
-		codec.ReleaseMessage(msg)
 	}
 }
 
@@ -95,20 +98,27 @@ func Loop() {
 		switch msg.Cmd {
 		case def.Error:
 			rsp := new(pb.CommonRsp)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg)
 			errch <- fmt.Errorf("error code:%d msg:%s", rsp.Code, rsp.Msg)
 			return
 		case def.Login:
 			rsp := new(pb.LoginRsp)
-			logdata(rsp, msg)
-			send(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{Uid: uint32(uid)})
+			logdata(msg.Cmd, rsp, msg)
+			send(def.ST_Hall, def.GetGameList, &pb.GetGameListReq{
+				Uid:    uint32(uid),
+				GateId: 1,
+			})
 			// send(def.ST_Gate, def.Logout, &pb.LogoutReq{Uid: uint32(uid)})
 		case def.GetGameList:
 			rsp := new(pb.GetGameListRsp)
-			logdata(rsp, msg)
-			send(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{Uid: uint32(uid), GameId: def.SID_MahjongBanbisan})
+			logdata(msg.Cmd, rsp, msg)
+			send(def.ST_Hall, def.GetRoomList, &pb.GetRoomListReq{
+				Uid:    uint32(uid),
+				GameId: def.SID_MahjongBanbisan,
+				GateId: 1,
+			})
 		case def.GetRoomList:
-			logdata(getRoomListRsp, msg)
+			logdata(msg.Cmd, getRoomListRsp, msg)
 			send(def.ST_Hall, def.EnterRoom, &pb.EnterRoomReq{
 				Uid:    uint32(uid),
 				GateId: 1,
@@ -117,28 +127,30 @@ func Loop() {
 			})
 		case def.StartGame:
 			rsp := new(pb.StartGameRsp)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg)
 			playerData = rsp
 		case def.GameFaPai:
 			rsp := new(pb.MjFaPai)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg, false)
 			for i := range rsp.Fapai {
 				if rsp.Fapai[i].Uid == uint32(uid) {
 					mjs = append(mjs, uint8(rsp.Fapai[i].MjVal))
 				}
 			}
 			log.Printf("uid:%d pai:%v", uid, mjs)
-			if mj.HasOp(rsp.CanOp, mj.ChuPai) {
+			for _, canOp := range rsp.CanOps {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
-					Op:     mj.ChuPai,
-					Mj:     int32(mjs[0]),
+					Op:     canOp.Op,
+					Mj:     canOp.Mj,
 				})
+				log.Printf("send opt op:%d, mj:%d", canOp.Op, canOp.Mj)
+				break
 			}
 		case def.BcOpt:
 			rsp := new(pb.MjOpt)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg, false)
 			if rsp.Uid == uint32(uid) {
 				if rsp.Op == mj.ChuPai && rsp.Mj > 0 {
 					for i, mj := range mjs {
@@ -153,50 +165,68 @@ func Loop() {
 					log.Printf("mopai mjs:%v pai:%d", mjs, rsp.Mj)
 				}
 			}
-			if mj.HasOp(rsp.CanOp, mj.GuoPai) {
+			for _, canOp := range rsp.CanOps {
 				send(def.ST_Game, def.OptGame, &pb.MjOpt{
 					Uid:    uint32(uid),
 					RoomId: playerData.RoomId,
-					Op:     mj.GuoPai,
+					Op:     canOp.Op,
+					Mj:     canOp.Mj,
 				})
-			} else if mj.HasOp(rsp.CanOp, mj.ChuPai) {
-				send(def.ST_Game, def.OptGame, &pb.MjOpt{
-					Uid:    uint32(uid),
-					RoomId: playerData.RoomId,
-					Op:     mj.ChuPai,
-					Mj:     int32(mjs[0]),
-				})
-				log.Printf("send chupai pai:%d", mjs[0])
+				log.Printf("send opt op:%d, mj:%d", canOp.Op, canOp.Mj)
+				break
 			}
 		case def.Reconnect:
 			rsp := new(pb.DeskSnapshot)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg)
 			playerData = &pb.StartGameRsp{
 				RoomId: rsp.RoomId,
 			}
-			for _, info := range rsp.Info {
-				if info.Uid == uint32(uid) {
-					mjs = append(mjs, info.Hands...)
-					log.Printf("mjs:%v", mjs)
-					if mj.HasOp(info.CanOp, mj.ChuPai) {
-						send(def.ST_Game, def.OptGame, &pb.MjOpt{
-							Uid:    uint32(uid),
-							RoomId: playerData.RoomId,
-							Op:     mj.ChuPai,
-							Mj:     int32(mjs[0]),
-						})
-					} else if mj.HasOp(info.CanOp, mj.GuoPai) {
-						send(def.ST_Game, def.OptGame, &pb.MjOpt{
-							Uid:    uint32(uid),
-							RoomId: playerData.RoomId,
-							Op:     mj.GuoPai,
-						})
+			if rsp.Playing {
+				for _, info := range rsp.Info {
+					if info.Uid == uint32(uid) {
+						mjs = append(mjs, info.Hands...)
+						log.Printf("mjs:%v", mjs)
+						for _, canOp := range info.CanOps {
+							send(def.ST_Game, def.OptGame, &pb.MjOpt{
+								Uid:    uint32(uid),
+								RoomId: playerData.RoomId,
+								Op:     canOp.Op,
+								Mj:     canOp.Mj,
+							})
+							break
+						}
 					}
 				}
+			} else {
+				send(def.ST_Game, def.Continue, &pb.Continue{
+					Uid:    uint32(uid),
+					RoomId: playerData.RoomId,
+					HallId: 1,
+					GateId: 1,
+				})
 			}
 		case def.GameOver:
 			rsp := new(pb.GameOver)
-			logdata(rsp, msg)
+			logdata(msg.Cmd, rsp, msg, false)
+			for i := range rsp.Users {
+				if rsp.Users[i].HuType > 0 {
+					sort.Slice(rsp.Users[i].Hands, func(a, b int) bool {
+						return rsp.Users[i].Hands[a] < rsp.Users[i].Hands[b]
+					})
+					log.Printf("mj:%v", rsp.Users[i].Hands)
+					log.Printf("user:%d hu:%s score:%d", rsp.Users[i].Uid, mj.HuStr(rsp.Users[i].HuType, 0), 0)
+				}
+			}
+			log.Printf("game over wait 100ms")
+			time.AfterFunc(time.Millisecond*100, func() {
+				mjs = mjs[:0]
+				send(def.ST_Game, def.Continue, &pb.Continue{
+					Uid:    uint32(uid),
+					RoomId: playerData.RoomId,
+					HallId: 1,
+					GateId: 1,
+				})
+			})
 		case def.Logout:
 			log.Printf("logout uid:%d", uid)
 			send(def.ST_Gate, def.Login, &pb.LoginReq{Uid: uint32(uid), Password: "123123", From: 1, GateId: 1})
@@ -207,8 +237,8 @@ func Loop() {
 }
 
 func send(svid uint8, cmd uint16, req proto.Message) {
-	// bsi, _ := json.MarshalIndent(req, "", "  ")
-	// log.Printf("send:%s", string(bsi))
+	bsi, _ := json.MarshalIndent(req, "", "  ")
+	log.Printf("send:%s", string(bsi))
 	var msg *codec.Message
 	if svid == def.ST_Gate {
 		msg = codec.NewMessage(cmd, req)
@@ -221,7 +251,7 @@ func send(svid uint8, cmd uint16, req proto.Message) {
 			Payload: bs,
 		}
 		msg = codec.NewMessage(def.PacketIn, packet)
-		// log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
+		log.Printf("send packetIn cmd:%d, svid:%d", packet.Cmd, packet.Svid)
 	}
 
 	if err = conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {

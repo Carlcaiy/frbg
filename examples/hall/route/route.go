@@ -1,8 +1,6 @@
 package route
 
 import (
-	"fmt"
-	"frbg/codec"
 	"frbg/core"
 	"frbg/def"
 	"frbg/examples/db"
@@ -49,42 +47,47 @@ func (l *Local) init() {
 	l.AddRoute(def.LeaveSlots, l.leaveSlots)
 }
 
-func (l *Local) offline(in *local.Input) error {
-	return nil
+func (l *Local) offline(in *local.Input) {
 }
 
-func (l *Local) getGameList(in *local.Input) error {
+func (l *Local) getGameList(in *local.Input) {
 	log.Println("getGameList")
 	req, rsp := new(pb.GetGameListReq), new(pb.GetGameListRsp)
 	if err := in.Unpack(req); err != nil {
 		log.Printf("getGameList msg.Unpack() err:%s", err.Error())
-		return err
+		return
 	}
+	log.Printf("getGameList req:%v", req.String())
 	rsp.Games = db.GetGameList()
-	return in.Response(req.Uid, in.Cmd, rsp)
+	if errSend := l.SendTo(core.Svid(def.ST_Gate, uint8(req.GateId)), req.Uid, in.Cmd, rsp); errSend != nil {
+		log.Printf("SendTo() err:%v", errSend.Error())
+	}
 }
 
-func (l *Local) getRoomList(in *local.Input) error {
+func (l *Local) getRoomList(in *local.Input) {
 	log.Println("getRoomList")
 	req, rsp := new(pb.GetRoomListReq), new(pb.GetRoomListRsp)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("getRoomList msg.Unpack() err:%s", err.Error())
+		return
 	}
+	log.Printf("getRoomList req:%v", req.String())
 	rsp.Rooms = db.GetRoomList(req.GameId)
-	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
+	// 发送给客户端
+	if errSend := l.SendTo(core.Svid(def.ST_Gate, uint8(req.GateId)), req.Uid, in.Cmd, rsp); errSend != nil {
 		log.Printf("Send() err:%s", errSend.Error())
 	}
-	return nil
 }
 
 // 如果只是配桌，同时活跃的用户不会很多，全部写在内存也不会占用多少
 // 考虑到服务器重启，只需要在服务器间同步配桌数据
 // 如果出现服务器挂掉的情况，需要重新配桌，这个数据又不重要，所以不做处理
 // 如果用户已经在房间内，直接返回
-func (l *Local) enterRoom(in *local.Input) error {
+func (l *Local) enterRoom(in *local.Input) {
 	req, rsp := new(pb.EnterRoomReq), new(pb.EnterRoomRsp)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("enterRoom msg.Unpack() err:%s", err.Error())
+		return
 	}
 	log.Println("enterRoom", req.String())
 	svid := core.Svid(def.ST_Game, uint8(req.GameId))
@@ -96,7 +99,8 @@ func (l *Local) enterRoom(in *local.Input) error {
 			GateId: uint32(req.GateId),
 			RoomId: game.RoomId,
 		}
-		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
+		l.Send(svid, def.Reconnect, &reconnect)
+		return
 	}
 
 	// 查询用户状态
@@ -104,7 +108,8 @@ func (l *Local) enterRoom(in *local.Input) error {
 		Uid: req.Uid,
 	}, new(pb.GameStatusRsp)
 	if err := l.RpcCall(svid, def.GameStatus, greq, grsp); err != nil {
-		return err
+		log.Printf("GameStatus uid:%d err:%s", req.Uid, err.Error())
+		return
 	}
 	log.Printf("GameStatus uid:%d rsp:%v", req.Uid, grsp.String())
 
@@ -126,7 +131,8 @@ func (l *Local) enterRoom(in *local.Input) error {
 			Uid:    req.Uid,
 			GateId: uint32(req.GateId),
 		}
-		return l.Send(svid, codec.NewMessage(def.Reconnect, &reconnect))
+		l.Send(svid, def.Reconnect, &reconnect)
+		return
 	}
 
 	l.userGame[req.Uid] = &User{
@@ -151,7 +157,7 @@ func (l *Local) enterRoom(in *local.Input) error {
 	// 4人配桌
 	if len(matchUid) < 4 {
 		log.Printf("enterRoom matchUid:%v", matchUid)
-		return nil
+		return
 	}
 
 	// 配桌信息
@@ -161,26 +167,26 @@ func (l *Local) enterRoom(in *local.Input) error {
 	}
 
 	// 通知游戏预约房间
-	startGameReq := codec.NewMessage(
-		def.StartGame,
-		&pb.StartGameReq{
-			RoomId: rsp.RoomId,
-			Users:  matchUser,
-		},
-	)
-	log.Printf("StartGame svid:%d startGameReq:%s", svid, startGameReq)
-	return l.Send(svid, startGameReq)
+	log.Printf("StartGame svid:%d startGameReq:%s", svid, &pb.StartGameReq{
+		RoomId: rsp.RoomId,
+		Users:  matchUser,
+	})
+	l.Send(svid, def.StartGame, &pb.StartGameReq{
+		RoomId: rsp.RoomId,
+		Users:  matchUser,
+	})
 }
 
 // 请求进入老虎机
-func (l *Local) enterSlots(in *local.Input) error {
+func (l *Local) enterSlots(in *local.Input) {
 	req := new(pb.EnterSlotsReq)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("enterSlots msg.Unpack() err:%s", err.Error())
+		return
 	}
 	conf := slots.GetSlotsData(req.Uid, req.GameId)
 	if conf == nil {
-		return nil
+		return
 	}
 	rsp := &pb.EnterSlotsRsp{
 		GameId: req.GameId,
@@ -190,45 +196,47 @@ func (l *Local) enterSlots(in *local.Input) error {
 		Lines:  conf.RouteConf,
 		Elems:  conf.ElemConf,
 	}
-	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
+	svid := core.Svid(def.ST_Gate, uint8(req.GateId))
+	if errSend := l.SendTo(svid, req.Uid, def.EnterSlots, rsp); errSend != nil {
 		log.Printf("Response() err:%s", errSend.Error())
 	}
-	return nil
 }
 
 // 老虎机请求摇奖
-func (l *Local) spinSlots(in *local.Input) error {
+func (l *Local) spinSlots(in *local.Input) {
 	req := new(pb.SlotsSpinReq)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("spinSlots msg.Unpack() err:%s", err.Error())
+		return
 	}
 
 	slotsData := slots.GetSlotsData(req.Uid, req.GameId)
 	if slotsData == nil {
-		return fmt.Errorf("sltos %d not find", req.GameId)
+		log.Printf("spinSlots sltos %d not find", req.GameId)
+		return
 	}
 	if !slotsData.BetConf.Valid(req.Bet, req.Level) {
-		return fmt.Errorf("sltos %d: bet:%d level:%d invalid", req.GameId, req.Bet, req.Level)
+		log.Printf("spinSlots sltos %d: bet:%d level:%d invalid", req.GameId, req.Bet, req.Level)
+		return
 	}
 
 	rsp, err := slotsData.Spin(int64(req.Bet) * int64(req.Level))
 	if err != nil {
-		return err
+		log.Printf("spinSlots sltos %d Spin() err:%s", req.GameId, err.Error())
+		return
 	}
-	if errSend := in.Response(req.Uid, in.Cmd, rsp); errSend != nil {
-		log.Printf("Response() err:%s", errSend.Error())
-	}
-	return nil
+	svid := core.Svid(def.ST_Gate, uint8(req.GateId))
+	l.SendTo(svid, req.Uid, def.LeaveSlots, rsp)
 }
 
 // 离开老虎机
-func (l *Local) leaveSlots(in *local.Input) error {
+func (l *Local) leaveSlots(in *local.Input) {
 	req := new(pb.LeaveSlotsReq)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("leaveSlots msg.Unpack() err:%s", err.Error())
+		return
 	}
 	slots.DelSlotsData(req.Uid)
-	return nil
 }
 
 func (l *Local) Close(conn core.IConn) {

@@ -1,5 +1,9 @@
 package mj
 
+import (
+	"sort"
+)
+
 type statlz struct {
 	laizi  uint8   // 癞子牌
 	pai    uint8   // 点炮的牌 >0表示点炮 =0表示自摸
@@ -97,8 +101,8 @@ func (m *statlz) deal_shunzi(pai uint8) bool {
 	}
 
 	// 牌数和牌值一致
-	if m.num[pai] >= 1 && m.num[pai+1]+m.num[Laizi] >= 1 && m.num[pai+2] >= 1 ||
-		m.num[pai] >= 1 && m.num[pai+1] >= 1 && m.num[pai+2]+m.num[Laizi] >= 1 {
+	if pai <= Tong7 && m.num[pai] >= 1 && m.num[pai+1]+m.num[Laizi] >= 1 && m.num[pai+2] >= 1 ||
+		pai <= Tong7 && m.num[pai] >= 1 && m.num[pai+1] >= 1 && m.num[pai+2]+m.num[Laizi] >= 1 {
 		m.num[pai] -= 1
 		m.num[pai+1] -= 1
 		m.num[pai+2] -= 1
@@ -172,22 +176,47 @@ func (m *statlz) hu233() bool {
 // 七对
 func (m *statlz) huQd() bool {
 	n := int8(0)
+	lzNum := m.num[Laizi]
 	for i := range m.num {
-		if m.num[i] != 2 && m.num[i] != 4 {
-			return false
+		if i == Laizi {
+			continue
 		}
-		n += m.num[i]
+		if m.num[i] == 1 && lzNum > 0 {
+			n += 1
+			lzNum -= 1
+		} else if m.num[i] == 2 {
+			n += 1
+		} else if m.num[i] == 3 && lzNum > 0 {
+			n += 2
+			lzNum -= 1
+		} else if m.num[i] == 4 {
+			n += 2
+		}
 	}
-	return n == 14
+	return n == 7
+}
+
+func IsJiang(val uint8) bool {
+	return val == Tiao2 || val == Tiao5 || val == Tiao8 ||
+		val == Wan2 || val == Wan5 || val == Wan8 ||
+		val == Tong2 || val == Tong5 || val == Tong8
 }
 
 // 将一色
 func (m *statlz) huJys() bool {
+	for _, g := range m.groups {
+		if g.Op == Ke || g.Op == Shun {
+			continue
+		}
+		if g.Op == LChi || g.Op == MChi || g.Op == RChi {
+			return false
+		}
+		if !IsJiang(g.Val) {
+			return false
+		}
+	}
 	for val := range m.num {
-		if m.num[val] > 0 && val != Laizi &&
-			val != Tiao2 && val != Tiao5 && val != Tiao8 &&
-			val != Wan2 && val != Wan5 && val != Wan8 &&
-			val != Tong2 && val != Tong5 && val != Tong8 {
+		if m.num[val] > 0 && val != Laizi && !IsJiang(uint8(val)) {
 			return false
 		}
 	}
@@ -212,9 +241,18 @@ func (m *statlz) huHh() int {
 
 // 清一色
 func (m *statlz) huQys() bool {
-	c := m.groups[0].Val / 10
+	c := 0
+	for i := range m.num {
+		if m.num[i] > 0 {
+			if c == 0 {
+				c = i / 10
+			} else if c != i/10 {
+				return false
+			}
+		}
+	}
 	for i := range m.groups {
-		if m.groups[i].Val/10 != c {
+		if m.groups[i].Val/10 != uint8(c) {
 			return false
 		}
 	}
@@ -226,6 +264,32 @@ func (m *statlz) huPph() bool {
 	for i := range m.groups {
 		if m.groups[i].Op == LChi || m.groups[i].Op == MChi || m.groups[i].Op == RChi || m.groups[i].Op == Shun {
 			return false
+		}
+	}
+	lzNum := m.num[Laizi]
+	var numArr []int8
+	for i := range m.num {
+		if i != Laizi && m.num[i] > 0 {
+			if m.num[i] > 3 {
+				numArr = append(numArr, 1, 3)
+			} else {
+				numArr = append(numArr, m.num[i])
+			}
+		}
+	}
+	sort.Slice(numArr, func(i, j int) bool { return numArr[i] < numArr[j] })
+	if numArr[0] == 1 {
+		lzNum -= 1
+		if lzNum < 0 {
+			return false
+		}
+	}
+	for i := 1; i < len(numArr); i++ {
+		if numArr[i] < 3 {
+			lzNum -= 3 - numArr[i]
+			if lzNum < 0 {
+				return false
+			}
 		}
 	}
 	return true
@@ -267,7 +331,7 @@ func (m *statlz) CanHu() bool {
 func (m *statlz) CanOpSelf() []*Group {
 	ret := make([]*Group, 0)
 	for i := range m.num {
-		if m.num[i] == 4 {
+		if m.num[i] == 4 && i != Laizi {
 			ret = append(ret, &Group{
 				Op:  AGang,
 				Val: uint8(i),
@@ -285,19 +349,19 @@ func (m *statlz) CanOpSelf() []*Group {
 func (m *statlz) CanOpOther(val, op uint8) []*Group {
 	ret := make([]*Group, 0)
 	if op == ChuPai {
-		if m.num[val+1] > 0 && m.num[val+2] > 0 {
+		if val >= Tiao1 && m.num[val+1] > 0 && m.num[val+2] > 0 {
 			ret = append(ret, &Group{
 				Op:  LChi,
 				Val: val,
 			})
 		}
-		if m.num[val-1] > 0 && m.num[val+1] > 0 {
+		if val >= Tiao2 && m.num[val-1] > 0 && m.num[val+1] > 0 {
 			ret = append(ret, &Group{
 				Op:  MChi,
 				Val: val,
 			})
 		}
-		if val > Tiao2 && m.num[val-2] > 0 && m.num[val-1] > 0 {
+		if val >= Tiao3 && m.num[val-2] > 0 && m.num[val-1] > 0 {
 			ret = append(ret, &Group{
 				Op:  RChi,
 				Val: val,
@@ -355,7 +419,7 @@ func (m *statlz) huType() int32 {
 		return hus
 	}
 	// 碰碰胡
-	if m.huPph() {
+	if hus&PH > 0 && m.huPph() {
 		hus |= PPH
 	}
 	// 清一色

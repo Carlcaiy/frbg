@@ -514,10 +514,8 @@ func (p *Poll) ConnTick() {
 		// 发送心跳
 		servers := connMgr.Servers()
 		for _, conn := range servers {
-			msg := codec.AcquireMessage()
-			msg.SetFlags(codec.FlagsHeartBeat)
+			msg := codec.NewHearBeatMessage()
 			conn.Write(msg)
-			codec.ReleaseMessage(msg)
 		}
 	}
 }

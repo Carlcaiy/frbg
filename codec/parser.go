@@ -43,12 +43,11 @@ func WsReadBySide(r io.ReadWriter, side ws.State) (*Message, error) {
 		return nil, fmt.Errorf("message too short: %d < %d", len(all), HeaderLen)
 	}
 
-	msg := AcquireMessage()
+	msg := new(Message)
 
 	// 解析头部
 	msg.MagicNumber = all[OffsetMagic]
 	if msg.MagicNumber != magicNumber {
-		ReleaseMessage(msg)
 		return nil, fmt.Errorf("invalid magic number: %02X", msg.MagicNumber)
 	}
 
@@ -59,7 +58,7 @@ func WsReadBySide(r io.ReadWriter, side ws.State) (*Message, error) {
 	msg.Len = byteOrder.Uint16(all[OffsetLen:])
 	// 检查消息长度
 	if msg.Len > MaxMessageSize {
-		ReleaseMessage(msg)
+
 		return nil, fmt.Errorf("message too large: %d > %d", msg.Len, MaxMessageSize)
 	}
 
@@ -76,7 +75,7 @@ func WsReadBySide(r io.ReadWriter, side ws.State) (*Message, error) {
 	// 验证校验和
 	expectedCheckSum := msg.calculateCheckSum()
 	if msg.CheckSum != expectedCheckSum {
-		ReleaseMessage(msg)
+
 		return nil, fmt.Errorf("checksum mismatch: expected %04X, got %04X", expectedCheckSum, msg.CheckSum)
 	}
 
@@ -105,7 +104,7 @@ func TcpRead(r io.Reader) (*Message, error) {
 		return nil, fmt.Errorf("read header failed: %w", err)
 	}
 
-	msg := AcquireMessage()
+	msg := &Message{}
 
 	// 解析头部
 	msg.MagicNumber = headerBuf[OffsetMagic]
@@ -120,7 +119,7 @@ func TcpRead(r io.Reader) (*Message, error) {
 	msg.Len = byteOrder.Uint16(headerBuf[OffsetLen:])
 	// 检查消息长度
 	if msg.Len > MaxMessageSize {
-		ReleaseMessage(msg)
+
 		return nil, fmt.Errorf("message too large: %d > %d", msg.Len, MaxMessageSize)
 	}
 	msg.CheckSum = byteOrder.Uint16(headerBuf[OffsetCheckSum:])
@@ -128,7 +127,7 @@ func TcpRead(r io.Reader) (*Message, error) {
 	// 读取命令字
 	cmdBuf := make([]byte, 2)
 	if _, err := io.ReadFull(r, cmdBuf); err != nil {
-		ReleaseMessage(msg)
+
 		return nil, fmt.Errorf("read cmd failed: %w", err)
 	}
 	msg.Cmd = byteOrder.Uint16(cmdBuf)
@@ -137,7 +136,7 @@ func TcpRead(r io.Reader) (*Message, error) {
 	if msg.Len > 0 {
 		payloadBuf := make([]byte, msg.Len)
 		if _, err := io.ReadFull(r, payloadBuf); err != nil {
-			ReleaseMessage(msg)
+
 			return nil, fmt.Errorf("read payload failed: %w", err)
 		}
 		msg.Payload = payloadBuf
@@ -146,7 +145,7 @@ func TcpRead(r io.Reader) (*Message, error) {
 	// 验证校验和
 	expectedCheckSum := msg.calculateCheckSum()
 	if msg.CheckSum != expectedCheckSum {
-		ReleaseMessage(msg)
+
 		return nil, fmt.Errorf("checksum mismatch: expected %04X, got %04X", expectedCheckSum, msg.CheckSum)
 	}
 
@@ -160,7 +159,6 @@ func TcpWrite(r io.Writer, msg *Message) error {
 	}
 
 	data := msg.Pack()
-	ReleaseMessage(msg)
 	if _, err := r.Write(data); err != nil {
 		return fmt.Errorf("tcp write failed: %w", err)
 	}

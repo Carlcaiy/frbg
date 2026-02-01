@@ -16,6 +16,9 @@ type DeskMj struct {
 	Belong byte
 }
 
+type ConfigMj struct {
+}
+
 type Room struct {
 	l           *Local
 	master      uint32   // 房主ID
@@ -26,11 +29,11 @@ type Room struct {
 	mj          []uint8  // 麻将
 	usedMjIndex []uint8  // 已使用的麻将下标
 	mjIndex     uint8    // 麻将索引
-	touzi       []int32  // 骰子
-	pizi        uint8    // 皮子
-	laizi       uint8    // 赖子
+	touZi       []int32  // 骰子
+	piZi        uint8    // 皮子
+	laiZi       uint8    // 赖子
 	zhuang      int32    // 庄家
-	waitOther   bool     // 等待其他玩家操作
+	waitMulti   bool     // 等待多个玩家操作
 	history     []*mj.MjOp
 	playing     bool
 	huangZhuang int // 黄庄剩余牌数
@@ -41,7 +44,7 @@ func NewRoom(l *Local, rid uint32) *Room {
 	room := &Room{
 		l:           l,
 		mj:          make([]uint8, len(mj.BanBiShanMJ)),
-		touzi:       make([]int32, 2),
+		touZi:       make([]int32, 2),
 		huangZhuang: 10,
 		roomId:      rid,
 	}
@@ -100,13 +103,13 @@ func (r *Room) Reset() {
 		r.mj[i], r.mj[j] = r.mj[j], r.mj[i]
 	})
 
-	r.touzi[0] = rand.Int31n(6) + 1
-	r.touzi[1] = rand.Int31n(6) + 1
+	r.touZi[0] = rand.Int31n(6) + 1
+	r.touZi[1] = rand.Int31n(6) + 1
 	r.mjIndex = 0
 	r.usedMjIndex = r.usedMjIndex[:0]
 	r.history = r.history[:0]
 	r.playing = true
-	r.waitOther = false
+	r.waitMulti = false
 
 }
 
@@ -128,28 +131,32 @@ func (r *Room) Offline(uid uint32) {
 
 func (r *Room) Reconnect(uid uint32, gateId uint16) {
 	req := &pb.DeskSnapshot{
-		RoomId:      r.roomId,
-		Pizi:        int32(r.pizi),
-		Touzi:       r.touzi,
-		Zhuang:      uid,
-		Laizi:       int32(r.laizi),
-		UsedMjIndex: r.usedMjIndex,
-		Info:        make([]*pb.PlayerInfo, len(r.Users)),
+		RoomId:   r.roomId,
+		Pizi:     int32(r.piZi),
+		Touzi:    r.touZi,
+		Zhuang:   uid,
+		Laizi:    int32(r.laiZi),
+		MjIndex:  r.usedMjIndex,
+		Info:     make([]*pb.PlayerInfo, len(r.Users)),
+		Playing:  r.playing,
+		LastUser: r.history[len(r.history)-1].Uid,
+		LastOp:   r.history[len(r.history)-1].Op,
+		LastOpMj: r.history[len(r.history)-1].Mj,
 	}
 	for i, u := range r.Users {
 		req.Info[i] = &pb.PlayerInfo{
 			Uid:   u.uid,
-			Dachu: r.Users[i].mj_history,
-			Cpgs:  make([][]byte, len(r.Users[i].mj_group)),
+			Dachu: r.Users[i].mjHistory,
+			Cpgs:  make([][]byte, len(r.Users[i].mjGroup)),
 		}
-		for j, g := range r.Users[i].mj_group {
+		for j, g := range r.Users[i].mjGroup {
 			req.Info[i].Cpgs[j] = g.ToBytes()
 		}
 		if u.uid == uid {
-			req.Info[i].Hands = r.Users[i].mj_hands
-			req.Info[i].CanOp = u.CanOp()
+			req.Info[i].Hands = r.Users[i].mjHands
+			req.Info[i].CanOps = r.Users[i].CanOps()
 		} else {
-			req.Info[i].Hands = make([]byte, len(r.Users[i].mj_hands))
+			req.Info[i].Hands = make([]byte, len(r.Users[i].mjHands))
 		}
 	}
 	user := r.GetUserByUID(uid)
@@ -161,6 +168,14 @@ func (r *Room) Reconnect(uid uint32, gateId uint16) {
 	user.offline = false
 	log.Println("Reconnect", "uid:", uid, "sit", user.Seat(), "turn", r.turn)
 	user.Send(def.Reconnect, req)
+}
+
+func (r *Room) FaPai(u *User) (uint8, uint8) {
+	idx, val := r.mjIndex, r.mj[r.mjIndex]
+	r.usedMjIndex = append(r.usedMjIndex, r.mjIndex)
+	r.mjIndex++
+	u.MoMj(val)
+	return idx, val
 }
 
 func (r *Room) MajFaPai() {
@@ -175,48 +190,42 @@ func (r *Room) MajFaPai() {
 			u := r.Users[(r.turn+i)%4]
 			// 每个玩家发4个麻將
 			for j := 0; j < 4; j++ {
-				mjVal := r.mj[r.mjIndex]
+				idx, val := r.FaPai(u)
 				faPai = append(faPai, &pb.DeskMj{
-					Index: int32(r.mjIndex),
+					Index: int32(idx),
 					Uid:   u.uid,
-					MjVal: int32(mjVal),
+					MjVal: int32(val),
 				})
-				r.usedMjIndex = append(r.usedMjIndex, r.mjIndex)
-				r.mjIndex++
-				u.MoMj(mjVal)
 			}
 		}
 	}
 	for i := 0; i < 5; i++ {
 		u := r.Users[(r.turn+i)%4]
-		mjVal := r.mj[r.mjIndex]
+		idx, val := r.FaPai(u)
 		faPai = append(faPai, &pb.DeskMj{
-			Index: int32(r.mjIndex),
+			Index: int32(idx),
 			Uid:   u.uid,
-			MjVal: int32(r.mj[r.mjIndex]),
+			MjVal: int32(val),
 		})
-		r.usedMjIndex = append(r.usedMjIndex, r.mjIndex)
-		r.mjIndex++
-		u.MoMj(mjVal)
 	}
 
 	// 确定赖子
-	col := r.touzi[1]
-	if r.touzi[0] < r.touzi[1] {
-		col = r.touzi[0]
+	col := r.touZi[1]
+	if r.touZi[0] < r.touZi[1] {
+		col = r.touZi[0]
 	}
 	piziIndex := (9*3+8)*2 - col*2
-	r.pizi = r.mj[piziIndex]
-	r.laizi = mj.GetLaizi(r.pizi)
+	r.piZi = r.mj[piziIndex]
+	r.laiZi = mj.GetLaizi(r.piZi)
 
 	// 组装信息
 	zhuang := r.Users[r.turn]
 	piziMj := &pb.DeskMj{
 		Index: piziIndex,
-		MjVal: int32(r.pizi),
+		MjVal: int32(r.piZi),
 	}
 
-	r.waitOther = false
+	r.waitMulti = false
 	for _, u := range r.Users {
 		log.Printf("mj:%v", u.Mj())
 		handsMj := make([]*pb.DeskMj, len(faPai))
@@ -232,12 +241,13 @@ func (r *Room) MajFaPai() {
 		data := &pb.MjFaPai{
 			Fapai:  handsMj,
 			Zhuang: zhuang.uid,
-			Touzi:  r.touzi,
+			Touzi:  r.touZi,
 			Pizi:   piziMj,
-			Laizi:  int32(r.laizi),
+			Laizi:  int32(r.laiZi),
 		}
 		if zhuang.uid == u.uid {
-			data.CanOp = u.CanOpSelf()
+			data.CanOpFlag = u.CanOpSelf(r.laiZi)
+			data.CanOps = u.CanOps()
 		}
 		u.Send(def.GameFaPai, data)
 	}
@@ -252,10 +262,10 @@ func (r *Room) MoPai() uint8 {
 
 // 从当前的位置往前找，存在没有操作的玩家，并且玩家可执行的操作大于当前操作，则继续等待
 func (r *Room) SkipWaiting(u *User) bool {
-	for op := u.wait_op + 1; op <= mj.HuPai; op++ {
+	for op := u.waitOp + 1; op <= mj.HuPai; op++ {
 		for seat := r.turn + 1; seat != u.seat; seat = (seat + 1) % 4 {
 			user := r.GetUser(seat)
-			if mj.HasOp(user.can_ops_flag, op) {
+			if mj.HasOp(user.canOpsFlag, op) {
 				return false
 			}
 		}
@@ -266,7 +276,7 @@ func (r *Room) SkipWaiting(u *User) bool {
 func (r *Room) Waiting() bool {
 	for _, u := range r.Users {
 		if u.waiting {
-			log.Printf("Waiting uid:%d wait_op:%d\n", u.uid, u.wait_op)
+			log.Printf("Waiting uid:%d waitOp:%d\n", u.uid, u.waitOp)
 			return true
 		}
 	}
@@ -274,15 +284,15 @@ func (r *Room) Waiting() bool {
 }
 
 func (r *Room) getOpUser(user *User) *User {
-	if r.waitOther {
+	if r.waitMulti {
 		maxOp, distance := uint8(0), int(4)
 		for _, u := range r.Users {
-			if u.wait_op >= maxOp {
-				maxOp = u.wait_op
+			if u.waitOp >= maxOp {
+				maxOp = u.waitOp
 			}
 		}
 		for i, u := range r.Users {
-			if u.wait_op == maxOp {
+			if u.waitOp == maxOp {
 				if dis := r.getDistance(i); dis < distance {
 					distance = dis
 					user = u
@@ -320,11 +330,6 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 		log.Printf("capop err, uid:%d cant op:%d\n", uid, opt.Op)
 		return
 	}
-	// 执行操作
-	if !currUser.DealMj(uint8(opt.Op), uint8(opt.Mj)) {
-		log.Printf("deal err, uid:%d opt:%d mj:%d\n", uid, opt.Op, opt.Mj)
-		return
-	}
 
 	r.history = append(r.history, &mj.MjOp{
 		Uid: opt.Uid,
@@ -333,7 +338,7 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 	})
 
 	// 当前操作
-	currUser.wait_op = uint8(opt.Op)
+	currUser.waitOp = uint8(opt.Op)
 	currUser.waiting = false
 
 	// 等待完毕
@@ -341,10 +346,10 @@ func (r *Room) MjOp(uid uint32, opt *pb.MjOpt) {
 		return
 	}
 
-	if !r.waitOther {
+	if !r.waitMulti {
 		r.MjOpSelf(uid, opt)
 	} else {
-		r.waitOther = false
+		r.waitMulti = false
 		r.MjOpOther(uid, opt)
 	}
 }
@@ -354,20 +359,26 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 	currUser := r.GetUserByUID(uid)
 	// 获取最佳操作玩家
 	finalUser := r.getOpUser(currUser)
-	finalOp := int32(finalUser.wait_op)
+	finalOp := int32(finalUser.waitOp)
+
+	// 执行操作
+	if !finalUser.DealMj(uint8(finalOp), uint8(opt.Mj)) {
+		log.Printf("deal err, uid:%d opt:%d mj:%d\n", uid, opt.Op, opt.Mj)
+		return
+	}
 
 	// 出牌操作，没有人有操作，给下一家发牌，并告知可执行操作
 	switch finalOp {
 	case mj.GuoPai:
 		// 黄庄操作，没有其他玩家可操作，且黄庄牌数大于等于牌数，游戏结束
-		if r.haiDiLao() {
+		if r.canHDL() {
+			r.doHDL()
 			return
 		}
 		r.turn = (r.turn + 1) % len(r.Users)
 		turnUser := r.Users[r.turn]
-		moPai := r.MoPai()
-		turnUser.MoMj(moPai)
-		r.waitOther = false
+		_, moPai := r.FaPai(turnUser)
+		r.waitMulti = false
 		for _, u := range r.Users {
 			nextOpt := &pb.MjOpt{
 				Op:  mj.MoPai,
@@ -375,7 +386,8 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 			}
 			if u == turnUser {
 				nextOpt.Mj = int32(moPai)
-				nextOpt.CanOp = u.CanOpSelf()
+				nextOpt.CanOpFlag = u.CanOpSelf(r.laiZi)
+				nextOpt.CanOps = u.CanOps()
 			}
 			u.Send(def.BcOpt, nextOpt)
 		}
@@ -388,9 +400,8 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 		// 当前玩家摸牌
 		r.turn = finalUser.seat
 		turnUser := r.Users[r.turn]
-		moPai := r.MoPai()
-		turnUser.MoMj(moPai)
-		r.waitOther = false
+		_, moPai := r.FaPai(turnUser)
+		r.waitMulti = false
 		for _, u := range r.Users {
 			nextOpt := &pb.MjOpt{
 				Op:  mj.MoPai,
@@ -398,14 +409,15 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 			}
 			if u == turnUser {
 				nextOpt.Mj = int32(moPai)
-				nextOpt.CanOp = u.CanOpSelf()
+				nextOpt.CanOpFlag = u.CanOpSelf(r.laiZi)
+				nextOpt.CanOps = u.CanOps()
 			}
 			u.Send(def.BcOpt, nextOpt)
 		}
 	case mj.Peng, mj.LChi, mj.MChi, mj.RChi: // 吃碰操作
 		r.turn = finalUser.seat
 		turnUser := r.Users[r.turn]
-		r.waitOther = false
+		r.waitMulti = false
 		for _, u := range r.Users {
 			nextOpt := &pb.MjOpt{
 				Op:  finalOp,
@@ -413,7 +425,8 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 				Mj:  opt.Mj,
 			}
 			if u == turnUser {
-				nextOpt.CanOp = u.CanOpSelf()
+				nextOpt.CanOpFlag = u.CanOpSelf(r.laiZi)
+				nextOpt.CanOps = u.CanOps()
 			}
 			u.Send(def.BcOpt, nextOpt)
 		}
@@ -423,6 +436,12 @@ func (r *Room) MjOpOther(uid uint32, opt *pb.MjOpt) {
 }
 
 func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
+	currUser := r.GetUserByUID(uid)
+	// 执行操作
+	if !currUser.DealMj(uint8(opt.Op), uint8(opt.Mj)) {
+		log.Printf("deal err, uid:%d opt:%d mj:%d\n", uid, opt.Op, opt.Mj)
+		return
+	}
 	log.Printf("MjOpSelf uid:%d opt:%v\n", uid, opt)
 	// 如果是出牌操作，告知其他玩家可执行的操作
 	switch opt.Op {
@@ -430,14 +449,16 @@ func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
 		// 检查是否有玩家可操作
 		noCanOp := true
 		for _, u := range r.Users {
-			opt.CanOp = 0
+			opt.CanOpFlag = 0
+			opt.CanOps = nil
 			if u.uid != uid {
 				// 如果是出牌操作，告知其他玩家可执行的操作
-				opt.CanOp = u.CanOpOther(uint8(opt.Mj), uint8(opt.Op), r.laizi)
-				if opt.CanOp > 0 {
+				opt.CanOpFlag = u.CanOpOther(uint8(opt.Mj), uint8(opt.Op), r.laiZi)
+				opt.CanOps = u.CanOps()
+				if opt.CanOpFlag > 0 {
 					// 其他玩家可操作，继续等待
 					noCanOp = false
-					r.waitOther = true
+					r.waitMulti = true
 					log.Printf("uid:%d canop:%d\n", u.uid, u.CanOp())
 				}
 			}
@@ -448,14 +469,17 @@ func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
 			// 没有可操作的玩家，给下一家发牌，并告知可执行操作
 			if opt.Op == mj.ChuPai {
 				r.turn = (r.turn + 1) % len(r.Users)
+				if r.canHDL() {
+					r.doHDL()
+					return
+				}
 			}
 			// 如果是补杠操作，给当前玩家发牌，并告知可执行操作
 			turnUser := r.Users[r.turn]
 
 			// 给当前玩家发牌
-			moPai := r.MoPai()
-			turnUser.MoMj(moPai)
-			r.waitOther = false
+			_, moPai := r.FaPai(turnUser)
+			r.waitMulti = false
 
 			// 通知其他玩家当前玩家出牌
 			for _, u := range r.Users {
@@ -465,7 +489,8 @@ func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
 				}
 				if u == turnUser {
 					temp.Mj = int32(moPai)
-					temp.CanOp = u.CanOpSelf()
+					temp.CanOpFlag = u.CanOpSelf(r.laiZi)
+					temp.CanOps = u.CanOps()
 				}
 				u.Send(def.BcOpt, temp)
 			}
@@ -479,9 +504,8 @@ func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
 
 		// 给当前玩家发牌
 		turnUser := r.Users[r.turn]
-		moPai := r.MoPai()
-		turnUser.MoMj(moPai)
-		r.waitOther = false
+		_, moPai := r.FaPai(turnUser)
+		r.waitMulti = false
 
 		// 通知其他玩家当前玩家出牌
 		for _, u := range r.Users {
@@ -491,20 +515,14 @@ func (r *Room) MjOpSelf(uid uint32, opt *pb.MjOpt) {
 			}
 			if u == turnUser {
 				temp.Mj = int32(moPai)
-				temp.CanOp = u.CanOpSelf()
+				temp.CanOpFlag = u.CanOpSelf(r.laiZi)
+				temp.CanOps = u.CanOps()
 			}
 			u.Send(def.BcOpt, temp)
 		}
 	case mj.HuPai:
 		turnUser := r.Users[r.turn]
-		// 胡牌操作，通知其他玩家当前玩家胡牌
-		if turnUser.Zimo() {
-			for _, u := range r.Users {
-				u.Send(def.BcOpt, opt)
-			}
-		} else {
-			log.Printf("tap err, uid:%d not zimo\n", uid)
-		}
+		r.huPai(turnUser)
 	}
 }
 
@@ -517,34 +535,56 @@ func (r *Room) getLatestOp(Op int32) *mj.MjOp {
 	return nil
 }
 
-func (r *Room) haiDiLao() bool {
-	if r.huangZhuang+int(r.mjIndex) >= len(r.mj) {
+func (r *Room) canHDL() bool {
+	return r.huangZhuang+int(r.mjIndex) >= len(r.mj)
+}
+
+func (r *Room) doHDL() {
+	r.turn = (r.turn + 1) % len(r.Users)
+	r.waitMulti = true
+	var huUser *User
+	for i := 0; i < 4; i++ {
+		user := r.Users[(r.turn+i)%4]
+		moPai := r.MoPai()
+		user.Haidilao(moPai)
+		nextOpt := &pb.MjOpt{
+			Op:        mj.MoPai,
+			Uid:       user.uid,
+			Mj:        int32(moPai),
+			CanOpFlag: user.CanOpSelf(r.laiZi),
+			CanOps:    user.CanOps(),
+		}
+		user.Send(def.BcOpt, nextOpt)
+		if huUser == nil && nextOpt.CanOpFlag > 0 {
+			huUser = user
+		}
+	}
+	if huUser != nil {
+		r.huPai(huUser)
+	} else {
 		settle := &pb.GameOver{}
 		for _, u := range r.Users {
-			userSettle := pb.GameOverUser{
+			u.prepare = false
+			settle.Users = append(settle.Users, &pb.GameOverUser{
 				Uid:   u.uid,
 				Hands: u.Mj(),
-			}
-			settle.Users = append(settle.Users, &userSettle)
+			})
 		}
 		r.SendAll(def.GameOver, settle)
-		return true
 	}
-	return false
 }
 
 func (r *Room) huPai(huUser *User) {
-	log.Println("game over")
 	pai := uint8(0)
-	if r.waitOther {
-		if opt := r.getLatestOp(mj.ChuPai | mj.BGang); opt != nil {
-			pai = uint8(opt.Mj)
-		}
-	}
 	settle := &pb.GameOver{}
-	ht, hs := huUser.HuPai(pai, r.laizi)
+	ht, hs := huUser.HuPai(pai, r.laiZi)
+	if str := mj.HuStr(ht, hs); str != "" {
+		log.Printf("uid:%d str:%s mj:%v group:%v", huUser.uid, str, huUser.Mj(), huUser.GroupString())
+	}
 	win := int64(0)
+	r.playing = false
 	for _, u := range r.Users {
+		u.prepare = false
 		if u == huUser {
 			continue
 		}
@@ -552,9 +592,11 @@ func (r *Room) huPai(huUser *User) {
 		lose := int64(hs) * int64(fan)
 		win += lose
 		userSettle := pb.GameOverUser{
-			Uid:   u.uid,
-			Win:   -lose,
-			Hands: u.Mj(),
+			Uid:     u.uid,
+			Win:     -lose,
+			Hands:   u.Mj(),
+			HuType:  ht,
+			DianPao: true,
 		}
 		settle.Users = append(settle.Users, &userSettle)
 	}
@@ -565,7 +607,6 @@ func (r *Room) huPai(huUser *User) {
 		HuType: ht,
 	})
 	r.SendAll(def.GameOver, settle)
-	r.playing = false
 }
 
 func (r *Room) SendOther(uid uint32, cmd uint16, data proto.Message) {

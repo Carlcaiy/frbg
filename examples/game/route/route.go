@@ -31,12 +31,14 @@ func (l *Local) init() {
 	l.AddRoute(def.OptGame, l.optGame)
 	l.AddRoute(def.Reconnect, l.reconnect)
 	l.AddRoute(def.Offline, l.offline)
+	l.AddRoute(def.Continue, l.continueGame)
 }
 
-func (l *Local) getGameStatus(in *local.Input) error {
+func (l *Local) getGameStatus(in *local.Input) {
 	req := new(pb.GameStatusReq)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("getGameStatus unpack error:%s", err.Error())
+		return
 	}
 	log.Println("getGameStatus", req.String())
 	rsp := new(pb.GameStatusRsp)
@@ -44,25 +46,26 @@ func (l *Local) getGameStatus(in *local.Input) error {
 	if ok && room.playing {
 		rsp.RoomId = room.roomId
 	}
-	return in.Rpc(rsp)
+	in.Rpc(rsp)
 }
 
-func (l *Local) offline(in *local.Input) error {
+func (l *Local) offline(in *local.Input) {
 	req := new(pb.Offline)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("offline unpack error:%s", err.Error())
+		return
 	}
 	log.Println("offline", req.String())
 	if room, ok := l.users[req.Uid]; ok {
 		room.Offline(req.Uid)
 	}
-	return nil
 }
 
-func (l *Local) reconnect(in *local.Input) error {
+func (l *Local) reconnect(in *local.Input) {
 	req := new(pb.Reconnect)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("reconnect unpack error:%s", err.Error())
+		return
 	}
 	log.Println("reconnect", req.String())
 	if req.RoomId > 0 {
@@ -74,14 +77,13 @@ func (l *Local) reconnect(in *local.Input) error {
 			log.Printf("room %d not found", req.RoomId)
 		}
 	}
-
-	return nil
 }
 
-func (l *Local) startGame(in *local.Input) error {
+func (l *Local) startGame(in *local.Input) {
 	req, rsp := new(pb.StartGameReq), new(pb.StartGameRsp)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("startGame unpack error:%s", err.Error())
+		return
 	}
 	log.Println("startGame", req.String())
 	room := l.rooms[req.RoomId]
@@ -106,36 +108,60 @@ func (l *Local) startGame(in *local.Input) error {
 	}
 
 	room.MajFaPai()
-	return nil
 }
 
-func (l *Local) leaveRoom(in *local.Input) error {
+func (l *Local) leaveRoom(in *local.Input) {
 	req, rsp := new(pb.LeaveRoomReq), new(pb.LeaveRoomRsp)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("leaveRoom unpack error:%s", err.Error())
+		return
 	}
 	log.Println("leaveRoom", req.String())
 	room, ok := l.rooms[req.RoomId]
 	if !ok {
-		return nil
+		return
 	}
 	if room.playing {
-		return nil
+		return
 	}
 	room.DelUser(req.Uid)
-	in.Response(req.Uid, in.Cmd, rsp)
-	return nil
+	delete(l.users, req.Uid)
+	in.WriteBy(in.Cmd, rsp)
 }
 
-func (l *Local) optGame(in *local.Input) error {
+func (l *Local) optGame(in *local.Input) {
 	req := new(pb.MjOpt)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("optGame unpack error:%s", err.Error())
+		return
 	}
 
 	if room, ok := l.rooms[req.RoomId]; ok {
 		room.MjOp(req.Uid, req)
 	}
+}
 
-	return nil
+func (l *Local) continueGame(in *local.Input) {
+	req := new(pb.Continue)
+	if err := in.Unpack(req); err != nil {
+		log.Printf("continueGame unpack error:%s", err.Error())
+		return
+	}
+	log.Println("continueGame", req.String())
+	room, ok := l.rooms[req.RoomId]
+	if !ok {
+		return
+	}
+	user := room.GetUserByUID(req.Uid)
+	if user == nil {
+		return
+	}
+	user.prepare = true
+	for _, u := range room.Users {
+		if !u.prepare {
+			return
+		}
+	}
+	room.Reset()
+	room.MajFaPai()
 }

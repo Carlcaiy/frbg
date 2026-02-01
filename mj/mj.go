@@ -22,10 +22,10 @@ var BanBiShanMJ = []uint8{
 	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
 	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
 	Dong, Nan, Xi, Bei, Zhong, Fa, Bai,
-	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
-	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
-	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
-	Laizi, Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
+	Tiao1, Tiao2, Tiao3, Tiao4, Tiao5, Tiao6, Tiao7, Tiao8, Tiao9,
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
 	Wan1, Wan2, Wan3, Wan4, Wan5, Wan6, Wan7, Wan8, Wan9,
@@ -38,13 +38,22 @@ var BanBiShanMJ = []uint8{
 
 // 操作枚举
 const (
-	FaPai                 = 0
-	MoPai, ChuPai, GuoPai = 1, 2, 3
-	LChi, MChi, RChi      = 4, 5, 6
-	Peng                  = 7
-	MGang, BGang, AGang   = 8, 9, 10
-	HuPai                 = 11
-	Jiang, Shun, Ke       = 12, 13, 14
+	FaPai = iota
+	MoPai
+	HdlPai
+	ChuPai
+	GuoPai
+	LChi
+	MChi
+	RChi
+	Peng
+	MGang
+	BGang
+	AGang
+	HuPai
+	Jiang
+	Shun
+	Ke
 )
 
 func opBit(op uint8) int32 {

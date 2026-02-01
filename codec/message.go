@@ -86,9 +86,39 @@ func (m *Message) Reset() {
 	m.All = m.All[:0]
 }
 
+func NewHearBeatMessage() *Message {
+	return &Message{
+		Header: Header{
+			MagicNumber: magicNumber,
+			Version:     1,
+			Flags:       FlagsHeartBeat,
+			Seq:         0,
+			Timestamp:   uint32(time.Now().Unix()),
+			Len:         0,
+			CheckSum:    0,
+		},
+	}
+}
+
+func NewMessageWithPayload(cmd uint16, payload []byte) *Message {
+	return &Message{
+		Header: Header{
+			MagicNumber: magicNumber,
+			Version:     1,
+			Flags:       0,
+			Seq:         0,
+			Timestamp:   uint32(time.Now().Unix()),
+			Len:         uint16(len(payload)),
+			CheckSum:    0,
+		},
+		Cmd:     cmd,
+		Payload: payload,
+	}
+}
+
 // NewMessage 创建新消息
 func NewMessage(cmd uint16, pro proto.Message) *Message {
-	msg := AcquireMessage()
+	msg := &Message{}
 	msg.MagicNumber = magicNumber
 	msg.Version = 1
 	msg.Seq = 0
@@ -98,15 +128,11 @@ func NewMessage(cmd uint16, pro proto.Message) *Message {
 	if pro != nil {
 		body, err := proto.Marshal(pro)
 		if err != nil {
-			ReleaseMessage(msg)
+
 			return nil
 		}
 		msg.Payload = body
 	}
-	// 更新长度和校验和
-	msg.Len = uint16(len(msg.Payload))
-	msg.CheckSum = msg.calculateCheckSum()
-
 	return msg
 }
 

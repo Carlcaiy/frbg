@@ -43,5 +43,6 @@ const (
 	CountDown  = 3007 // 倒计时
 	GameFaPai  = 3008 // 发牌
 	GameStatus = 3010 // 获取游戏状态
+	Continue   = 3011 // 继续游戏
 	GameEnd    = 3999 // Game
 )

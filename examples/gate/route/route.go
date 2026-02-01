@@ -1,7 +1,6 @@
 package route
 
 import (
-	"fmt"
 	"frbg/codec"
 	"frbg/core"
 	"frbg/def"
@@ -34,17 +33,19 @@ func (l *Local) Init() {
 	l.AddRoute(def.PacketOut, l.packetOut)
 }
 
-func (l *Local) echo(in *local.Input) error {
+func (l *Local) echo(in *local.Input) {
 	test := new(pb.Test)
 	in.Unpack(test)
-	return in.Response(0, in.Cmd, test)
+	if errSend := in.WriteBy(in.Cmd, test); errSend != nil {
+		log.Printf("echo Response() err:%s", errSend.Error())
+	}
 }
 
-func (l *Local) login(in *local.Input) error {
+func (l *Local) login(in *local.Input) {
 	req := new(pb.LoginReq)
 	if err := in.Unpack(req); err != nil {
 		log.Printf("login unpack error:%s", err.Error())
-		return err
+		return
 	}
 	log.Printf("login req:%v", req)
 	var info *User
@@ -52,9 +53,10 @@ func (l *Local) login(in *local.Input) error {
 		uid, err := db.GenUserId()
 		if err != nil {
 			log.Printf("GenUserId err:%s", err.Error())
-			return in.Response(req.Uid, def.Login, &pb.LoginRsp{
+			in.WriteBy(def.Login, &pb.LoginRsp{
 				Ret: 1,
 			})
+			return
 		}
 		info = &User{
 			Nick:   "Beautify",
@@ -63,21 +65,25 @@ func (l *Local) login(in *local.Input) error {
 			Uid:    uid,
 		}
 		if err := db.SetUser(uid, info); err != nil {
-			return err
+			log.Printf("SetUser err:%s", err.Error())
+			in.WriteBy(def.Login, &pb.LoginRsp{
+				Ret: 1,
+			})
+			return
 		}
-		l.clients.SetClient(uid, in.Client())
+		l.clients.SetClient(uid, in.IConn)
 	} else {
-		if conn := l.clients.GetClient(req.Uid); conn != in.Client() {
+		if conn := l.clients.GetClient(req.Uid); conn != in.IConn {
 			if conn != nil {
-				log.Println("给已经登录的连接推送挤号信息")
-				conn.Write(codec.NewMessage(def.GateKick, &pb.GateKick{
+				log.Printf("给已经登录的连接推送挤号信息 uid:%d", req.Uid)
+				conn.WriteBy(def.GateKick, &pb.GateKick{
 					Type: pb.KickType_Squeeze,
-				}))
+				})
 			}
-			l.clients.SetClient(req.Uid, in.Client())
+			l.clients.SetClient(req.Uid, in.IConn)
 			if err := db.SetGate(req.Uid, uint8(req.GateId)); err != nil {
 				log.Printf("db.SetGate(%d, %d) error:%s", req.Uid, req.GateId, err.Error())
-				return nil
+				return
 			}
 		} else {
 			log.Println("连接相同不做处理")
@@ -85,11 +91,11 @@ func (l *Local) login(in *local.Input) error {
 		info = new(User)
 		if err := db.GetUser(req.Uid, info); err != nil {
 			log.Printf("db.GetUser(%d) error:%s", req.Uid, err.Error())
-			return err
+			return
 		}
 	}
 	log.Printf("login uid:%d, gate:%d", info.Uid, req.GateId)
-	return in.Response(req.Uid, in.Cmd, &pb.LoginRsp{
+	in.WriteBy(in.Cmd, &pb.LoginRsp{
 		Ret:      0,
 		Nick:     info.Nick,
 		Uid:      info.Uid,
@@ -100,54 +106,49 @@ func (l *Local) login(in *local.Input) error {
 }
 
 // 离开网关
-func (l *Local) logout(in *local.Input) error {
+func (l *Local) logout(in *local.Input) {
 	req := new(pb.LogoutReq)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("logout unpack error:%s", err.Error())
+		return
 	}
-	client := l.clients.GetClient(req.Uid)
-	if client != nil {
-		client.Write(codec.NewMessage(in.Cmd, &pb.CommonRsp{
-			Code: pb.ErrorCode_Success,
-		}))
-		l.clients.DelClient(req.Uid)
-		return nil
-	}
-	return fmt.Errorf("reqLeaveGate not find user: %d", req.Uid)
+	in.WriteBy(in.Cmd, &pb.CommonRsp{
+		Code: pb.ErrorCode_Success,
+	})
+	l.clients.DelClient(req.Uid)
+	log.Printf("logout uid:%d", req.Uid)
 }
 
-func (l *Local) packetIn(in *local.Input) error {
+func (l *Local) packetIn(in *local.Input) {
 	req := new(pb.PacketIn)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("packetIn unpack error:%s", err.Error())
+		return
 	}
 	cli := l.Poll.GetServer(uint16(req.Svid))
 	if cli == nil {
-		return fmt.Errorf("not find server %d", req.Svid)
+		log.Printf("not find server %d", req.Svid)
+		return
 	}
 	// log.Printf("packetIn cmd:%d, svid:%d", req.Cmd, req.Svid)
-	data := in.Message
-	data.Cmd = uint16(req.Cmd)
-	data.Payload = req.Payload
-	return cli.Write(data)
+	cli.Write(codec.NewMessageWithPayload(uint16(req.Cmd), req.Payload))
 }
 
-func (l *Local) packetOut(in *local.Input) error {
+func (l *Local) packetOut(in *local.Input) {
 	req := new(pb.PacketOut)
 	if err := in.Unpack(req); err != nil {
-		return err
+		log.Printf("packetOut unpack error:%s", err.Error())
+		return
 	}
 	// log.Printf("packetOut uid:%d, cmd:%d", req.Uid, req.Cmd)
 	for _, uid := range req.Uid {
 		cli := l.clients.GetClient(uid)
 		if cli == nil {
-			return fmt.Errorf("not find user %d", uid)
+			log.Printf("not find user %d", uid)
+			continue
 		}
-		in.Message.Cmd = uint16(req.Cmd)
-		in.Message.Payload = req.Payload
-		cli.Write(in.Message)
+		cli.Write(codec.NewMessageWithPayload(uint16(req.Cmd), req.Payload))
 	}
-	return nil
 }
 
 func (l *Local) Close(conn core.IConn) {

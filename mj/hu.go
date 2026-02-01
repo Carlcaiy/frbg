@@ -216,12 +216,26 @@ func (m *stat) CanHu() bool {
 
 func (m *stat) CanOpSelf(op uint8) []*Group {
 	ret := make([]*Group, 0)
-	for i := range m.num {
-		if m.num[i] == 4 {
-			ret = append(ret, &Group{
-				Op:  AGang,
-				Val: m.val[i],
-			})
+	if op != HdlPai {
+		for i := range m.num {
+			if m.num[i] == 4 {
+				ret = append(ret, &Group{
+					Op:  AGang,
+					Val: m.val[i],
+				})
+			}
+		}
+		for _, g := range m.Group {
+			if g.Op == Peng {
+				for i := range m.val {
+					if m.val[i] == g.Val && m.num[i] > 0 {
+						ret = append(ret, &Group{
+							Op:  BGang,
+							Val: m.val[i],
+						})
+					}
+				}
+			}
 		}
 	}
 	if op == LChi || op == MChi || op == RChi || op == Peng {

@@ -109,13 +109,7 @@ func (c *Conn) Write(msg *codec.Message) error {
 }
 
 func (c *Conn) WriteBy(cmd uint16, pro proto.Message) error {
-	payload, err := proto.Marshal(pro)
-	if err != nil {
-		return fmt.Errorf("marshal proto message failed: %w", err)
-	}
-	msg := codec.AcquireMessage()
-	msg.Cmd = cmd
-	msg.Payload = payload
+	msg := codec.NewMessage(cmd, pro)
 	return c.Write(msg)
 }
 
@@ -126,17 +120,10 @@ func (c *Conn) WriteBy(cmd uint16, pro proto.Message) error {
 //   - rsp: 返回消息体(protobuf)
 //   - timeout: 超时时间(毫秒)
 func (c *Conn) RpcWrite(cmd uint16, req proto.Message, rsp proto.Message, timeout int) error {
-	// 1. 序列化请求消息
-	payload, err := proto.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshal proto message failed: %w", err)
-	}
 
 	// 2. 生成唯一序列号用于匹配响应
 	seq := uint16(seq.Add(1))
-	msg := codec.AcquireMessage()
-	msg.Cmd = cmd
-	msg.Payload = payload
+	msg := codec.NewMessage(cmd, req)
 	msg.Seq = seq
 
 	// 3. 创建响应等待通道
@@ -168,17 +155,10 @@ func (c *Conn) RpcWrite(cmd uint16, req proto.Message, rsp proto.Message, timeou
 // 返回:
 //   - error: 错误信息(仅发送错误)
 func (c *Conn) RpcWriteAsync(cmd uint16, req proto.Message, callback func(*codec.Message, error)) error {
-	// 1. 序列化请求消息
-	payload, err := proto.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshal proto message failed: %w", err)
-	}
 
 	// 2. 生成唯一序列号用于匹配响应
 	seq := uint16(seq.Add(1))
-	msg := codec.AcquireMessage()
-	msg.Cmd = cmd
-	msg.Payload = payload
+	msg := codec.NewMessage(cmd, req)
 	msg.Seq = seq
 
 	// 3. 注册异步回调
@@ -199,6 +179,7 @@ func (c *WsConn) Read() (*codec.Message, error) {
 	now := time.Now()
 	c.conn.SetReadDeadline(now.Add(time.Second))
 	if msg, err := codec.WsRead(c.conn); err == nil {
+		// log.Printf("Read fd:%d cmd:%d", c.fd, msg.Cmd)
 		c.SetActiveTime(now.Unix())
 		return msg, nil
 	} else {
@@ -224,4 +205,9 @@ func (c *WsConn) Write(msg *codec.Message) error {
 	}
 	c.SetActiveTime(now.Unix())
 	return err
+}
+
+func (c *WsConn) WriteBy(cmd uint16, pro proto.Message) error {
+	msg := codec.NewMessage(cmd, pro)
+	return c.Write(msg)
 }

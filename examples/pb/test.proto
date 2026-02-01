@@ -268,7 +268,8 @@ message MjFaPai {
     repeated int32 touzi = 3;       // 骰子
     uint32 zhuang = 4;              // 庄家
     int32 laizi = 5;                // 赖子
-    int32 can_op = 6;               // 可操作
+    int32 canOpFlag = 6;            // 可操作
+    repeated CanOp canOps = 7;      // 可操作
 }
 
 // 完成数据
@@ -285,13 +286,18 @@ message MjOpt {
     uint32 roomId = 2;      // roomId
     int32 op = 3;           // 操作
     int32 mj = 4;           // 麻将
-    int32 can_op = 5;       // 可操作
-    
+    int32 canOpFlag = 5;       // 可操作
+    repeated CanOp canOps = 6;   // 可操作
 }
 
 // 空数据
 message Empty {
     
+}
+
+message CanOp {
+    int32 op = 1;
+    int32 mj = 2;
 }
 
 // 手牌数据
@@ -300,7 +306,7 @@ message playerInfo {
     bytes hands = 2;          // 手牌
     bytes dachu = 3;          // 打出牌
     repeated bytes cpgs = 4;  // 吃碰杠
-    int32 can_op = 5;         // 可操作
+    repeated CanOp canOps = 5;   // 可操作
 }
 
 // 重连数据
@@ -309,9 +315,13 @@ message DeskSnapshot {
     repeated int32 touzi = 2;       // 骰子
     uint32 zhuang = 3;              // 庄家
     int32 laizi = 4;                // 赖子
-    bytes usedMjIndex = 5;          // 牌堆中已经被抓走的牌
+    bytes mjIndex = 5;          // 牌堆中已经被抓走的牌
     repeated playerInfo info = 6;   // 各个玩家手中的牌
-    uint32 roomId = 7;               // 房间ID
+    uint32 roomId = 7;              // 房间ID
+    bool playing = 8;               // 是否正在玩牌
+    uint32 last_user = 9;           // 最后一个玩家
+    int32 last_op = 10;             // 最后一个操作
+    int32 last_op_mj = 11;          // 最后操作的mj
 }
 
 message GameOverUser{
@@ -319,7 +329,7 @@ message GameOverUser{
     int64 win = 2;            // 赢钱
     repeated int32 hands = 3; // 手牌
     int32 huType = 4;         // 胡类型
-    
+    bool dianPao = 5;         // 点炮
 }
 
 // 游戏结束
@@ -356,4 +366,12 @@ message Test {
 message CommonRsp {
     ErrorCode code = 1;
     string msg = 2;
+}
+
+// 重连
+message Continue {
+    uint32 uid = 1;
+    uint32 roomId = 3;
+    uint32 hallId = 4;
+    uint32 gateId = 5;
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"frbg/codec"
 	core "frbg/core"
+	"frbg/def"
+	"frbg/examples/pb"
 	"frbg/timer"
 	"log"
 	"runtime"
@@ -11,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type Handle func(*Input) error
+type Handle func(*Input)
 
 type BaseLocal struct {
 	queue chan *Input
@@ -30,16 +32,13 @@ func NewBase() *BaseLocal {
 
 func (l *BaseLocal) Attach(poll *core.Poll) {
 	l.Poll = poll
-	serverType = poll.ServerConf.ServerType
 }
 
 func (l *BaseLocal) Start() {
 	go func() {
 		for {
 			input := <-l.queue
-			if err := l.Route(input); err != nil {
-				log.Printf("Route error:%s", err.Error())
-			}
+			l.Route(input)
 		}
 	}()
 }
@@ -71,22 +70,44 @@ func (l *BaseLocal) AddRoute(cmd uint16, h Handle) {
 	l.m_route[cmd] = h
 }
 
-func (l *BaseLocal) Route(input *Input) error {
+func (l *BaseLocal) Route(input *Input) {
 	// 2. 检查消息是否有路由
 	if handle, ok := l.m_route[input.Cmd]; ok {
 		defer l.CatchEx(input.Cmd)
-		return handle(input)
+		handle(input)
 	} else {
-		return fmt.Errorf("call: not find cmd %d", input.Cmd)
+		log.Printf("call: not find cmd %d", input.Cmd)
 	}
 }
 
-func (l *BaseLocal) Send(svid uint16, msg *codec.Message) error {
+func (l *BaseLocal) Send(svid uint16, cmd uint16, req proto.Message) error {
+	if svid/100 == def.ST_Gate {
+		return fmt.Errorf("error gate server %d", svid)
+	}
 	conn := l.Poll.GetServer(svid)
 	if conn == nil {
 		return fmt.Errorf("error not find server %d", svid)
 	}
-	return conn.Write(msg)
+	return conn.WriteBy(cmd, req)
+}
+
+func (l *BaseLocal) SendTo(svid uint16, uid uint32, cmd uint16, req proto.Message) error {
+	if svid/100 != def.ST_Gate {
+		return fmt.Errorf("error gate server %d", svid)
+	}
+	bs, err := proto.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("error marshal req %d", svid)
+	}
+	conn := l.Poll.GetServer(svid)
+	if conn == nil {
+		return fmt.Errorf("error not find server %d", svid)
+	}
+	return conn.WriteBy(def.PacketOut, &pb.PacketOut{
+		Uid:     []uint32{uid},
+		Cmd:     uint32(cmd),
+		Payload: bs,
+	})
 }
 
 func (l *BaseLocal) RpcCall(svid uint16, cmd uint16, req proto.Message, rsp proto.Message) error {

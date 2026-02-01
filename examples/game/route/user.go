@@ -1,33 +1,33 @@
 package route
 
 import (
-	"frbg/codec"
 	"frbg/core"
 	"frbg/def"
 	"frbg/examples/pb"
 	"frbg/mj"
 	"log"
+	"sort"
 
 	"google.golang.org/protobuf/proto"
 )
 
 type User struct {
-	l             *Local
-	uid           uint32
-	gateId        uint16 // 网关ID
-	pai           int32
-	offline       bool
-	can_ops_group []*mj.Group
-	waiting       bool       // 是否等待操作
-	wait_op       uint8      // 等待期间收集到的操作
-	mj_hands      []uint8    // 麻将
-	mj_history    []uint8    // 出牌
-	mj_group      []mj.Group // 麻将组
-	seat          int
-	can_ops_flag  int32
-	hu_type       int32
-	last_op       uint8 // 上一次操作
-	prepare       bool  // 准备状态
+	l           *Local
+	uid         uint32
+	gateId      uint16 // 网关ID
+	pai         int32
+	offline     bool
+	canOpsGroup []*mj.Group
+	waiting     bool       // 是否等待操作
+	waitOp      uint8      // 等待期间收集到的操作
+	mjHands     []uint8    // 麻将
+	mjHistory   []uint8    // 出牌
+	mjGroup     []mj.Group // 麻将组
+	seat        int
+	canOpsFlag  int32
+	huType      int32
+	lastOp      mj.Group // 上一次操作
+	prepare     bool     // 准备状态
 }
 
 func (u *User) Seat() int {
@@ -35,44 +35,35 @@ func (u *User) Seat() int {
 }
 
 func (u *User) Send(cmd uint16, data proto.Message) {
-	payload, err := proto.Marshal(data)
-	if err != nil {
-		log.Printf("Send proto.Marshal() err:%s", err.Error())
-		return
-	}
-	msg := codec.NewMessage(def.PacketOut, &pb.PacketOut{
-		Uid:     []uint32{u.uid},
-		Cmd:     uint32(cmd),
-		Payload: payload,
-	})
 	svid := core.Svid(def.ST_Gate, uint8(u.gateId))
-	// log.Printf("Send uid:%d cmd:%d svid:%d", u.uid, cmd, svid)
-	if conn := u.l.Poll.GetServer(svid); conn != nil {
-		conn.Write(msg)
-	}
+	u.l.SendTo(svid, u.uid, cmd, data)
 }
 
 func (u *User) Reset() {
 	u.pai = 0
 	u.prepare = true
-	u.mj_hands = u.mj_hands[:0]
-	u.mj_history = u.mj_history[:0]
-	u.mj_group = u.mj_group[:0]
-	u.can_ops_group = u.can_ops_group[:0]
+	u.mjHands = u.mjHands[:0]
+	u.mjHistory = u.mjHistory[:0]
+	u.mjGroup = u.mjGroup[:0]
+	u.canOpsGroup = u.canOpsGroup[:0]
+	u.waiting = false
+	u.waitOp = 0
 }
 
-func (u *User) remove_mj(val uint8, num int) bool {
-	tail := len(u.mj_hands) - 1
-	for i := 0; i <= tail; i++ {
-		if u.mj_hands[i] == val {
-			u.mj_hands[i], u.mj_hands[tail] = u.mj_hands[tail], u.mj_hands[i]
+func (u *User) removeMj(val uint8, num int) bool {
+	tail := len(u.mjHands) - 1
+	for i := 0; i <= tail; {
+		if u.mjHands[i] == val {
+			u.mjHands[i], u.mjHands[tail] = u.mjHands[tail], u.mjHands[i]
 			num--
 			if num == 0 {
-				u.mj_hands = u.mj_hands[:tail]
+				u.mjHands = u.mjHands[:tail]
 				log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), val)
 				return true
 			}
 			tail--
+		} else {
+			i++
 		}
 	}
 	log.Printf("uid:%d remove_mj %v %d", u.uid, u.Mj(), val)
@@ -81,26 +72,40 @@ func (u *User) remove_mj(val uint8, num int) bool {
 
 // 打麻将
 func (u *User) DaMj(val uint8) bool {
-	return u.remove_mj(val, 1)
+	return u.removeMj(val, 1)
 }
 
 // 摸麻将
 func (u *User) MoMj(val ...uint8) {
-	u.can_ops_flag = 0
-	u.mj_hands = append(u.mj_hands, val...)
+	u.lastOp = mj.Group{
+		Op:  mj.MoPai,
+		Val: val[0],
+	}
+	u.canOpsFlag = 0
+	u.mjHands = append(u.mjHands, val...)
 	log.Printf("uid:%d MoMj %v", u.uid, val)
+}
+
+func (u *User) Haidilao(val ...uint8) {
+	u.lastOp = mj.Group{
+		Op:  mj.HdlPai,
+		Val: val[0],
+	}
+	u.canOpsFlag = 0
+	u.mjHands = append(u.mjHands, val...)
+	log.Printf("uid:%d Haidilao %v", u.uid, val)
 }
 
 // 左吃麻将
 func (u *User) LChiMj(val uint8) bool {
 	val1, val2 := val+1, val+2
-	if !u.remove_mj(val1, 1) {
+	if !u.removeMj(val1, 1) {
 		return false
 	}
-	if !u.remove_mj(val2, 1) {
+	if !u.removeMj(val2, 1) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.LChi, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.LChi, Val: val})
 	log.Printf("uid:%d LChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val+1), mj.Pai(val+2))
 	return true
 }
@@ -108,13 +113,13 @@ func (u *User) LChiMj(val uint8) bool {
 // 中吃麻将
 func (u *User) MChiMj(val uint8) bool {
 	val1, val2 := val-1, val+1
-	if !u.remove_mj(val1, 1) {
+	if !u.removeMj(val1, 1) {
 		return false
 	}
-	if !u.remove_mj(val2, 1) {
+	if !u.removeMj(val2, 1) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MChi, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.MChi, Val: val})
 	log.Printf("uid:%d MChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val-1), mj.Pai(val+1))
 	return true
 }
@@ -122,13 +127,13 @@ func (u *User) MChiMj(val uint8) bool {
 // 右吃麻将
 func (u *User) RChiMj(val uint8) bool {
 	val1, val2 := val-1, val-2
-	if !u.remove_mj(val1, 1) {
+	if !u.removeMj(val1, 1) {
 		return false
 	}
-	if !u.remove_mj(val2, 1) {
+	if !u.removeMj(val2, 1) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.RChi, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.RChi, Val: val})
 	log.Printf("uid:%d RChiMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val-1), mj.Pai(val-2))
 	return true
 }
@@ -136,7 +141,7 @@ func (u *User) RChiMj(val uint8) bool {
 // 碰牌
 func (u *User) PengMj(val uint8) bool {
 	cnt := 0
-	for _, v := range u.mj_hands {
+	for _, v := range u.mjHands {
 		if v == val {
 			cnt++
 		}
@@ -145,10 +150,10 @@ func (u *User) PengMj(val uint8) bool {
 		return false
 	}
 
-	if !u.remove_mj(val, 2) {
+	if !u.removeMj(val, 2) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.Peng, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.Peng, Val: val})
 	log.Printf("uid:%d PengMj %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
@@ -156,7 +161,7 @@ func (u *User) PengMj(val uint8) bool {
 // 明杠
 func (u *User) MGangMj(val uint8) bool {
 	cnt := 0
-	for _, v := range u.mj_hands {
+	for _, v := range u.mjHands {
 		if v == val {
 			cnt++
 		}
@@ -165,23 +170,23 @@ func (u *User) MGangMj(val uint8) bool {
 		return false
 	}
 
-	if !u.remove_mj(val, 3) {
+	if !u.removeMj(val, 3) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.MGang, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.MGang, Val: val})
 	log.Printf("uid:%d MGangMj %v %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
 
 // 补杠
 func (u *User) BGangMj(val uint8) bool {
-	for _, v := range u.mj_group {
+	for _, v := range u.mjGroup {
 		if v.Op == mj.Peng && v.Val == val {
 			v.Op = mj.BGang
 		}
 	}
 
-	if !u.remove_mj(val, 1) {
+	if !u.removeMj(val, 1) {
 		return false
 	}
 
@@ -192,7 +197,7 @@ func (u *User) BGangMj(val uint8) bool {
 // 暗杠
 func (u *User) AGangMj(val uint8) bool {
 	cnt := 0
-	for _, v := range u.mj_hands {
+	for _, v := range u.mjHands {
 		if v == val {
 			cnt++
 		}
@@ -201,24 +206,24 @@ func (u *User) AGangMj(val uint8) bool {
 		return false
 	}
 
-	if !u.remove_mj(val, 4) {
+	if !u.removeMj(val, 4) {
 		return false
 	}
-	u.mj_group = append(u.mj_group, mj.Group{Op: mj.AGang, Val: val})
+	u.mjGroup = append(u.mjGroup, mj.Group{Op: mj.AGang, Val: val})
 	log.Printf("uid:%d AGangMj %v %v %v %v", u.uid, mj.Pai(val), mj.Pai(val), mj.Pai(val), mj.Pai(val))
 	return true
 }
 
 // 点炮
-func (u *User) DianPao(val uint8) bool {
-	st := mj.New(u.mj_hands, val, u.mj_group)
+func (u *User) DianPao(val uint8, laizi uint8) bool {
+	st := mj.Newlz(u.mjHands, val, laizi, u.mjGroup)
 	log.Printf("uid:%d DianPao %v", u.uid, mj.Pai(val))
 	return st.CanHu()
 }
 
 // 自摸
-func (u *User) Zimo() bool {
-	st := mj.New(u.mj_hands, 0, u.mj_group)
+func (u *User) Zimo(laizi uint8) bool {
+	st := mj.Newlz(u.mjHands, 0, laizi, u.mjGroup)
 	log.Printf("uid:%d Zimo", u.uid)
 	return st.CanHu()
 }
@@ -248,65 +253,95 @@ func (u *User) DealMj(op uint8, val uint8) bool {
 	if !ok {
 		return ok
 	}
-	u.can_ops_flag = 0
-	u.last_op = op
+	u.canOpsFlag = 0
+	u.lastOp.Op = op
+	u.lastOp.Val = val
 	return ok
 }
 
 // 手牌操作
-func (u *User) CanOpSelf() int32 {
-	if u.can_ops_flag > 0 {
-		return u.can_ops_flag
+func (u *User) CanOpSelf(lz uint8) int32 {
+	if u.canOpsFlag > 0 {
+		return u.canOpsFlag
 	}
-	st := mj.New(u.mj_hands, 0, nil)
-	u.can_ops_group = st.CanOpSelf(u.last_op)
+	st := mj.Newlz(u.mjHands, 0, lz, u.mjGroup)
+	u.canOpsGroup = st.CanOpSelf()
 	u.waiting = true
 
 	// 可以出牌
-	mj.AddOp(&u.can_ops_flag, mj.ChuPai)
+	if u.lastOp.Op != mj.HdlPai {
+		mj.AddOp(&u.canOpsFlag, mj.ChuPai)
+	}
 	// 其他操作
-	for i := range u.can_ops_group {
-		mj.AddOp(&u.can_ops_flag, u.can_ops_group[i].Op)
+	for i := range u.canOpsGroup {
+		mj.AddOp(&u.canOpsFlag, u.canOpsGroup[i].Op)
 	}
 
-	return u.can_ops_flag
+	return u.canOpsFlag
+}
+
+func (u *User) CanOps() []*pb.CanOp {
+	var canOps []*pb.CanOp
+	for _, g := range u.canOpsGroup {
+		canOps = append(canOps, &pb.CanOp{
+			Op: int32(g.Op),
+			Mj: int32(g.Val),
+		})
+	}
+	if mj.HasOp(u.canOpsFlag, mj.ChuPai) {
+		canOps = append(canOps, &pb.CanOp{
+			Op: int32(mj.ChuPai),
+			Mj: int32(u.mjHands[0]),
+		})
+	}
+	if mj.HasOp(u.canOpsFlag, mj.GuoPai) {
+		canOps = append(canOps, &pb.CanOp{
+			Op: int32(mj.GuoPai),
+			Mj: int32(0),
+		})
+	}
+	sort.Slice(canOps, func(i, j int) bool {
+		return canOps[i].Op >= canOps[j].Op
+	})
+	return canOps
 }
 
 func (u *User) IsCanOp(op int32) bool {
-	return mj.HasOp(u.can_ops_flag, uint8(op))
+	return mj.HasOp(u.canOpsFlag, uint8(op))
 }
 
 func (u *User) CanOp() int32 {
-	return u.can_ops_flag
+	return u.canOpsFlag
 }
 
 // 可操作其他玩家的牌
 func (u *User) CanOpOther(val uint8, op uint8, lz uint8) int32 {
-	st := mj.Newlz(u.mj_hands, val, lz, nil)
-	u.can_ops_group = st.CanOpOther(val, op)
-	u.waiting = len(u.can_ops_group) > 0
+	st := mj.Newlz(u.mjHands, val, lz, nil)
+	u.canOpsGroup = st.CanOpOther(val, op)
+	u.waiting = len(u.canOpsGroup) > 0
 
-	u.can_ops_flag = int32(0)
+	u.canOpsFlag = int32(0)
 	if u.waiting {
-		mj.AddOp(&u.can_ops_flag, mj.GuoPai)
+		mj.AddOp(&u.canOpsFlag, mj.GuoPai)
 	}
-	for i := range u.can_ops_group {
-		log.Printf("uid:%d CanOpOther %v %v %v", u.uid, mj.Pai(val), mj.Pai(lz), mj.Pai(u.can_ops_group[i].Val))
-		mj.AddOp(&u.can_ops_flag, u.can_ops_group[i].Op)
+	log.Printf("uid:%d mj:%v", u.uid, u.Mj())
+	for i := range u.canOpsGroup {
+		log.Printf("canop:%d", u.canOpsGroup[i].Op)
+		mj.AddOp(&u.canOpsFlag, u.canOpsGroup[i].Op)
 	}
 
-	return u.can_ops_flag
+	return u.canOpsFlag
 }
 
 func (u *User) HuPai(pai, laizi uint8) (int32, int32) {
-	stlz := mj.Newlz(u.mj_hands, pai, laizi, u.mj_group)
+	stlz := mj.Newlz(u.mjHands, pai, laizi, u.mjGroup)
 	return stlz.HuPai()
 }
 
 func (u *User) FanShu() int32 {
 	f := int32(1)
-	for i := range u.mj_group {
-		if u.mj_group[i].Op&(mj.MGang|mj.AGang|mj.BGang) > 0 {
+	for i := range u.mjGroup {
+		if u.mjGroup[i].Op&(mj.MGang|mj.AGang|mj.BGang) > 0 {
 			f <<= 1
 		}
 	}
@@ -314,9 +349,17 @@ func (u *User) FanShu() int32 {
 }
 
 func (u *User) Mj() []int32 {
-	mj := make([]int32, len(u.mj_hands))
-	for i := range u.mj_hands {
-		mj[i] = int32(u.mj_hands[i])
+	mj := make([]int32, len(u.mjHands))
+	for i := range u.mjHands {
+		mj[i] = int32(u.mjHands[i])
 	}
 	return mj
+}
+
+func (u *User) GroupString() string {
+	str := ""
+	for i := range u.mjGroup {
+		str += " " + u.mjGroup[i].String()
+	}
+	return str
 }
